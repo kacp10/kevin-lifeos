@@ -1,0 +1,6 @@
+lifeos.db
+__pycache__/
+*.pyc
+server.log
+nohup.out
+actualizar.py

@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: kevin-lifeos
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: kevin-lifeos-db
+          property: connectionString
+databases:
+  - name: kevin-lifeos-db
+    plan: free
