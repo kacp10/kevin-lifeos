@@ -116,20 +116,24 @@ else:
             self._con.commit()
 
         def fix_sequences(self):
-            # Resincroniza los contadores SERIAL con el id máximo real de cada tabla.
-            # Sin esto, agregar libros/metas/anime nuevos choca con ids ya sembrados.
+            # Asegura que la columna 'id' autoincremente en TODAS las tablas con id,
+            # incluso las creadas como INTEGER PRIMARY KEY plano (dreams, books, habits, debts).
+            # Crea una secuencia, la liga a la columna y la resincroniza al máximo id actual.
+            # Todo idempotente: se puede correr muchas veces sin daño y sin borrar datos.
             tablas = ['debts', 'abonos', 'habits', 'dreams', 'animes', 'books',
                       'compras', 'goals', 'extra_debts']
-            cur = self._con.cursor()
             for t in tablas:
+                cur = self._con.cursor()
                 try:
-                    # nombre de tabla validado (lista fija interna, no viene del usuario)
+                    seq = f'{t}_id_seq'
+                    cur.execute(f'CREATE SEQUENCE IF NOT EXISTS {seq}')
+                    cur.execute(f"ALTER TABLE {t} ALTER COLUMN id SET DEFAULT nextval('{seq}')")
+                    cur.execute(f'ALTER SEQUENCE {seq} OWNED BY {t}.id')
                     cur.execute(
-                        f"SELECT setval(pg_get_serial_sequence('{t}','id'), "
-                        f"COALESCE((SELECT MAX(id) FROM {t}),1), true)")
+                        f"SELECT setval('{seq}', COALESCE((SELECT MAX(id) FROM {t}),1), true)")
+                    self._con.commit()
                 except Exception:
                     self._con.rollback()
-                    cur = self._con.cursor()
             self._con.commit()
 
         def commit(self):
