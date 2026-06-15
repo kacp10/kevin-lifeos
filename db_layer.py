@@ -92,15 +92,44 @@ else:
             return ', '.join(f'{c}=EXCLUDED.{c}' for c in cols)
 
         def execute(self, sql, params=()):
-            cur = self._con.cursor()
-            cur.execute(self._translate(sql), params)
-            return PGCursor(cur)
+            try:
+                cur = self._con.cursor()
+                cur.execute(self._translate(sql), params)
+                return PGCursor(cur)
+            except Exception:
+                # una consulta falló: limpiar la conexión para que las siguientes funcionen
+                try:
+                    self._con.rollback()
+                except Exception:
+                    pass
+                raise
 
         def executescript(self, script):
             cur = self._con.cursor()
             for stmt in script.split(';'):
                 if stmt.strip():
-                    cur.execute(self._translate(stmt))
+                    try:
+                        cur.execute(self._translate(stmt))
+                    except Exception:
+                        self._con.rollback()
+                        cur = self._con.cursor()
+            self._con.commit()
+
+        def fix_sequences(self):
+            # Resincroniza los contadores SERIAL con el id máximo real de cada tabla.
+            # Sin esto, agregar libros/metas/anime nuevos choca con ids ya sembrados.
+            tablas = ['debts', 'abonos', 'habits', 'dreams', 'animes', 'books',
+                      'compras', 'goals', 'extra_debts']
+            cur = self._con.cursor()
+            for t in tablas:
+                try:
+                    # nombre de tabla validado (lista fija interna, no viene del usuario)
+                    cur.execute(
+                        f"SELECT setval(pg_get_serial_sequence('{t}','id'), "
+                        f"COALESCE((SELECT MAX(id) FROM {t}),1), true)")
+                except Exception:
+                    self._con.rollback()
+                    cur = self._con.cursor()
             self._con.commit()
 
         def commit(self):

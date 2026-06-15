@@ -218,6 +218,9 @@ def init_db():
         con.execute("INSERT INTO config VALUES ('life_v1','1')")
         con.commit()
         print('  + pestaña Life (rutina inteligente) activada')
+    # Postgres: resincronizar contadores SERIAL para que los INSERT nuevos no choquen
+    if db_layer.IS_PG and hasattr(con, 'fix_sequences'):
+        con.fix_sequences()
     con.close()
 
 
