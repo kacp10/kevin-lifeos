@@ -13,7 +13,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 15  # debe coincidir con FRONT_V en static/app.js
+VERSION = 16  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
