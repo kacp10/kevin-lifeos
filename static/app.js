@@ -35,7 +35,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 17;
+const FRONT_V = 18;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Fecha LOCAL del dispositivo (no UTC), en formato YYYY-MM-DD — evita el desfase de zona horaria
@@ -73,6 +73,61 @@ function toast(msg, tipo) {
   t.innerHTML = msg;
   wrap.appendChild(t);
   setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 350); }, 2600);
+}
+
+// ====== CONFETI + CELEBRACIÓN ÉPICA ======
+function confetti(duration = 2600) {
+  const cv = document.createElement('canvas');
+  cv.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2000';
+  cv.width = innerWidth; cv.height = innerHeight;
+  document.body.appendChild(cv);
+  const ctx = cv.getContext('2d');
+  const colors = ['#f5b942', '#36c9a7', '#7c6ce0', '#ff5e7a', '#ffffff'];
+  const parts = Array.from({ length: 140 }, () => ({
+    x: Math.random() * cv.width, y: -20 - Math.random() * cv.height * 0.5,
+    r: 4 + Math.random() * 6, c: colors[(Math.random() * colors.length) | 0],
+    vx: -2 + Math.random() * 4, vy: 2 + Math.random() * 4, rot: Math.random() * 6.28,
+    vr: -0.2 + Math.random() * 0.4
+  }));
+  const t0 = performance.now();
+  (function frame(t) {
+    const el = t - t0;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    for (const p of parts) {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.05; p.rot += p.vr;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.fillStyle = p.c; ctx.fillRect(-p.r / 2, -p.r / 2, p.r, p.r * 0.5); ctx.restore();
+    }
+    if (el < duration) requestAnimationFrame(frame);
+    else cv.remove();
+  })(t0);
+}
+
+function celebrate({ icon = '🎉', title = '', text = '', confettiOn = true }) {
+  if (confettiOn) confetti();
+  const back = document.createElement('div');
+  back.className = 'modal-back celebrate';
+  back.innerHTML = `<div class="modal-card celebrate-card">
+    <div class="celebrate-icon">${icon}</div>
+    <h3>${title}</h3>${text ? `<p>${text}</p>` : ''}
+    <div class="modal-btns"><button class="m-ok">¡Sigamos! / Let's go!</button></div>
+  </div>`;
+  document.body.appendChild(back);
+  requestAnimationFrame(() => back.classList.add('show'));
+  const close = () => { back.classList.remove('show'); setTimeout(() => back.remove(), 300); };
+  back.querySelector('.m-ok').onclick = close;
+  back.onclick = (e) => { if (e.target === back) close(); };
+}
+
+// Detecta enemigos recién derrotados comparando antes/después de un abono
+let _deudasVivasAntes = null;
+function snapshotDeudasVivas() {
+  const set = new Set();
+  for (const d of (S.debts || [])) {
+    const tot = d.initial + compradoEn(d.name);
+    if (tot - d.abonado > 0) set.add(d.name);
+  }
+  return set;
 }
 
 function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Confirmar', danger = false }) {
@@ -123,6 +178,7 @@ async function load(animate) {
   const ym = hoyLocal().slice(0, 7);
   S = await api('/api/state?month=' + ym);
   checkVersion();
+  renderFreedom();
   renderInicio();
   renderBoss(animate);
   renderHabitos();
@@ -132,9 +188,82 @@ async function load(animate) {
   renderGoals();
   renderLife();
   renderHaki();
+  setTimeout(avisosInteligentes, 1200);
+}
+
+let _avisosMostrados = false;
+function avisosInteligentes() {
+  if (_avisosMostrados) return;      // solo una vez por carga de página
+  _avisosMostrados = true;
+  const hoy = new Date();
+  const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+  // 1. Fin de mes: recordar cerrar el mes
+  if (hoy.getDate() >= diasEnMes - 1) {
+    const ymActual = hoyLocal().slice(0, 7);
+    const yaCerrado = (S.history || []).some(h => {
+      // label tipo "June 2026" no coincide directo con ym; chequeo laxo por mes/año
+      return false;
+    });
+    toast('📅 Month is ending — close it in Habits to lock your Haki.');
+  }
+  // 2. Sueños ya comprables (ahorro >= valor y no marcados como comprados)
+  const comprable = (S.dreams || []).find(d => d.value > 0 && d.saved >= d.value && !d.bought);
+  if (comprable) {
+    setTimeout(() => toast(`✨ You can buy <b>${comprable.name}</b> in cash now!`), 700);
+  }
+  // 3. Meta estancada: en proceso pero 0% (sin avance)
+  const estancada = (S.goals || []).find(g => g.status === 'En proceso 🔥' && (g.pct || 0) === 0);
+  if (estancada) {
+    setTimeout(() => toast(`🎯 "${estancada.name}" is in progress but at 0% — what's the next small step?`), 1400);
+  }
 }
 
 /* ---------- INICIO ---------- */
+function renderFreedom() {
+  const panel = document.getElementById('freedomPanel');
+  if (!panel) return;
+  const init = (S.debts || []).reduce((s, d) => s + d.initial + compradoEn(d.name), 0)
+    + (S.extra_debts || []).reduce((s, d) => s + d.total, 0);
+  const dmg = (S.debts || []).reduce((s, d) => s + d.abonado, 0);
+  const pct = init ? Math.min((dmg / init) * 100, 100) : 0;
+  const rest = Math.max(init - dmg, 0);
+
+  // ritmo: total abonado / meses con actividad -> estimar meses restantes
+  const abonos = S.abonos || [];
+  let fechaLibre = '';
+  if (abonos.length && rest > 0) {
+    const meses = new Set(abonos.map(a => (a.fecha || '').slice(0, 7)));
+    const ritmoMensual = dmg / Math.max(meses.size, 1);
+    if (ritmoMensual > 0) {
+      const mesesRestantes = Math.ceil(rest / ritmoMensual);
+      const f = new Date();
+      f.setMonth(f.getMonth() + mesesRestantes);
+      fechaLibre = f.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
+  }
+
+  const enemigosVivos = (S.debts || []).filter(d => (d.initial + compradoEn(d.name) - d.abonado) > 0).length
+    + (S.extra_debts || []).length;
+  panel.innerHTML = `
+    <div class="freedom-top">
+      <div>
+        <div class="freedom-label">🔓 Your road to freedom</div>
+        <div class="freedom-sub">${enemigosVivos} ${enemigosVivos === 1 ? 'enemy' : 'enemies'} left · ${fmt(rest)} to go</div>
+      </div>
+      <div class="freedom-pct">${pct.toFixed(1)}%</div>
+    </div>
+    <div class="freedom-bar"><i style="width:0%" data-w="${pct}"></i></div>
+    <div class="freedom-foot">
+      <span>Paid: <b>${fmt(dmg)}</b> of ${fmt(init)}</span>
+      ${fechaLibre ? `<span>At this pace: free by <b>${fechaLibre}</b> 🏁</span>` : '<span>Log payments to estimate your freedom date</span>'}
+    </div>`;
+  // animación: la barra crece desde 0
+  requestAnimationFrame(() => {
+    const bar = panel.querySelector('.freedom-bar i');
+    if (bar) setTimeout(() => { bar.style.width = bar.dataset.w + '%'; }, 100);
+  });
+}
+
 function renderInicio() {
   const sel = $('#monthSel');
   if (!sel.options.length) {
@@ -308,14 +437,24 @@ function renderBoss(animate) {
 $('#abonoForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const valor = +$('#abonoValor').value;
-  const r = await api('/api/abono', { body: { debt_id: +$('#abonoDebt').value, valor } });
+  const vivasAntes = snapshotDeudasVivas();
+  const debtId = +$('#abonoDebt').value;
+  const debtName = (S.debts.find(d => d.id === debtId) || {}).name || '';
+  const r = await api('/api/abono', { body: { debt_id: debtId, valor } });
   if (r.error) { toast('⚠ ' + r.error, 'err'); return; }
-  toast('⚔ Hit of <b>' + fmt(valor) + '</b> al jefe!');
+  toast('⚔ Hit of <b>' + fmt(valor) + '</b> to the boss!');
   const f = $('#dmgFloat');
   f.textContent = '−' + fmt(valor);
   f.classList.remove('show'); void f.offsetWidth; f.classList.add('show');
   $('#abonoValor').value = '';
-  load(true);
+  await load(true);
+  // ¿este abono mató al enemigo?
+  const vivasAhora = snapshotDeudasVivas();
+  if (debtName && vivasAntes.has(debtName) && !vivasAhora.has(debtName)) {
+    celebrate({ icon: '☠', title: 'ENEMY DEFEATED', text: `<b>${debtName}</b> is down. One less chain. 🔥` });
+  } else if (vivasAhora.size === 0 && vivasAntes.size > 0) {
+    celebrate({ icon: '👑', title: 'YOU ARE FREE', text: 'Every debt defeated. You won the war, Kevin.' });
+  }
 });
 
 $('#abonoList').addEventListener('click', async (e) => {
@@ -395,6 +534,21 @@ function renderDesglose() {
 }
 
 /* ---------- HÁBITOS ---------- */
+// Calcula días consecutivos de un hábito hasta hoy (o hasta ayer si hoy aún no se marca)
+function rachaHabito(habitId, marks) {
+  let streak = 0;
+  const d = new Date();
+  // si hoy no está marcado, empezar a contar desde ayer (no rompe la racha aún)
+  const hoyKey = `${habitId}|${localISO(d)}`;
+  if (!marks.has(hoyKey)) d.setDate(d.getDate() - 1);
+  for (let k = 0; k < 400; k++) {
+    const key = `${habitId}|${localISO(d)}`;
+    if (marks.has(key)) { streak++; d.setDate(d.getDate() - 1); }
+    else break;
+  }
+  return streak;
+}
+
 function renderHabitos() {
   const today = new Date();
   const ym = hoyLocal().slice(0, 7);
@@ -408,7 +562,9 @@ function renderHabitos() {
   for (let d = 1; d <= daysInMonth; d++) html += `<th>${d}</th>`;
   html += '</tr>';
   S.habits.forEach(h => {
-    html += `<tr><td class="hname">${h.name} <button class="del-x" data-type="habit" data-id="${h.id}">✕</button></td>`;
+    const racha = rachaHabito(h.id, marks);
+    const fuego = racha > 0 ? ` <span class="streak" title="${racha} days in a row">🔥${racha}</span>` : '';
+    html += `<tr><td class="hname">${h.name}${fuego} <button class="del-x" data-type="habit" data-id="${h.id}">✕</button></td>`;
     for (let d = 1; d <= daysInMonth; d++) {
       const day = `${ym}-${String(d).padStart(2, '0')}`;
       const on = marks.has(`${h.id}|${day}`);
@@ -440,7 +596,8 @@ $('#closeMonth').addEventListener('click', async (e) => {
   const { label, pct: p } = e.target.dataset;
   if (!await confirmModal('Cerrar el mes', `You're about to save <b>${label}</b> with <b>${(p * 100).toFixed(1)}%</b> in your Haki history. ${p >= 0.7 ? 'Month conquered! 👑' : 'Didn\'t reach 70%, but keep going.'}`, false)) return;
   await api('/api/close_month', { body: { label, pct: +p } });
-  load();
+  await load();
+  if (+p >= 0.7) celebrate({ icon: '👑', title: 'MONTH CONQUERED', text: `<b>${label}</b> closed at <b>${(p * 100).toFixed(0)}%</b>. Your Haki grows stronger.` });
 });
 
 function renderHaki() {
@@ -455,6 +612,31 @@ function renderHaki() {
     `<span class="haki-month ${h.pct >= 0.7 ? 'win' : 'lose'}">
      ${h.label}: ${pct(h.pct)} ${h.pct >= 0.7 ? '✔' : '✘'}</span>`
   ).join('') || '<span class="hint">Close your first month to start earning Haki. The King demands 6 months ≥70%.</span>';
+  renderHakiChart();
+}
+
+let hakiChart = null;
+function renderHakiChart() {
+  const cv = document.getElementById('hakiChart');
+  if (!cv) return;
+  const hist = S.history || [];
+  if (hist.length < 2) { cv.style.display = 'none'; if (hakiChart) { hakiChart.destroy(); hakiChart = null; } return; }
+  cv.style.display = '';
+  const data = {
+    labels: hist.map(h => h.label),
+    datasets: [{
+      label: '% completion',
+      data: hist.map(h => Math.round(h.pct * 100)),
+      borderColor: '#f5b942', backgroundColor: 'rgba(245,185,66,.15)',
+      fill: true, tension: 0.3, pointRadius: 5,
+      pointBackgroundColor: hist.map(h => h.pct >= 0.7 ? '#36c9a7' : '#ff5e7a')
+    }]
+  };
+  const opts = { responsive: true, plugins: { legend: { display: false } },
+    scales: { y: { min: 0, max: 100, ticks: { color: '#9a93b8' }, grid: { color: 'rgba(255,255,255,.06)' } },
+              x: { ticks: { color: '#9a93b8' }, grid: { display: false } } } };
+  if (hakiChart) { hakiChart.data = data; hakiChart.update(); }
+  else hakiChart = new Chart(cv, { type: 'line', data, options: opts });
 }
 
 /* ---------- METAS ---------- */
@@ -485,8 +667,15 @@ function renderGoals() {
 }
 $('#goalTable').addEventListener('change', async (e) => {
   if (!e.target.classList.contains('g-edit')) return;
-  await api('/api/goal', { body: { id: +e.target.dataset.id, field: e.target.dataset.f, value: e.target.value } });
-  load();
+  const field = e.target.dataset.f, value = e.target.value;
+  const g = S.goals.find(x => x.id === +e.target.dataset.id) || {};
+  const eraLograda = g.status === 'Lograda 🏆';
+  await api('/api/goal', { body: { id: +e.target.dataset.id, field, value } });
+  await load();
+  const ahora = S.goals.find(x => x.id === g.id) || {};
+  if (!eraLograda && (ahora.status === 'Lograda 🏆' || (field === 'status' && value === 'Lograda 🏆'))) {
+    celebrate({ icon: '🏆', title: 'GOAL ACHIEVED', text: `<b>${ahora.name || g.name}</b> — you earned it. On to the next.` });
+  }
 });
 
 /* ====== PELDAÑOS DE CARRERA (Data / Ciber) ====== */

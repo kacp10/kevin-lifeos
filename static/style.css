@@ -429,3 +429,38 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .hide-main { background: none; border: none; color: var(--mut); cursor: pointer;
   font-size: .72rem; opacity: .5; padding: 0 4px; }
 .hide-main:hover { opacity: 1; color: var(--hp); }
+
+/* ====== BARRA DE LIBERTAD (foto grande) v18 ====== */
+.freedom-panel {
+  background: linear-gradient(135deg, #2a2347, var(--panel));
+  border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px; margin-bottom: 16px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.25);
+}
+.freedom-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.freedom-label { font-family: 'Russo One', sans-serif; font-size: 1.05rem; color: var(--txt); }
+.freedom-sub { color: var(--mut); font-size: .82rem; margin-top: 3px; }
+.freedom-pct { font-family: 'Russo One', sans-serif; font-size: 2rem; color: var(--gold);
+  text-shadow: 0 0 18px rgba(245,185,66,.4); }
+.freedom-bar { height: 16px; background: #15112680; border-radius: 99px; overflow: hidden;
+  border: 1px solid var(--line); }
+.freedom-bar i { display: block; height: 100%;
+  background: linear-gradient(90deg, var(--ok), var(--gold));
+  border-radius: 99px; transition: width 1.1s cubic-bezier(.22,1,.36,1); }
+.freedom-foot { display: flex; justify-content: space-between; margin-top: 10px;
+  font-size: .82rem; color: var(--mut); flex-wrap: wrap; gap: 6px; }
+.freedom-foot b { color: var(--txt); }
+@media (max-width: 680px) { .freedom-pct { font-size: 1.5rem; } .freedom-foot { flex-direction: column; } }
+
+/* ====== CELEBRACIÓN ÉPICA ====== */
+.celebrate-card { text-align: center; border: 2px solid var(--gold);
+  box-shadow: 0 0 60px rgba(245,185,66,.35); }
+.celebrate-icon { font-size: 4rem; animation: celebpop .6s cubic-bezier(.22,1.5,.5,1) both; }
+@keyframes celebpop { 0% { transform: scale(0) rotate(-20deg); } 70% { transform: scale(1.3) rotate(8deg); } 100% { transform: scale(1) rotate(0); } }
+.celebrate-card h3 { font-size: 1.5rem; color: var(--gold); letter-spacing: 1px; margin: 8px 0; }
+
+/* ====== RACHA DE HÁBITOS ====== */
+.streak { color: var(--gold); font-size: .72rem; font-weight: 800; margin-left: 2px; }
+
+/* ====== ANIMACIÓN BARRAS DEL BOSS ====== */
+.mini-bar i { transition: width .9s cubic-bezier(.22,1,.36,1); }
+#bossHp { transition: width 1s cubic-bezier(.22,1,.36,1); }
