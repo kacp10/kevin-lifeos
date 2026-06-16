@@ -121,7 +121,8 @@ else:
             # Crea una secuencia, la liga a la columna y la resincroniza al máximo id actual.
             # Todo idempotente: se puede correr muchas veces sin daño y sin borrar datos.
             tablas = ['debts', 'abonos', 'habits', 'dreams', 'animes', 'books',
-                      'compras', 'goals', 'extra_debts']
+                      'compras', 'goals', 'extra_debts', 'careers', 'courses_done',
+                      'routine_extra']
             for t in tablas:
                 cur = self._con.cursor()
                 try:

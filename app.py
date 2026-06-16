@@ -13,7 +13,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 16  # debe coincidir con FRONT_V en static/app.js
+VERSION = 17  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -88,6 +88,16 @@ def init_db():
     CREATE TABLE IF NOT EXISTS routine_done (
         day TEXT, activity TEXT, note TEXT DEFAULT '', PRIMARY KEY (day, activity));
     CREATE TABLE IF NOT EXISTS study_profile (key TEXT PRIMARY KEY, value TEXT);
+    CREATE TABLE IF NOT EXISTS careers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, icon TEXT DEFAULT '🎯',
+        step INTEGER DEFAULT 0, course TEXT DEFAULT '', pct INTEGER DEFAULT 0,
+        active INTEGER DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS courses_done (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, career TEXT, title TEXT,
+        finished_on TEXT);
+    CREATE TABLE IF NOT EXISTS routine_extra (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, time TEXT, title TEXT, descr TEXT,
+        weekday INTEGER DEFAULT -1);
     CREATE TABLE IF NOT EXISTS extra_debts (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, total INTEGER,
         cuota INTEGER DEFAULT 0, cuotas INTEGER DEFAULT 0, start INTEGER DEFAULT 0);
@@ -218,6 +228,14 @@ def init_db():
         con.execute("INSERT INTO config VALUES ('life_v1','1')")
         con.commit()
         print('  + pestaña Life (rutina inteligente) activada')
+    if not con.execute("SELECT 1 FROM config WHERE key='careers_v1'").fetchone():
+        con.execute("INSERT INTO careers (name, icon, step, course, pct, active) VALUES (?,?,?,?,?,?)",
+                    ('Data Analytics', '📊', 0, 'Google Data Analytics (Coursera)', 14, 1))
+        con.execute("INSERT INTO careers (name, icon, step, course, pct, active) VALUES (?,?,?,?,?,?)",
+                    ('Cybersecurity', '🛡', 0, '', 0, 0))
+        con.execute("INSERT INTO config VALUES ('careers_v1','1')")
+        con.commit()
+        print('  + carreras personalizables activadas')
     # Postgres: resincronizar contadores SERIAL para que los INSERT nuevos no choquen
     if db_layer.IS_PG and hasattr(con, 'fix_sequences'):
         con.fix_sequences()
@@ -268,9 +286,12 @@ def state():
     shifts = {r['weekday']: r['shift'] for r in d.execute('SELECT * FROM week_shifts')}
     profile = {r['key']: r['value'] for r in d.execute('SELECT * FROM study_profile')}
     rdone = [f"{r['day']}|{r['activity']}" for r in d.execute('SELECT day, activity FROM routine_done')]
+    careers = [dict(r) for r in d.execute('SELECT * FROM careers')]
+    courses_done = [dict(r) for r in d.execute('SELECT * FROM courses_done ORDER BY id DESC')]
+    routine_extra = [dict(r) for r in d.execute('SELECT * FROM routine_extra')]
     extra_debts = [dict(r) for r in d.execute('SELECT * FROM extra_debts')]
     core = [x[0] for x in _SEED['debts']]
-    return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, plan=plan, debts=debts, abonos=abonos, habits=habits,
+    return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, plan=plan, debts=debts, abonos=abonos, habits=habits,
                         marks=marks, history=history, dreams=dreams,
                         animes=animes, books=books,
                         servicios=SERVICIOS, detalle=DETALLE,
@@ -428,6 +449,70 @@ def shift():
     j = request.json
     db().execute('INSERT OR REPLACE INTO week_shifts VALUES (?,?)',
                  (int(j['weekday']), j['shift']))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/career/new')
+def career_new():
+    j = request.json
+    db().execute('INSERT INTO careers (name, icon) VALUES (?,?)',
+                 (j['name'].strip(), j.get('icon', '🎯')))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/career')
+def career_update():
+    j = request.json
+    field = j['field']
+    if field not in ('name', 'icon', 'step', 'course', 'pct', 'active'):
+        return jsonify(error='Field not allowed'), 400
+    if field == 'active':   # solo una activa a la vez
+        db().execute('UPDATE careers SET active=0')
+        db().execute('UPDATE careers SET active=1 WHERE id=?', (int(j['id']),))
+    else:
+        val = int(j['value'] or 0) if field in ('step', 'pct') else j['value']
+        db().execute(f'UPDATE careers SET {field}=? WHERE id=?', (val, int(j['id'])))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete('/api/career/<int:i>')
+def career_del(i):
+    db().execute('DELETE FROM careers WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/course/done')
+def course_done():
+    j = request.json
+    db().execute('INSERT INTO courses_done (career, title, finished_on) VALUES (?,?,?)',
+                 (j.get('career', ''), j['title'].strip(), j.get('finished_on', date.today().isoformat())))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete('/api/course/<int:i>')
+def course_del(i):
+    db().execute('DELETE FROM courses_done WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/routine_extra/new')
+def routine_extra_new():
+    j = request.json
+    db().execute('INSERT INTO routine_extra (time, title, descr, weekday) VALUES (?,?,?,?)',
+                 (j.get('time', ''), j['title'].strip(), j.get('descr', ''), int(j.get('weekday', -1))))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete('/api/routine_extra/<int:i>')
+def routine_extra_del(i):
+    db().execute('DELETE FROM routine_extra WHERE id=?', (i,))
     db().commit()
     return jsonify(ok=True)
 
