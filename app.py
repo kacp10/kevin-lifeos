@@ -97,7 +97,11 @@ def init_db():
         finished_on TEXT);
     CREATE TABLE IF NOT EXISTS routine_extra (
         id INTEGER PRIMARY KEY AUTOINCREMENT, time TEXT, title TEXT, descr TEXT,
-        weekday INTEGER DEFAULT -1);
+        weekday INTEGER DEFAULT -1, day TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS routine_hidden (
+        weekday INTEGER, akey TEXT, PRIMARY KEY (weekday, akey));
+    CREATE TABLE IF NOT EXISTS routine_hidden_day (
+        day TEXT, akey TEXT, PRIMARY KEY (day, akey));
     CREATE TABLE IF NOT EXISTS extra_debts (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, total INTEGER,
         cuota INTEGER DEFAULT 0, cuotas INTEGER DEFAULT 0, start INTEGER DEFAULT 0);
@@ -228,6 +232,13 @@ def init_db():
         con.execute("INSERT INTO config VALUES ('life_v1','1')")
         con.commit()
         print('  + pestaña Life (rutina inteligente) activada')
+    if not con.execute("SELECT 1 FROM config WHERE key='routine_day_v1'").fetchone():
+        try:
+            con.execute("ALTER TABLE routine_extra ADD COLUMN day TEXT DEFAULT ''")
+        except Exception:
+            pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('routine_day_v1','1')")
+        con.commit()
     if not con.execute("SELECT 1 FROM config WHERE key='careers_v1'").fetchone():
         con.execute("INSERT INTO careers (name, icon, step, course, pct, active) VALUES (?,?,?,?,?,?)",
                     ('Data Analytics', '📊', 0, 'Google Data Analytics (Coursera)', 14, 1))
@@ -289,9 +300,11 @@ def state():
     careers = [dict(r) for r in d.execute('SELECT * FROM careers')]
     courses_done = [dict(r) for r in d.execute('SELECT * FROM courses_done ORDER BY id DESC')]
     routine_extra = [dict(r) for r in d.execute('SELECT * FROM routine_extra')]
+    routine_hidden = [f"{r['weekday']}|{r['akey']}" for r in d.execute('SELECT weekday, akey FROM routine_hidden')]
+    routine_hidden_day = [f"{r['day']}|{r['akey']}" for r in d.execute('SELECT day, akey FROM routine_hidden_day')]
     extra_debts = [dict(r) for r in d.execute('SELECT * FROM extra_debts')]
     core = [x[0] for x in _SEED['debts']]
-    return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, plan=plan, debts=debts, abonos=abonos, habits=habits,
+    return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, plan=plan, debts=debts, abonos=abonos, habits=habits,
                         marks=marks, history=history, dreams=dreams,
                         animes=animes, books=books,
                         servicios=SERVICIOS, detalle=DETALLE,
@@ -501,11 +514,35 @@ def course_del(i):
     return jsonify(ok=True)
 
 
+@app.post('/api/routine_hide')
+def routine_hide():
+    j = request.json
+    akey = j['akey']
+    scope = j.get('scope', 'day')   # 'day' = solo esa fecha, 'week' = todos esos días
+    if scope == 'week':
+        wd = int(j['weekday'])
+        cur = db().execute('SELECT 1 FROM routine_hidden WHERE weekday=? AND akey=?', (wd, akey)).fetchone()
+        if cur:
+            db().execute('DELETE FROM routine_hidden WHERE weekday=? AND akey=?', (wd, akey))
+        else:
+            db().execute('INSERT INTO routine_hidden (weekday, akey) VALUES (?,?)', (wd, akey))
+    else:
+        day = j['day']
+        cur = db().execute('SELECT 1 FROM routine_hidden_day WHERE day=? AND akey=?', (day, akey)).fetchone()
+        if cur:
+            db().execute('DELETE FROM routine_hidden_day WHERE day=? AND akey=?', (day, akey))
+        else:
+            db().execute('INSERT INTO routine_hidden_day (day, akey) VALUES (?,?)', (day, akey))
+    db().commit()
+    return jsonify(ok=True)
+
+
 @app.post('/api/routine_extra/new')
 def routine_extra_new():
     j = request.json
-    db().execute('INSERT INTO routine_extra (time, title, descr, weekday) VALUES (?,?,?,?)',
-                 (j.get('time', ''), j['title'].strip(), j.get('descr', ''), int(j.get('weekday', -1))))
+    db().execute('INSERT INTO routine_extra (time, title, descr, weekday, day) VALUES (?,?,?,?,?)',
+                 (j.get('time', ''), j['title'].strip(), j.get('descr', ''),
+                  int(j.get('weekday', -1)), j.get('day', '')))
     db().commit()
     return jsonify(ok=True)
 
