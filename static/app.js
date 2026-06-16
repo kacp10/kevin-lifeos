@@ -720,6 +720,16 @@ function bloqueEstudio(pf) {
 }
 
 let CUR_WD = 0;
+// Convierte una etiqueta de hora a un número ordenable (minutos desde medianoche).
+// "6:00"->360, "14:00"->840, "8:30"->510. Textos sin hora van al final en orden lógico.
+function horaOrden(t) {
+  const m = String(t).match(/^(\d{1,2}):?(\d{2})?/);
+  if (m) return (+m[1]) * 60 + (+(m[2] || 0));
+  const orden = { 'Morning': 7 * 60, 'Afternoon': 15 * 60, 'Tarde': 15 * 60,
+    'Evening': 19 * 60, 'Night': 21 * 60, 'Noche': 21 * 60, 'Free': 22 * 60,
+    'Sleep': 23 * 60, 'Dormir': 23 * 60 };
+  return orden[t] != null ? orden[t] : 23 * 60 + 30;   // desconocidos, casi al final
+}
 function renderRoutineDay() {
   const val = $('#dayPick').value;
   if (!val) return;
@@ -728,17 +738,28 @@ function renderRoutineDay() {
   CUR_WD = wd;
   const shiftKey = (S.shifts || {})[wd] || 'libre';
   const { rest, acts, msg } = actividadesDelDia(wd, shiftKey);
-  // añadir actividades extra del usuario para este día (weekday -1 = todos los días)
-  const extras = (S.routine_extra || []).filter(x => x.weekday === -1 || x.weekday === wd);
+  // ocultar principales: por fecha exacta (puntual) o por weekday (recurrente)
+  const hiddenWeek = new Set(S.routine_hidden || []);
+  const hiddenDay = new Set(S.routine_hidden_day || []);
+  let lista = acts.filter(a => !hiddenWeek.has(`${wd}|${a.key}`) && !hiddenDay.has(`${iso}|${a.key}`));
+  // extras: por fecha exacta (day == iso), por weekday, o globales (weekday -1 y sin day)
+  const extras = (S.routine_extra || []).filter(x =>
+    (x.day && x.day === iso) ||
+    (!x.day && (x.weekday === -1 || x.weekday === wd)));
   for (const x of extras) {
-    acts.push({ t: x.time || '—', title: x.title, d: x.descr || '', key: 'extra_' + x.id, extraId: x.id });
+    lista.push({ t: x.time || '—', title: x.title, d: x.descr || '', key: 'extra_' + x.id, extraId: x.id });
   }
+  // ORDENAR TODO por hora real (los textos como Sleep/Afternoon/Night van al final en orden lógico)
+  lista.sort((a, b) => horaOrden(a.t) - horaOrden(b.t));
   const done = new Set(S.rdone || []);
   let html = '';
   if (rest && msg) html += `<div class="rest-day"><div class="big">🌿</div><p>${msg}</p></div>`;
-  html += acts.map(a => {
+  html += lista.map(a => {
     const isDone = done.has(`${iso}|${a.key}`);
-    const delBtn = a.extraId ? `<button class="del-x" data-type="routine_extra" data-id="${a.extraId}" title="Remove">✕</button>` : '';
+    // botón borrar: las extra se borran de la BD; las principales se ocultan para ese día
+    const delBtn = a.extraId
+      ? `<button class="del-x" data-type="routine_extra" data-id="${a.extraId}" title="Remove">✕</button>`
+      : `<button class="hide-main" data-wd="${wd}" data-day="${iso}" data-key="${a.key}" title="Remove / replace">✕</button>`;
     return `<div class="routine-block ${a.work ? 'work' : ''} ${isDone ? 'done' : ''}">
       <span class="rb-time">${a.t}</span>
       <div class="rb-body"><div class="rb-title">${a.title} ${delBtn}</div><div class="rb-desc">${a.d}</div></div>
@@ -805,20 +826,57 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  const hideBtn = e.target.closest('.hide-main');
+  if (hideBtn) {
+    const wd = +hideBtn.dataset.wd, key = hideBtn.dataset.key, iso = hideBtn.dataset.day;
+    const dayName = DIAS[wd];
+    const r = await modal({ icon: '✏️', title: 'Remove or replace',
+      text: `Remove this activity. Replace it? Type the new one (optional). And choose if it's just this ${dayName} or every ${dayName}.`,
+      fields: [
+        { type: 'text', placeholder: 'New activity (optional)' },
+        { type: 'text', placeholder: 'Time (e.g. 14:00, optional)' },
+        { type: 'select', options: [
+          { v: 'day', t: `Just this ${dayName} (${iso})` },
+          { v: 'week', t: `Every ${dayName} (recurring)` }
+        ] }
+      ], okText: 'Apply' });
+    if (r === null) return;
+    const scope = r[2] || 'day';
+    await api('/api/routine_hide', { body: { akey: key, scope, weekday: wd, day: iso } });
+    if (r[0] && r[0].trim()) {
+      const body = { time: r[1] || '', title: r[0], descr: '' };
+      if (scope === 'week') body.weekday = wd; else body.day = iso;
+      await api('/api/routine_extra/new', { body });
+      toast('✏️ Activity replaced');
+    } else {
+      toast(scope === 'week' ? `✕ Removed every ${dayName}` : '✕ Removed for this day only');
+    }
+    load();
+    return;
+  }
+
   if (e.target.id === 'addRoutineBtn') {
     const sh = SHIFTS[(S.shifts || {})[CUR_WD] || 'libre'];
     const sugerencia = (!sh || !sh.work) ? 'Free day — any time works'
       : `Free after ${sh.work[1] + 1}:00`;
+    const iso = ($('#dayPick').value || '').split('|')[0];
+    const dayName = DIAS[CUR_WD];
     const r = await modal({ icon: '➕', title: 'Add activity',
-      text: `Add something to this day. ${sugerencia}.`,
+      text: `Add something. ${sugerencia}. Choose if it's just this ${dayName} or every ${dayName}.`,
       fields: [
         { type: 'text', placeholder: 'Time (e.g. 20:00)' },
         { type: 'text', placeholder: 'Activity name' },
-        { type: 'text', placeholder: 'Short note (optional)' }
+        { type: 'text', placeholder: 'Short note (optional)' },
+        { type: 'select', options: [
+          { v: 'day', t: `Just this ${dayName} (${iso})` },
+          { v: 'week', t: `Every ${dayName} (recurring)` }
+        ] }
       ], okText: 'Add' });
     if (!r || !r[1].trim()) return;
-    await api('/api/routine_extra/new', { body: { time: r[0], title: r[1], descr: r[2], weekday: CUR_WD } });
-    toast('➕ Activity added to this day');
+    const body = { time: r[0], title: r[1], descr: r[2] };
+    if ((r[3] || 'day') === 'week') body.weekday = CUR_WD; else body.day = iso;
+    await api('/api/routine_extra/new', { body });
+    toast((r[3] || 'day') === 'week' ? `➕ Added every ${dayName}` : '➕ Added for this day only');
     load();
     return;
   }

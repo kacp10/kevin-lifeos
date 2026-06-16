@@ -424,3 +424,8 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 }
 .anime-filter button:hover { color: var(--txt); border-color: var(--gold); }
 .anime-filter button.active { background: var(--gold); color: #221a06; border-color: var(--gold); }
+
+/* botón borrar/reemplazar actividad principal de la rutina */
+.hide-main { background: none; border: none; color: var(--mut); cursor: pointer;
+  font-size: .72rem; opacity: .5; padding: 0 4px; }
+.hide-main:hover { opacity: 1; color: var(--hp); }
