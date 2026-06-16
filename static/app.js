@@ -151,7 +151,7 @@ function renderInicio() {
   $('#kpis').innerHTML = `
     <div class="card"><label>Monthly income</label><strong>${fmt(ingreso)}</strong></div>
     <div class="card red"><label>Debt this month</label><strong>${fmt(totalDeudas)}</strong></div>
-    <div class="card"><label>Vida + ahorro</label><strong>${fmt(p.vida + p.ahorro)}</strong></div>
+    <div class="card"><label>Life + savings</label><strong>${fmt(p.vida + p.ahorro)}</strong></div>
     <div class="card ${saldo >= 0 ? 'green' : 'red'}"><label>Expected balance</label><strong>${fmt(saldo)}</strong></div>` +
     (() => {
       const crecioCompras = deudas.reduce((s, d) => s + d[2], 0);
@@ -177,7 +177,7 @@ function renderInicio() {
     '👑 50/30/20 ZONE: debt now fits the rule. Time to spend on wants and dreams.';
 
   const data = {
-    labels: ['Necesidades', 'Ahorro', 'Deudas', 'Free cushion'],
+    labels: ['Needs', 'Savings', 'Debt', 'Free cushion'],
     datasets: [{
       data: [p.vida, p.ahorro, totalDeudas, Math.max(saldo, 0)],
       backgroundColor: ['#7c6ce0', '#f5b942', '#e0445c', '#36c9a7'],
@@ -431,7 +431,7 @@ function renderHaki() {
   $('#hakiHistory').innerHTML = S.history.map(h =>
     `<span class="haki-month ${h.pct >= 0.7 ? 'win' : 'lose'}">
      ${h.label}: ${pct(h.pct)} ${h.pct >= 0.7 ? '✔' : '✘'}</span>`
-  ).join('') || '<span class="hint">Cierra tu primer mes para empezar a ganar Haki. El Rey exige 6 meses ≥70%.</span>';
+  ).join('') || '<span class="hint">Close your first month to start earning Haki. The King demands 6 months ≥70%.</span>';
 }
 
 /* ---------- METAS ---------- */
@@ -442,6 +442,7 @@ function renderGoals() {
     <div class="card gold"><label>Goals achieved</label><strong>${won} / ${S.goals.length}</strong></div>
     <div class="card"><label>In progress 🔥</label><strong>${fuego}</strong></div>`;
   const estados = ['Pendiente', 'En proceso 🔥', 'Lograda 🏆'];
+  const estLbl = { 'Pendiente': 'Pending', 'En proceso 🔥': 'In progress 🔥', 'Lograda 🏆': 'Achieved 🏆' };
   $('#goalTable').innerHTML =
     '<tr><th>Goal</th><th>Why do you want it?</th><th>Date</th><th>Status</th><th>%</th><th>Progress</th><th>Next step</th><th></th></tr>' +
     S.goals.map(g => {
@@ -452,7 +453,7 @@ function renderGoals() {
         <td><input class="g-edit wide" data-id="${g.id}" data-f="why" value="${esc(g.why)}" placeholder="your reason in one line"></td>
         <td><input class="g-edit" data-id="${g.id}" data-f="target" value="${esc(g.target)}" style="width:84px"></td>
         <td><select class="g-edit" data-id="${g.id}" data-f="status">
-          ${estados.map(s => `<option ${s === g.status ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
+          ${estados.map(s => `<option value="${s}" ${s === g.status ? 'selected' : ''}>${estLbl[s]}</option>`).join('')}</select></td>
         <td><input class="g-edit" type="number" min="0" max="100" data-id="${g.id}" data-f="pct" value="${p}" style="width:64px"></td>
         <td class="bar-cell">${bar}</td>
         <td><input class="g-edit wide" data-id="${g.id}" data-f="next_step" value="${esc(g.next_step)}" placeholder="next small action"></td>
