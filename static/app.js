@@ -35,7 +35,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 16;
+const FRONT_V = 17;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';   // debe coincidir con VERSION en app.py
 
@@ -48,7 +48,7 @@ async function api(path, opts) {
       body: opts.body ? JSON.stringify(opts.body) : undefined
     } : undefined);
   } catch (err) {
-    toast('⚠ No pude hablar con el servidor. ¿Está corriendo <b>python app.py</b>?', 'err');
+    toast('⚠ Could not reach the server.', 'err');
     throw err;
   }
   if (!r.ok) {
@@ -82,7 +82,7 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
       <h3>${title}</h3>${text ? `<p>${text}</p>` : ''}
       ${fieldsHtml}
       <div class="modal-btns">
-        ${fields.length || !danger ? '<button class="m-cancel">Cancelar</button>' : ''}
+        ${fields.length || !danger ? '<button class="m-cancel">Cancel</button>' : ''}
         <button class="m-ok ${danger ? 'danger' : ''}">${okText}</button>
       </div></div>`;
     document.body.appendChild(back);
@@ -102,7 +102,7 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
   });
 }
 async function confirmModal(title, text, danger = true) {
-  return await modal({ icon: danger ? '⚠' : '❓', title, text, okText: 'Sí, hazlo', danger }) === true;
+  return await modal({ icon: danger ? '⚠' : '❓', title, text, okText: 'Yes, do it', danger }) === true;
 }
 
 function checkVersion() {
@@ -149,10 +149,10 @@ function renderInicio() {
   const saldo = ingreso - egresos;
 
   $('#kpis').innerHTML = `
-    <div class="card"><label>Ingreso del mes</label><strong>${fmt(ingreso)}</strong></div>
-    <div class="card red"><label>Deudas del mes</label><strong>${fmt(totalDeudas)}</strong></div>
+    <div class="card"><label>Monthly income</label><strong>${fmt(ingreso)}</strong></div>
+    <div class="card red"><label>Debt this month</label><strong>${fmt(totalDeudas)}</strong></div>
     <div class="card"><label>Vida + ahorro</label><strong>${fmt(p.vida + p.ahorro)}</strong></div>
-    <div class="card ${saldo >= 0 ? 'green' : 'red'}"><label>Saldo esperado</label><strong>${fmt(saldo)}</strong></div>` +
+    <div class="card ${saldo >= 0 ? 'green' : 'red'}"><label>Expected balance</label><strong>${fmt(saldo)}</strong></div>` +
     (() => {
       const crecioCompras = deudas.reduce((s, d) => s + d[2], 0);
       const cuotasReg = extraDebtCuota(i);
@@ -160,24 +160,24 @@ function renderInicio() {
       const crecio = crecioCompras + cuotasReg;
       let html = '';
       if (crecio > 0)
-        html += `<div class="card red"><label>📈 Deuda creció este mes</label><strong>+${fmt(crecio)}</strong></div>`;
+        html += `<div class="card red"><label>📈 Debt grew this month</label><strong>+${fmt(crecio)}</strong></div>`;
       if (sinCuotas > 0)
-        html += `<div class="card red"><label>☠ Deudas registradas sin cuotas (saldo)</label><strong>${fmt(sinCuotas)}</strong></div>`;
+        html += `<div class="card red"><label>☠ Registered debts without installments (balance)</label><strong>${fmt(sinCuotas)}</strong></div>`;
       return html;
     })();
 
   $('#pagosTable').innerHTML =
     deudas.map(d => `<tr><td>${d[0]}${d[2] > 0 ? ` <small class="grew" title="incluye compra a cuotas">📈 +${fmt(d[2])}</small>` : ''}</td><td class="num">${fmt(d[1])}</td></tr>`).join('') +
-    `<tr><th>Total deudas</th><th class="num">${fmt(totalDeudas)}</th></tr>`;
+    `<tr><th>Total debt</th><th class="num">${fmt(totalDeudas)}</th></tr>`;
 
   const dPct = totalDeudas / ingreso;
   $('#diagnostico').textContent =
-    dPct > 0.5 ? '⚔ MODO GUERRA: la deuda se come más de la mitad del ingreso. Aguanta, cada mes baja.' :
-    dPct > 0.3 ? '🛡 RESISTIENDO: la deuda aún pesa más que el ideal. Vas por buen camino.' :
-    '👑 ZONA 50/30/20: la deuda ya cabe en la regla. Hora de soltar plata a gustos y sueños.';
+    dPct > 0.5 ? '⚔ WAR MODE: debt eats more than half your income. Hold on, it drops every month.' :
+    dPct > 0.3 ? '🛡 HOLDING: debt still weighs more than ideal. You\'re on the right track.' :
+    '👑 50/30/20 ZONE: debt now fits the rule. Time to spend on wants and dreams.';
 
   const data = {
-    labels: ['Necesidades', 'Ahorro', 'Deudas', 'Colchón libre'],
+    labels: ['Necesidades', 'Ahorro', 'Deudas', 'Free cushion'],
     datasets: [{
       data: [p.vida, p.ahorro, totalDeudas, Math.max(saldo, 0)],
       backgroundColor: ['#7c6ce0', '#f5b942', '#e0445c', '#36c9a7'],
@@ -242,7 +242,7 @@ function renderBoss(animate) {
   const extraBars = (S.extra_debts || []).map(d => {
     const cuotaTxt = d.cuotas >= 1
       ? `${d.cuotas} cuotas de ${fmt(d.cuota)} desde ${S.plan.months[d.start] || '—'}`
-      : 'sin cuotas (abónale cuando puedas)';
+      : 'no installments (pay it down when you can)';
     return `<div class="debt-item">
       <div class="row-between"><span>☠ ${d.name}
         <button class="del-x" data-type="debt_extra" data-id="${d.id}" title="Borrar deuda">✕</button></span>
@@ -266,20 +266,20 @@ function renderBoss(animate) {
   $('#cpCred').innerHTML = Object.keys(S.plan.creditors)
     .map(c => `<option>${c}</option>`).join('');
   $('#cpStart').innerHTML = S.plan.months
-    .map((m, ix) => `<option value="${ix}">1ª cuota: ${m}</option>`).join('');
-  $('#ndStart').innerHTML = '<option value="0">1ª cuota: mes inicial</option>' + S.plan.months
-    .map((m, ix) => `<option value="${ix}">1ª cuota: ${m}</option>`).join('');
+    .map((m, ix) => `<option value="${ix}">1st installment: ${m}</option>`).join('');
+  $('#ndStart').innerHTML = '<option value="0">1st installment: starting month</option>' + S.plan.months
+    .map((m, ix) => `<option value="${ix}">1st installment: ${m}</option>`).join('');
   $('#compraList').innerHTML = S.compras.map(c =>
     `<li><span>${c.creditor} · ${c.concepto} · ${c.cuotas} x ${fmt(cuotaDe(c))} desde ${S.plan.months[c.start]}</span>
      <span>${fmt(c.valor)} <button class="del-x" data-type="compra" data-id="${c.id}">✕</button></span></li>`
-  ).join('') || '<li>Sin compras nuevas a cuotas. Que siga así. 🙏</li>';
+  ).join('') || '<li>No new installment purchases. Keep it that way. 🙏</li>';
 
   renderDesglose();
 
   $('#abonoList').innerHTML = S.abonos.map(a =>
     `<li><span>${a.fecha} · ${a.name}</span>
      <span>${fmt(a.valor)} <button class="del" data-id="${a.id}" title="Deshacer">✕</button></span></li>`
-  ).join('') || '<li>Aún sin ataques. El primer abono es el más importante.</li>';
+  ).join('') || '<li>No attacks yet. The first payment is the most important one.</li>';
 }
 
 $('#abonoForm').addEventListener('submit', async (e) => {
@@ -287,7 +287,7 @@ $('#abonoForm').addEventListener('submit', async (e) => {
   const valor = +$('#abonoValor').value;
   const r = await api('/api/abono', { body: { debt_id: +$('#abonoDebt').value, valor } });
   if (r.error) { toast('⚠ ' + r.error, 'err'); return; }
-  toast('⚔ ¡Golpe de <b>' + fmt(valor) + '</b> al jefe!');
+  toast('⚔ Hit of <b>' + fmt(valor) + '</b> al jefe!');
   const f = $('#dmgFloat');
   f.textContent = '−' + fmt(valor);
   f.classList.remove('show'); void f.offsetWidth; f.classList.add('show');
@@ -297,7 +297,7 @@ $('#abonoForm').addEventListener('submit', async (e) => {
 
 $('#abonoList').addEventListener('click', async (e) => {
   if (!e.target.classList.contains('del')) return;
-  if (!await confirmModal('Deshacer abono', '¿Quieres deshacer este ataque? El daño se le devuelve al jefe.')) return;
+  if (!await confirmModal('Deshacer abono', 'Undo this attack? The damage goes back to the boss.')) return;
   await api('/api/abono/' + e.target.dataset.id, { method: 'DELETE' });
   load();
 });
@@ -312,7 +312,7 @@ function calcItem(it, i) {
   if (num > total) {
     return { label: nombre, cuota: 0, saldo: 0, done: true };
   }
-  return { label: `${nombre} · cuota ${num}/${total}`, cuota,
+  return { label: `${nombre} · installment ${num}/${total}`, cuota,
            saldo: cuota * (total - num), done: false };
 }
 
@@ -344,21 +344,21 @@ function renderDesglose() {
     const pagadas = Math.min(Math.max(num, 0), c.cuotas);
     const activa = num >= 1 && num <= c.cuotas;
     (filas[g] = filas[g] || []).push({
-      label: `💳 ${c.concepto}` + (activa ? ` · cuota ${num}/${c.cuotas}` : ` (${c.cuotas} cuotas desde ${S.plan.months[c.start]})`),
+      label: `💳 ${c.concepto}` + (activa ? ` · installment ${num}/${c.cuotas}` : ` (${c.cuotas} cuotas desde ${S.plan.months[c.start]})`),
       cuota: activa ? cuotaDe(c) : 0,
       saldo: Math.max(c.valor - cuotaDe(c) * pagadas, 0),
       done: num > c.cuotas
     });
   }
   let total = 0;
-  let html = `<p class="hint">Calculado para <b>${S.plan.months[i]}</b> — cámbialo con el selector de mes en Inicio y mira las cuotas avanzar solas.</p>`;
+  let html = `<p class="hint">Calculated for <b>${S.plan.months[i]}</b> — change it with the month selector in Home and watch installments advance on their own.</p>`;
   html += Object.entries(filas).map(([grupo, items]) => {
     const saldo = items.reduce((s, it) => s + it.saldo, 0);
     if (!grupo.startsWith('Nómina')) total += saldo;
     return `<details><summary><span>${grupo}</span>
       <span class="sum-val">${saldo ? fmt(saldo) : 'cargos fijos'}</span></summary>
       <table class="table">
-      <tr><th>Concepto</th><th>Cuota del mes</th><th>Saldo tras pagar</th></tr>` +
+      <tr><th>Item</th><th>This month</th><th>Balance after paying</th></tr>` +
       items.map(it => it.done
         ? `<tr class="done-row"><td>✓ ${it.label} — TERMINADA</td><td class="num">—</td><td class="num">$0</td></tr>`
         : `<tr><td>${it.label}</td>
@@ -366,7 +366,7 @@ function renderDesglose() {
            <td class="num">${it.saldo ? fmt(it.saldo) : '—'}</td></tr>`).join('') +
       '</table></details>';
   }).join('');
-  html += `<div class="desglose-total"><span>TOTAL DEUDA EN ${S.plan.months[i].toUpperCase()} (sin nómina)</span>
+  html += `<div class="desglose-total"><span>TOTAL DEBT IN ${S.plan.months[i].toUpperCase()} (excl. payroll)</span>
     <span>${fmt(total)}</span></div>`;
   $('#desglose').innerHTML = html;
 }
@@ -378,7 +378,7 @@ function renderHabitos() {
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
   const elapsed = today.getDate();
   const monthName = today.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
-  $('#habitMonthTitle').textContent = 'Hábitos · ' + monthName;
+  $('#habitMonthTitle').textContent = 'Habits · ' + monthName;
 
   const marks = new Set(S.marks);
   let html = '<tr><th></th>';
@@ -400,8 +400,8 @@ function renderHabitos() {
   const globalPct = done / (S.habits.length * elapsed);
   $('#habitStats').innerHTML = `
     <div class="card green"><label>x marcadas este mes</label><strong>${done}</strong></div>
-    <div class="card gold"><label>Cumplimiento del mes</label><strong>${pct(globalPct)}</strong></div>
-    <div class="card"><label>Días transcurridos</label><strong>${elapsed} / ${daysInMonth}</strong></div>`;
+    <div class="card gold"><label>Month completion</label><strong>${pct(globalPct)}</strong></div>
+    <div class="card"><label>Days elapsed</label><strong>${elapsed} / ${daysInMonth}</strong></div>`;
   $('#closeMonth').dataset.pct = globalPct;
   $('#closeMonth').dataset.label = monthName;
 }
@@ -415,7 +415,7 @@ $('#habitGrid').addEventListener('click', async (e) => {
 
 $('#closeMonth').addEventListener('click', async (e) => {
   const { label, pct: p } = e.target.dataset;
-  if (!await confirmModal('Cerrar el mes', `Vas a guardar <b>${label}</b> con <b>${(p * 100).toFixed(1)}%</b> en tu historial de Haki. ${p >= 0.7 ? '¡Mes conquistado! 👑' : 'No llegó al 70%, pero sigue.'}`, false)) return;
+  if (!await confirmModal('Cerrar el mes', `You're about to save <b>${label}</b> with <b>${(p * 100).toFixed(1)}%</b> in your Haki history. ${p >= 0.7 ? 'Month conquered! 👑' : 'Didn\'t reach 70%, but keep going.'}`, false)) return;
   await api('/api/close_month', { body: { label, pct: +p } });
   load();
 });
@@ -424,9 +424,9 @@ function renderHaki() {
   const wins = S.history.filter(h => h.pct >= 0.7).length;
   const level =
     wins === 0 ? '😴 Haki dormido' :
-    wins < 2 ? '👁 Haki de Observación' :
-    wins < 4 ? '🛡 Haki de Armamento' :
-    wins < 6 ? '⚡ Haki avanzado' : '👑 HAKI DEL REY CONQUISTADOR';
+    wins < 2 ? '👁 Observation Haki' :
+    wins < 4 ? '🛡 Armament Haki' :
+    wins < 6 ? '⚡ Advanced Haki' : '👑 HAKI DEL REY CONQUISTADOR';
   $('#hakiBadge').textContent = `${level} · ${wins} ${wins === 1 ? 'mes' : 'meses'}`;
   $('#hakiHistory').innerHTML = S.history.map(h =>
     `<span class="haki-month ${h.pct >= 0.7 ? 'win' : 'lose'}">
@@ -439,23 +439,23 @@ function renderGoals() {
   const won = S.goals.filter(g => g.status === 'Lograda 🏆').length;
   const fuego = S.goals.filter(g => g.status === 'En proceso 🔥').length;
   $('#goalStats').innerHTML = `
-    <div class="card gold"><label>Metas logradas</label><strong>${won} / ${S.goals.length}</strong></div>
-    <div class="card"><label>En proceso 🔥</label><strong>${fuego}</strong></div>`;
+    <div class="card gold"><label>Goals achieved</label><strong>${won} / ${S.goals.length}</strong></div>
+    <div class="card"><label>In progress 🔥</label><strong>${fuego}</strong></div>`;
   const estados = ['Pendiente', 'En proceso 🔥', 'Lograda 🏆'];
   $('#goalTable').innerHTML =
-    '<tr><th>Meta</th><th>¿Por qué la quieres?</th><th>Fecha</th><th>Estado</th><th>%</th><th>Progreso</th><th>Próximo paso</th><th></th></tr>' +
+    '<tr><th>Goal</th><th>Why do you want it?</th><th>Date</th><th>Status</th><th>%</th><th>Progress</th><th>Next step</th><th></th></tr>' +
     S.goals.map(g => {
       const p = Math.min(Math.max(g.pct || 0, 0), 100);
       const bar = '█'.repeat(Math.round(p / 5)) + '░'.repeat(20 - Math.round(p / 5));
       return `<tr class="${g.status === 'Lograda 🏆' ? 'goal-won' : ''}">
         <td><input class="g-edit wide" data-id="${g.id}" data-f="name" value="${esc(g.name)}"></td>
-        <td><input class="g-edit wide" data-id="${g.id}" data-f="why" value="${esc(g.why)}" placeholder="tu razón en una frase"></td>
+        <td><input class="g-edit wide" data-id="${g.id}" data-f="why" value="${esc(g.why)}" placeholder="your reason in one line"></td>
         <td><input class="g-edit" data-id="${g.id}" data-f="target" value="${esc(g.target)}" style="width:84px"></td>
         <td><select class="g-edit" data-id="${g.id}" data-f="status">
           ${estados.map(s => `<option ${s === g.status ? 'selected' : ''}>${s}</option>`).join('')}</select></td>
         <td><input class="g-edit" type="number" min="0" max="100" data-id="${g.id}" data-f="pct" value="${p}" style="width:64px"></td>
         <td class="bar-cell">${bar}</td>
-        <td><input class="g-edit wide" data-id="${g.id}" data-f="next_step" value="${esc(g.next_step)}" placeholder="siguiente acción pequeña"></td>
+        <td><input class="g-edit wide" data-id="${g.id}" data-f="next_step" value="${esc(g.next_step)}" placeholder="next small action"></td>
         <td><button class="del-x" data-type="goal" data-id="${g.id}">✕</button></td></tr>`;
     }).join('');
 }
@@ -466,18 +466,24 @@ $('#goalTable').addEventListener('change', async (e) => {
 });
 
 /* ====== PELDAÑOS DE CARRERA (Data / Ciber) ====== */
-const PELDANOS = ['Fundamentos', 'Intermedio', 'Proyectos', 'Profesional'];
+const PELDANOS = ['Fundamentals', 'Intermediate', 'Projects', 'Professional'];
+const STEP_DESC = [
+  'The basics: core concepts, tools and first courses. Your current course lives here.',
+  'Going deeper: advanced topics, real practice, complex exercises.',
+  'Building: 2-3 solid projects for your portfolio (GitHub, demos).',
+  'The seal: a strong certificate + ready to work professionally.'
+];
 const PELDANO_DESC = [
-  'Lo básico: SQL, Excel, Python intro, conceptos. Tu curso actual vive aquí.',
-  'Profundizas: estadística, limpieza de datos, visualización, consultas complejas.',
-  'Construyes: 2-3 proyectos reales en tu portafolio (GitHub, dashboards).',
-  'El sello: un certificado fuerte (Google Data Analytics, CompTIA Security+) + listo para trabajar.'
+  'The basics: SQL, Excel, Python intro, concepts. Your current course lives here.',
+  'Going deeper: statistics, data cleaning, visualization, complex queries.',
+  'Building: 2-3 real projects for your portfolio (GitHub, dashboards).',
+  'The seal: a strong certificate + ready to work.'
 ];
 const PELDANO_DESC_CIBER = [
-  'Lo básico: redes, Linux, conceptos de seguridad. Cisco "Intro a Ciberseguridad".',
-  'Profundizas: TryHackMe rooms, criptografía básica, análisis de vulnerabilidades.',
-  'Practicas: máquinas resueltas, writeups, un mini-portafolio de hacking ético.',
-  'El sello: certificado fuerte (CompTIA Security+) + listo para trabajar.'
+  'The basics: networks, Linux, security concepts.',
+  'Going deeper: TryHackMe rooms, crypto basics, vulnerability analysis.',
+  'Practice: solved machines, writeups, an ethical-hacking mini-portfolio.',
+  'The seal: strong certificate + ready to work.'
 ];
 // progreso de la meta = (peldaños completos + avance del curso actual) / 4
 function progresoCarrera(foco) {
@@ -511,22 +517,22 @@ const SHIFTS = {
   '8-17': { label: '8am – 5pm', work: [8, 17] },
   '9-18': { label: '9am – 6pm', work: [9, 18] },
   '12-21': { label: '12pm – 9pm (viernes)', work: [12, 21] },
-  'sabado': { label: 'Sábado 10am – 6pm', work: [10, 18] },
-  'sabado11': { label: 'Sábado 11am – 7pm', work: [11, 19] },
-  'libre': { label: 'Libre', work: null },
-  'descanso': { label: 'Descanso', work: null }
+  'sabado': { label: 'Saturday 10am – 6pm', work: [10, 18] },
+  'sabado11': { label: 'Saturday 11am – 7pm', work: [11, 19] },
+  'libre': { label: 'Day off', work: null },
+  'descanso': { label: 'Rest', work: null }
 };
-const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+const DIAS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 // inglés A1-A2 → C1: qué tocar cada día de la semana
 const INGLES_PLAN = [
-  ['Inglés (20 min) — Gramática', 'Language Transfer (audio), 1 lección. Estructuras simples: to be, presente, pasado. 20 min enfocados.'],
-  ['Inglés (20 min) — Vocabulario', '15 palabras nuevas en Anki. Repasa las de ayer. Apunta las que veas en el trabajo.'],
-  ['Inglés (20 min) — Listening', 'VOA Learning English (beginner). Subtítulos en inglés y repite en voz alta (shadowing).'],
-  ['Inglés (20 min) — Speaking', 'ELSA Speak + describe tu día en voz alta. Grábate 1 min y escúchate.'],
-  ['Inglés (20 min) — Reading', 'Graded readers o noticias VOA. Subraya lo que no entiendas, búscalo después.'],
-  ['Inglés (20 min) — Repaso', 'Repasa la semana. Si ves anime hoy, ponlo con subtítulos en inglés y anota 5 frases.'],
-  ['Inglés (15 min) — Suave', 'Solo lo que más te gustó esta semana. Mente descansada también aprende.']
+  ['English (20 min) — Grammar', 'Language Transfer (audio), 1 lesson. Simple structures: to be, present, past. 20 focused minutes.'],
+  ['English (20 min) — Vocabulary', '15 new words in Anki. Review yesterday\'s. Note the ones you see at work.'],
+  ['English (20 min) — Listening', 'VOA Learning English (beginner). English subtitles, repeat out loud (shadowing).'],
+  ['English (20 min) — Speaking', 'ELSA Speak + describe your day out loud. Record 1 min and listen back.'],
+  ['English (20 min) — Reading', 'Graded readers or VOA news. Underline what you don\'t get, look it up after.'],
+  ['English (20 min) — Review', 'Review the week. If you watch anime today, use English subtitles and note 5 phrases.'],
+  ['English (15 min) — Easy', 'Just what you enjoyed most this week. A rested mind learns too.']
 ];
 
 function renderLife() {
@@ -539,11 +545,6 @@ function renderLife() {
         ${Object.entries(SHIFTS).map(([k, v]) =>
           `<option value="${k}" ${(sh[wd] || 'libre') === k ? 'selected' : ''}>${v.label}</option>`).join('')}
       </select></div>`).join('');
-  $('#pfFoco').innerHTML = ['Data', 'Ciber'].map(v =>
-    `<option value="${v}" ${(pf.foco2 || 'Data') === v ? 'selected' : ''}>${v === 'Data' ? '🎯 Analítica de Datos' : '🎯 Ciberseguridad'}</option>`).join('');
-  // sincronizar ambas metas con su progreso de carrera al cargar
-  syncMeta('Data'); syncMeta('Ciber');
-
   // 2. Selector de día (próximos 7 días desde hoy)
   const pick = $('#dayPick');
   if (!pick.dataset.ready) {
@@ -553,7 +554,7 @@ function renderLife() {
       const d = new Date(base); d.setDate(base.getDate() + k);
       const iso = d.toISOString().slice(0, 10);
       const wd = (d.getDay() + 6) % 7;
-      opts += `<option value="${iso}|${wd}">${k === 0 ? 'HOY · ' : ''}${DIAS[wd]} ${d.getDate()}/${d.getMonth() + 1}</option>`;
+      opts += `<option value="${iso}|${wd}">${k === 0 ? 'TODAY · ' : ''}${DIAS[wd]} ${d.getDate()}/${d.getMonth() + 1}</option>`;
     }
     pick.innerHTML = opts;
     pick.dataset.ready = '1';
@@ -561,173 +562,253 @@ function renderLife() {
   }
   renderRoutineDay();
 
-  // Panel de carrera con peldaños (Data y Ciber)
-  renderCareer(pf);
-  // Progreso REAL del foco según días de estudio cumplidos (no un salto a 100)
-  const focoMeta = (S.goals || []).find(g => {
-    const n = (g.name || '').toLowerCase();
-    return (pf.foco2 || 'Data') === 'Ciber'
-      ? /ciber|cyber|security|seguridad/.test(n)
-      : /data|anal[íi]tic|datos/.test(n);
-  });
-  const diasEstudio = (S.rdone || []).filter(x => x.endsWith('|estudio') || x.endsWith('|proyecto')).length;
-  // 3. Consejo de la semana según foco
-  const foco = pf.foco2 || 'Data';
-  const pct = +pf.data_pct || 0;
-  let tip = `Tu inglés está en ${pf.ingles_nivel || 'A1-A2'}: la constancia diaria pesa más que las maratones. 30 min TODOS los días te llevan al C1, no 3 horas un solo día. `;
-  if (foco === 'Data') {
-    tip += pct < 30 ? `Vas en ${pct}% de tu curso: céntrate en fundamentos y SQL. Practica en SQLBolt en paralelo.`
-      : pct < 70 ? `${pct}% del curso: ya puedes empezar tu primer proyecto en Looker Studio con datos reales (¡los de este Life OS!).`
-      : `${pct}%: recta final. Sube 2 proyectos a GitHub y arma tu LinkedIn en inglés. Después: Data Engineering Zoomcamp.`;
-  } else {
-    tip += 'Foco en Ciberseguridad: arranca con Cisco "Introducción a la Ciberseguridad" (gratis, español) y TryHackMe los fines de semana.';
+  // Panel de carreras personalizables
+  renderCareer();
+  // sincronizar metas que coincidan por nombre con una carrera
+  for (const c of (S.careers || [])) {
+    const prog = progresoCareer(c);
+    const meta = (S.goals || []).find(g => {
+      const gn = (g.name || '').toLowerCase(), cn = (c.name || '').toLowerCase();
+      return gn.includes(cn) || cn.includes(gn.replace('learn ', '').replace('get ', ''));
+    });
+    if (meta && (meta.pct || 0) !== prog) {
+      api('/api/goal', { body: { id: meta.id, field: 'pct', value: prog } });
+    }
   }
-  tip += ` Llevas ${diasEstudio} ${diasEstudio === 1 ? 'sesión' : 'sesiones'} de estudio registradas — cada ✓ es progreso real. El 100% de una meta no se regala: se gana día a día, y tú decides cuándo de verdad llegaste.`;
-  // Sugerir actualizar el % de la meta conectada, sin forzarlo
-  if (focoMeta) {
-    const gp = focoMeta.pct || 0;
-    tip += ` Tu meta "${focoMeta.name}" va en ${gp}%: súbelo TÚ en la pestaña Metas cuando sientas el avance, no antes.`;
+
+  // 3. Weekly advice based on the ACTIVE career
+  const active = (S.careers || []).find(c => c.active) || (S.careers || [])[0];
+  const studyDays = (S.rdone || []).filter(x => x.endsWith('|estudio') || x.endsWith('|proyecto')).length;
+  const lvl = pf.ingles_nivel || 'A1-A2';
+  let tip = `Your English is at ${lvl}: daily consistency beats marathons. 30 focused minutes EVERY day take you to C1 — not 3 hours once. `;
+  if (active) {
+    const pct = active.pct || 0;
+    tip += `Focus: ${active.icon || ''} ${active.name} (${pct}% of your current course). `;
+    tip += pct < 30 ? 'Lock down the fundamentals first; practice a little every day.'
+      : pct < 70 ? 'Good momentum — start your first real project for your portfolio.'
+      : 'Final stretch: push 2 projects to GitHub and aim for your certificate.';
   }
-  $('#lifeTip').textContent = tip;
+  tip += ` You have ${studyDays} study ${studyDays === 1 ? 'session' : 'sessions'} logged — every ✓ is real progress. A goal's 100% is never given: you earn it day by day, and YOU decide when you truly got there.`;
+    $('#lifeTip').textContent = tip;
 }
 
-function renderCareer(pf) {
+function progresoCareer(c) {
+  return Math.min(Math.round((c.step || 0) * 25 + ((c.pct || 0) / 100) * 25), 100);
+}
+function renderCareer() {
   const wrap = document.getElementById('careerPanel');
   if (!wrap) return;
-  const bloque = (foco) => {
-    const isCiber = foco === 'Ciber';
-    const cursoK = isCiber ? 'ciber_curso' : 'data_curso';
-    const pctK = isCiber ? 'ciber_pct' : 'data_pct';
-    const stepK = isCiber ? 'ciber_step' : 'data_step';
-    const step = +(pf[stepK] || 0);
-    const pct = +(pf[pctK] || 0);
-    const prog = progresoCarrera(foco);
-    const descs = isCiber ? PELDANO_DESC_CIBER : PELDANO_DESC;
+  const careers = S.careers || [];
+  const done = S.courses_done || [];
+  const card = (c) => {
+    const prog = progresoCareer(c);
     const dots = PELDANOS.map((p, i) =>
-      `<span class="peldano ${i < step ? 'done' : i === step ? 'now' : ''}">${i < step ? '✓' : i + 1}. ${p}</span>`).join('');
-    return `<div class="career-card">
-      <div class="career-head"><b>${isCiber ? '🛡 Ciberseguridad' : '📊 Analítica de Datos'}</b>
-        <span class="career-prog">${prog}% de la meta</span></div>
+      `<span class="peldano ${i < c.step ? 'done' : i === c.step ? 'now' : ''}">${i < c.step ? '✓' : i + 1}. ${p}</span>`).join('');
+    const myCourses = done.filter(d => d.career === c.name);
+    const coursesHtml = myCourses.length
+      ? `<div class="courses-done">${myCourses.map(d =>
+          `<span class="course-chip">✓ ${esc(d.title)} <button class="del-x" data-type="course" data-id="${d.id}">✕</button></span>`).join('')}</div>`
+      : '<p class="hint" style="margin:4px 0">No finished courses yet.</p>';
+    return `<div class="career-card ${c.active ? 'career-active' : ''}">
+      <div class="career-head">
+        <b>${c.icon || '🎯'} ${esc(c.name)}</b>
+        <span class="career-prog">${prog}% to goal</span>
+      </div>
       <div class="peldano-row">${dots}</div>
       <div class="mini-bar green" style="margin:8px 0"><i style="width:${prog}%"></i></div>
       <div class="abono-form" style="margin-top:8px">
-        <select data-pf="${stepK}" style="flex:2">
-          ${PELDANOS.map((p, i) => `<option value="${i}" ${i === step ? 'selected' : ''}>Peldaño ${i + 1}: ${p}</option>`).join('')}
+        <select data-career="${c.id}" data-f="step" style="flex:2">
+          ${PELDANOS.map((p, i) => `<option value="${i}" ${i === c.step ? 'selected' : ''}>Step ${i + 1}: ${p}</option>`).join('')}
         </select>
-        <input data-pf="${cursoK}" placeholder="Curso actual" value="${esc(pf[cursoK] || '')}" style="flex:2">
-        <input data-pf="${pctK}" type="number" min="0" max="100" value="${pct}" placeholder="% curso" style="flex:1">
+        <input data-career="${c.id}" data-f="course" placeholder="Current course" value="${esc(c.course || '')}" style="flex:2">
+        <input data-career="${c.id}" data-f="pct" type="number" min="0" max="100" value="${c.pct || 0}" placeholder="% course" style="flex:1">
       </div>
-      <p class="hint" style="margin:6px 0 0">${descs[step]}</p>
+      <p class="hint" style="margin:6px 0 8px">${STEP_DESC[c.step] || ''}</p>
+      <div class="career-foot">
+        ${c.active ? '<span class="active-badge">★ Active focus</span>'
+          : `<button class="set-active" data-career="${c.id}">Set as focus</button>`}
+        <button class="add-course" data-career="${c.id}" data-name="${esc(c.name)}">+ Finished a course</button>
+        <button class="del-x" data-type="career" data-id="${c.id}" title="Delete career">✕</button>
+      </div>
+      <div class="career-courses"><b class="mini-title">Finished courses</b>${coursesHtml}</div>
     </div>`;
   };
-  wrap.innerHTML = bloque('Data') + bloque('Ciber');
+  wrap.innerHTML = careers.map(card).join('') +
+    `<button class="btn-gold add-career-btn" id="addCareerBtn">+ Add a career to learn</button>`;
 }
 
 function actividadesDelDia(wd, shiftKey) {
   const sh = SHIFTS[shiftKey] || SHIFTS.libre;
-  const pf = S.profile || {};
-  const foco = pf.foco2 || 'Data';
-  const focoLabel = foco === 'Data' ? 'Analítica de Datos' : 'Ciberseguridad';
+  const active = (S.careers || []).find(c => c.active) || (S.careers || [])[0];
+  const focoLabel = active ? `${active.icon || ''} ${active.name}` : 'Study';
   const [ing, ingDesc] = INGLES_PLAN[wd] || INGLES_PLAN[0];
+  const studyDesc = active
+    ? `${active.course || active.name} (at ${active.pct || 0}%). Advance one module + take notes.`
+    : 'Advance your active course + take notes.';
 
   if (shiftKey === 'descanso') {
-    return { rest: true, msg: 'Domingo de descanso 🌿', acts: [
-      { t: '9:00', title: 'Despertar sin alarma', d: 'Descansa de verdad. El cuerpo también entrena descansando.' },
-      { t: '10:00', title: 'Skincare + algo rico', d: 'Cuida tu piel sin prisa.' },
-      { t: 'Libre', title: 'Lectura ligera o anime', d: '1 capítulo de un libro o un episodio. Disfruta sin culpa.' },
-      { t: 'Noche', title: 'Planea la semana', d: 'Mira tu horario y ajusta los turnos en esta pestaña.' }
+    return { rest: true, msg: 'Rest Sunday 🌿', acts: [
+      { t: '9:00', title: 'Wake up without an alarm', d: 'Rest for real. The body also trains by resting.', key: 'wake' },
+      { t: '10:00', title: 'Skincare + something tasty', d: 'Take care of your skin, no rush.', key: 'skincare' },
+      { t: 'Free', title: 'Light reading or anime', d: 'One book chapter or one episode. Enjoy guilt-free.', key: 'leer' },
+      { t: 'Night', title: 'Plan the week', d: 'Check your schedule and adjust your shifts in this tab.', key: 'plan' }
     ]};
   }
 
   const acts = [];
-  acts.push({ t: '6:00', title: 'Saltar lazo + ejercicio', d: '4 min de lazo + abdominales. Enciende el cuerpo. ⚡', key: 'ejercicio' });
-  acts.push({ t: '6:20', title: 'Skincare AM', d: 'Limpieza + protector solar. 5 min que se notan. 🧴', key: 'skincare' });
+  acts.push({ t: '6:00', title: 'Abs + jump rope', d: '4 min abs + ~10 min jump rope (increase over time). Wake up the body. ⚡', key: 'ejercicio' });
+  acts.push({ t: '6:20', title: 'Skincare AM', d: 'Cleanse + sunscreen. 5 minutes that show. 🧴', key: 'skincare' });
 
   if (sh.work) {
     const [ini, fin] = sh.work;
-    // antes del trabajo: si entra a las 9 o 12, mete inglés/estudio en la mañana
     if (ini >= 9) {
-      acts.push({ t: `6:40`, title: `Inglés — ${ing}`, d: ingDesc, key: 'ingles' });
-      if (ini >= 12) acts.push({ t: '8:30', title: `Estudio: ${focoLabel}`, d: bloqueEstudio(pf), key: 'estudio' });
+      acts.push({ t: `6:40`, title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
+      if (ini >= 12) acts.push({ t: '8:30', title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' });
     }
-    acts.push({ t: `${ini}:00`, title: '💼 WORK (bloqueado)', d: 'Solo trabajo, cursos de Softtek, o adelantar Coursera en los ratos libres.', work: true, key: 'work' });
-    // después del trabajo
+    acts.push({ t: `${ini}:00`, title: '💼 WORK (locked)', d: 'Work only — Softtek courses, or advance Coursera in free moments.', work: true, key: 'work' });
     let h = fin + 1;
-    if (ini < 9) { acts.push({ t: `${h}:00`, title: `Inglés — ${ing}`, d: ingDesc, key: 'ingles' }); h += 1; }
-    acts.push({ t: `${h}:00`, title: `Estudio: ${focoLabel}`, d: bloqueEstudio(pf), key: 'estudio' }); h += 1;
-    acts.push({ t: `${h}:00`, title: 'Gym 🏋️', d: 'Tu hora de hierro. No la negocies.', key: 'gym' }); h += 1;
-    acts.push({ t: `${h}:30`, title: 'Leer (20 min) + Skincare PM', d: '20 min de lectura y rutina de noche. Cierra el día. 📖', key: 'leer' });
-    acts.push({ t: 'Dormir', title: 'A la cama', d: 'Dormir bien es un hábito de tu lista. Protégelo como un pago.', key: 'dormir' });
-  } else if (shiftKey === 'sabado') {
-    acts.push({ t: '8:00', title: `Inglés — ${ing}`, d: ingDesc, key: 'ingles' });
-    acts.push({ t: '10:00', title: '💼 WORK sábado (bloqueado)', d: 'Turno de sábado. Suave con el resto del día.', work: true, key: 'work' });
-    acts.push({ t: '19:00', title: 'Gym ligero o caminar', d: 'Algo suave, ya trabajaste hoy.', key: 'gym' });
-    acts.push({ t: 'Noche', title: 'Leer (20 min) + Skincare', d: 'Cierre tranquilo, 20 min de lectura.', key: 'leer' });
+    if (ini < 9) { acts.push({ t: `${h}:00`, title: `English — ${ing}`, d: ingDesc, key: 'ingles' }); h += 1; }
+    acts.push({ t: `${h}:00`, title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' }); h += 1;
+    acts.push({ t: `${h}:00`, title: 'Gym 🏋️', d: 'Your iron hour. Don\'t negotiate it.', key: 'gym' }); h += 1;
+    acts.push({ t: `${h}:30`, title: 'Read (20 min) + Skincare PM', d: '20 min reading and night routine. Close the day. 📖', key: 'leer' });
+    acts.push({ t: 'Sleep', title: 'Off to bed', d: 'Sleeping well is a habit on your list. Protect it like a payment.', key: 'dormir' });
+  } else if (shiftKey === 'sabado' || shiftKey === 'sabado11') {
+    acts.push({ t: '8:00', title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
+    const [si, sfin] = sh.work || [10, 18];
+    acts.push({ t: `${si}:00`, title: '💼 WORK Saturday (locked)', d: 'Saturday shift. Take the rest of the day easy.', work: true, key: 'work' });
+    acts.push({ t: `${sfin + 1}:00`, title: 'Light gym or a walk', d: 'Something easy, you already worked today.', key: 'gym' });
+    acts.push({ t: 'Night', title: 'Read (20 min) + Skincare', d: 'Calm close, 20 min reading.', key: 'leer' });
   } else {
-    // día libre entre semana: sesión profunda
-    acts.push({ t: '6:40', title: `Inglés — ${ing}`, d: ingDesc, key: 'ingles' });
-    acts.push({ t: '8:00', title: `Estudio PROFUNDO: ${focoLabel}`, d: bloqueEstudio(pf) + ' Aprovecha: día libre = sesión larga de proyecto.', key: 'estudio' });
-    acts.push({ t: '11:00', title: 'Gym 🏋️', d: 'Entrena con calma, tienes tiempo.', key: 'gym' });
-    acts.push({ t: 'Tarde', title: 'Proyecto / portafolio', d: 'Avanza tu proyecto de datos o una room de ciberseguridad.', key: 'proyecto' });
-    acts.push({ t: 'Noche', title: 'Leer (20 min) + Skincare PM', d: '20 min de lectura. Cierra el día.', key: 'leer' });
+    acts.push({ t: '6:40', title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
+    acts.push({ t: '8:00', title: `DEEP study: ${focoLabel}`, d: studyDesc + ' Take advantage: day off = long project session.', key: 'estudio' });
+    acts.push({ t: '11:00', title: 'Gym 🏋️', d: 'Train calmly, you have time.', key: 'gym' });
+    acts.push({ t: 'Afternoon', title: 'Project / portfolio', d: 'Advance your project or a practice room.', key: 'proyecto' });
+    acts.push({ t: 'Night', title: 'Read (20 min) + Skincare PM', d: '20 min reading. Close the day.', key: 'leer' });
   }
   return { rest: false, acts };
 }
 
 function bloqueEstudio(pf) {
-  const pct = +(pf.data_pct || 0);
-  if ((pf.foco2 || 'Data') === 'Ciber')
-    return 'Cisco Skills for All + 1 room de TryHackMe. Anota comandos de Linux nuevos.';
-  return `Google Data Analytics (vas en ${pct}%). Avanza 1 módulo + 20 min de SQLBolt. Toma notas de lo que practicas.`;
+  const active = (S.careers || []).find(c => c.active);
+  return active ? `${active.course || active.name} (${active.pct || 0}%). Advance one module + take notes.`
+    : 'Advance your active course + take notes.';
 }
 
+let CUR_WD = 0;
 function renderRoutineDay() {
   const val = $('#dayPick').value;
   if (!val) return;
   const [iso, wdStr] = val.split('|');
   const wd = +wdStr;
+  CUR_WD = wd;
   const shiftKey = (S.shifts || {})[wd] || 'libre';
   const { rest, acts, msg } = actividadesDelDia(wd, shiftKey);
+  // añadir actividades extra del usuario para este día (weekday -1 = todos los días)
+  const extras = (S.routine_extra || []).filter(x => x.weekday === -1 || x.weekday === wd);
+  for (const x of extras) {
+    acts.push({ t: x.time || '—', title: x.title, d: x.descr || '', key: 'extra_' + x.id, extraId: x.id });
+  }
   const done = new Set(S.rdone || []);
   let html = '';
   if (rest && msg) html += `<div class="rest-day"><div class="big">🌿</div><p>${msg}</p></div>`;
   html += acts.map(a => {
     const isDone = done.has(`${iso}|${a.key}`);
+    const delBtn = a.extraId ? `<button class="del-x" data-type="routine_extra" data-id="${a.extraId}" title="Remove">✕</button>` : '';
     return `<div class="routine-block ${a.work ? 'work' : ''} ${isDone ? 'done' : ''}">
       <span class="rb-time">${a.t}</span>
-      <div class="rb-body"><div class="rb-title">${a.title}</div><div class="rb-desc">${a.d}</div></div>
+      <div class="rb-body"><div class="rb-title">${a.title} ${delBtn}</div><div class="rb-desc">${a.d}</div></div>
       <button class="rb-check ${isDone ? 'on' : ''}" data-day="${iso}" data-act="${a.key}">${isDone ? '✓' : ''}</button>
     </div>`;
   }).join('');
   $('#routineDay').innerHTML = html;
+
+  // INTELIGENCIA: ¿dónde hay hueco para algo nuevo?
+  const hint = $('#freeTimeHint');
+  if (hint) {
+    const sh = SHIFTS[shiftKey];
+    if (!sh || !sh.work) {
+      hint.innerHTML = '💡 This is a light/free day — you have plenty of room. Add anything you like.';
+    } else {
+      const [ini, fin] = sh.work;
+      const huecos = [];
+      if (ini >= 8) huecos.push(`early morning before work (around 6:00–${ini}:00)`);
+      huecos.push(`evening after work (from ${fin + 1}:00 on)`);
+      hint.innerHTML = `💡 Your free windows today: <b>${huecos.join('</b> and <b>')}</b>. Best time to add something new.`;
+    }
+  }
 }
 
 // listeners de Life
 document.addEventListener('change', async (e) => {
   if (e.target.matches('#shiftGrid select')) {
     await api('/api/shift', { body: { weekday: +e.target.dataset.wd, shift: e.target.value } });
-    toast('📅 Turno actualizado.');
+    toast('📅 Shift updated.');
     load();
-  } else if (e.target.id === 'pfFoco') {
-    await api('/api/profile', { body: { key: 'foco2', value: e.target.value } });
-    load();
-  } else if (e.target.matches('[data-pf]')) {
-    await api('/api/profile', { body: { key: e.target.dataset.pf, value: e.target.value } });
+  } else if (e.target.matches('[data-career]')) {
+    await api('/api/career', { body: { id: +e.target.dataset.career, field: e.target.dataset.f, value: e.target.value } });
     load();
   }
 });
+// Carreras: set active, add career, add course
 document.addEventListener('click', async (e) => {
+  const setA = e.target.closest('.set-active');
+  if (setA) { await api('/api/career', { body: { id: +setA.dataset.career, field: 'active', value: 1 } }); toast('★ Focus updated'); load(); return; }
+
+  if (e.target.id === 'addCareerBtn') {
+    const r = await modal({ icon: '🚀', title: 'Add a career',
+      text: 'What do you want to learn? (e.g. Web Development)',
+      fields: [
+        { type: 'text', placeholder: 'Career name' },
+        { type: 'text', placeholder: 'Emoji (optional, e.g. 💻)', value: '🎯' }
+      ], okText: 'Add career' });
+    if (!r || !r[0].trim()) return;
+    await api('/api/career/new', { body: { name: r[0], icon: r[1] || '🎯' } });
+    toast('🚀 Career added');
+    load();
+    return;
+  }
+
+  const addC = e.target.closest('.add-course');
+  if (addC) {
+    const r = await modal({ icon: '🎓', title: 'Finished a course',
+      text: `Add a finished course to <b>${addC.dataset.name}</b>. This is your record of what you complete.`,
+      fields: [{ type: 'text', placeholder: 'Course name' }], okText: 'Save course' });
+    if (!r || !r[0].trim()) return;
+    await api('/api/course/done', { body: { career: addC.dataset.name, title: r[0] } });
+    toast('🎓 Course logged!');
+    load();
+    return;
+  }
+
+  if (e.target.id === 'addRoutineBtn') {
+    const sh = SHIFTS[(S.shifts || {})[CUR_WD] || 'libre'];
+    const sugerencia = (!sh || !sh.work) ? 'Free day — any time works'
+      : `Free after ${sh.work[1] + 1}:00`;
+    const r = await modal({ icon: '➕', title: 'Add activity',
+      text: `Add something to this day. ${sugerencia}.`,
+      fields: [
+        { type: 'text', placeholder: 'Time (e.g. 20:00)' },
+        { type: 'text', placeholder: 'Activity name' },
+        { type: 'text', placeholder: 'Short note (optional)' }
+      ], okText: 'Add' });
+    if (!r || !r[1].trim()) return;
+    await api('/api/routine_extra/new', { body: { time: r[0], title: r[1], descr: r[2], weekday: CUR_WD } });
+    toast('➕ Activity added to this day');
+    load();
+    return;
+  }
+
   const c = e.target.closest('.rb-check');
   if (!c) return;
   const day = c.dataset.day, act = c.dataset.act;
   if (!c.classList.contains('on')) {
     // permitir registrar por qué no se hizo (opcional) -> aquí solo lo marca hecho
     await api('/api/routine', { body: { day, activity: act } });
-    toast('✓ ¡Hecho! Un golpe más a tus metas.');
+    toast('✓ Done! One more step toward your goals.');
   } else {
-    const why = await modal({ icon: '🤔', title: '¿Desmarcar?',
-      text: '¿No alcanzaste a hacer esto? Está bien, la vida pasa. Puedes anotar por qué.',
-      fields: [{ type: 'text', placeholder: 'ej: cita médica, planes... (opcional)' }], okText: 'Desmarcar' });
+    const why = await modal({ icon: '🤔', title: 'Uncheck?',
+      text: "Didn't get to do this? That's okay, life happens. You can note why.",
+      fields: [{ type: 'text', placeholder: 'e.g. doctor appointment, plans... (optional)' }], okText: 'Uncheck' });
     if (why === null) return;
     await api('/api/routine', { body: { day, activity: act, note: why[0] || '' } });
   }
@@ -740,7 +821,7 @@ function renderSuenos() {
   $('#dreamList').innerHTML = cats.map(cat => {
     const items = S.dreams.filter(d => d.category === cat);
     const comprados = items.filter(d => d.bought).length;
-    return `<div class="dream-cat">${cat} <small>· ${comprados}/${items.length} comprados ✅</small></div>` +
+    return `<div class="dream-cat">${cat} <small>· ${comprados}/${items.length} bought ✅</small></div>` +
       items.map(d => {
         const p = d.value ? Math.min(d.saved / d.value, 1) : 0;
         return `<div class="dream-item ${d.bought ? 'bought-item' : ''}">
@@ -748,7 +829,7 @@ function renderSuenos() {
           <input class="d-edit" type="number" min="0" data-f="value" data-id="${d.id}" value="${d.value}" title="Valor (editable)">
           <input class="d-edit" type="number" min="0" data-f="saved" data-id="${d.id}" value="${d.saved}" title="Lo que llevas ahorrado">
           <div class="mini-bar green"><i style="width:${d.bought ? 100 : p * 100}%"></i></div>
-          <button class="buy-btn ${d.bought ? 'on' : ''}" data-id="${d.id}">${d.bought ? '✅ Comprado' : '¿Comprado?'}</button>
+          <button class="buy-btn ${d.bought ? 'on' : ''}" data-id="${d.id}">${d.bought ? '✅ Comprado' : 'Bought?'}</button>
         </div>`;
       }).join('');
   }).join('');
@@ -809,9 +890,9 @@ function renderAnime() {
   const viendo = S.animes.filter(a => a.estado === 'Viéndolo 👀').length;
   const fin = S.animes.filter(a => a.estado === 'Finalizado ✅').length;
   $('#animeStats').innerHTML = `
-    <div class="card gold"><label>Viéndolo ahora 👀</label><strong>${viendo}</strong></div>
-    <div class="card green"><label>Finalizados ✅</label><strong>${fin}</strong></div>
-    <div class="card"><label>En la lista</label><strong>${S.animes.length}</strong></div>`;
+    <div class="card gold"><label>Watching now 👀</label><strong>${viendo}</strong></div>
+    <div class="card green"><label>Finished ✅</label><strong>${fin}</strong></div>
+    <div class="card"><label>In the list</label><strong>${S.animes.length}</strong></div>`;
   const pasa = (a) => ANIME_FILTRO === 'todos' || (a.estado || 'Pendiente') === ANIME_FILTRO
     || (ANIME_FILTRO === 'Pendiente' && !a.estado);
   const ranked = S.animes.filter(a => a.score != null && pasa(a));
@@ -836,7 +917,7 @@ function renderAnime() {
     const usadas = A_TEMPS.slice(0, nTemps).filter(f => numTotal(a[f]) > 0).length;
     const puedeMas = usadas >= nTemps && nTemps < 7;
     const addBtn = puedeMas
-      ? `<button class="add-temp" data-id="${a.id}" data-next="t${nTemps + 1}" title="Añadir temporada nueva">+ temp</button>` : '';
+      ? `<button class="add-temp" data-id="${a.id}" data-next="t${nTemps + 1}" title="Add new season">+ season</button>` : '';
     return `<tr class="${estadoCls}">
       <td class="${rank === 1 ? 'rank-1' : ''}">${rank ? (rank === 1 ? '👑 1' : '#' + rank) : '—'}</td>
       <td class="an-name ${rank === 1 ? 'rank-1' : ''}">${esc(a.name)} ${addBtn}</td>` +
@@ -850,7 +931,7 @@ function renderAnime() {
   const ths = BLOQUES.map(([, lbl]) => `<th>${lbl}</th>`).join('');
   let rank = 0;
   $('#animeTable').innerHTML =
-    '<tr><th>TOP</th><th>Anime</th>' + ths + '<th>Estado</th><th>Pt</th><th></th></tr>' +
+    '<tr><th>TOP</th><th>Anime</th>' + ths + '<th>Status</th><th>Pt</th><th></th></tr>' +
     ranked.map(a => fila(a, ++rank)).join('') +
     rest.map(a => fila(a, 0)).join('');
 }
@@ -860,11 +941,11 @@ $('#animeTable').addEventListener('click', async (e) => {
   const next = btn.dataset.next;
   const lbl = 'T' + next.slice(1);
   const r = await modal({ icon: '✨', title: 'Nueva temporada',
-    text: `¿Cuántos episodios tiene la <b>${lbl}</b>? Se añadirá solo a este anime.`,
-    fields: [{ type: 'number', placeholder: 'Episodios de ' + lbl, min: 1 }], okText: 'Añadir ' + lbl });
+    text: `How many episodes does <b>${lbl}</b> have? It will be added only to this anime.`,
+    fields: [{ type: 'number', placeholder: 'Episodios de ' + lbl, min: 1 }], okText: 'Add ' + lbl });
   if (!r || !r[0]) return;
   await api('/api/anime', { body: { id: +btn.dataset.id, field: next, value: r[0] } });
-  toast('✨ ' + lbl + ' añadida.');
+  toast('✨ ' + lbl + ' added.');
   load();
 });
 document.addEventListener('click', (e) => {
@@ -892,15 +973,21 @@ $('#animeTable').addEventListener('change', async (e) => {
 });
 
 /* ---------- LIBROS ---------- */
+let BOOK_FILTRO = 'all';
+const BOOK_STATES = [
+  ['Por comprar', 'To buy'], ['Por leer', 'To read'],
+  ['Leyendo', 'Reading'], ['Terminado', 'Finished']
+];
 function renderLibros() {
-  const states = ['Por comprar', 'Por leer', 'Leyendo', 'Terminado'];
+  const pasa = (b) => BOOK_FILTRO === 'all' || (b.status || 'Por leer') === BOOK_FILTRO;
+  const lista = S.books.filter(pasa);
   $('#bookTable').innerHTML =
-    '<tr><th>Título</th><th>Estado</th><th>Págs</th><th>Voy en</th><th>Progreso</th><th></th></tr>' +
-    S.books.map(b => {
+    '<tr><th>Title</th><th>Status</th><th>Pages</th><th>On page</th><th>Progress</th><th></th></tr>' +
+    lista.map(b => {
       const p = b.pages ? Math.min((b.status === 'Terminado' ? b.pages : b.current) / b.pages, 1) : 0;
-      return `<tr><td>${b.title}</td>
+      return `<tr><td>${esc(b.title)}</td>
         <td><select class="book-status" data-id="${b.id}">
-          ${states.map(s => `<option ${s === b.status ? 'selected' : ''}>${s}</option>`).join('')}
+          ${BOOK_STATES.map(([v, t]) => `<option value="${v}" ${v === b.status ? 'selected' : ''}>${t}</option>`).join('')}
         </select></td>
         <td><input class="pg-input" type="number" min="0" value="${b.pages}" data-id="${b.id}" data-f="pages"></td>
         <td><input class="pg-input" type="number" min="0" value="${b.current}" data-id="${b.id}" data-f="current"></td>
@@ -908,6 +995,14 @@ function renderLibros() {
         <td><button class="del-x" data-type="book" data-id="${b.id}">✕</button></td></tr>`;
     }).join('');
 }
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#bookFilter button');
+  if (!b) return;
+  BOOK_FILTRO = b.dataset.f;
+  document.querySelectorAll('#bookFilter button').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  renderLibros();
+});
 $('#bookTable').addEventListener('change', async (e) => {
   const id = +e.target.dataset.id;
   if (e.target.classList.contains('book-status'))
@@ -919,14 +1014,14 @@ $('#bookTable').addEventListener('change', async (e) => {
 
 /* ---------- BORRAR (nivel superior) ---------- */
 const DEL_MSG = {
-  debt_extra: '¿Borrar esta deuda registrada Y quitarla del jefe? Solo si la metiste por error.',
-  habit: '¿Borrar este hábito Y todas sus x marcadas? No afecta los meses ya cerrados en el historial de Haki.',
-  goal: '¿Borrar esta meta?',
-  compra: '¿Borrar esta compra a cuotas? Su cuota dejará de sumarse en Inicio y la barra del enemigo baja.',
-  dream: '¿Borrar este sueño? (si ya no te interesa, fuera)',
-  book: '¿Borrar este libro de la biblioteca?',
-  anime: '¿Borrar este anime de la lista?',
-  debt: '¿Borrar esta deuda Y sus abonos registrados? Solo hazlo si la registraste por error.'
+  debt_extra: 'Delete this registered debt AND remove it from the boss? Only if you added it by mistake.',
+  habit: 'Delete this habit AND all its marks? It won\'t affect months already closed in Haki history.',
+  goal: 'Delete this goal?',
+  compra: 'Delete this installment purchase? Its installment stops adding in Home and the boss bar goes down.',
+  dream: 'Delete this wish? (if you\'re not into it anymore, out)',
+  book: 'Delete this book from your library?',
+  anime: 'Delete this anime from the list?',
+  debt: 'Delete this debt AND its logged payments? Only if you registered it by mistake.'
 };
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('.del-x');
@@ -954,25 +1049,25 @@ $('#goalNew').addEventListener('submit', async (e) => {
 
 $('#compraNew').addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!await confirmModal('Compra a cuotas', 'Esto rompe tu promesa de cero cuotas nuevas. Regístrala solo si YA pasó en la vida real, para que el sistema diga la verdad.')) return;
+  if (!await confirmModal('Compra a cuotas', 'This breaks your promise of zero new installments. Log it only if it ALREADY happened in real life, so the system tells the truth.')) return;
   const r = await api('/api/compra', { body: {
     creditor: $('#cpCred').value, concepto: $('#cpConcepto').value,
     valor: +$('#cpValor').value, cuotas: +$('#cpCuotas').value,
     start: +$('#cpStart').value } });
   if (r.error) { toast('⚠ ' + r.error, 'err'); return; }
-  toast('💳 Compra registrada. El sistema ya la tiene en cuenta.');
+  toast('💳 Purchase logged. The system now accounts for it.');
   e.target.reset();
   load();
 });
 
 $('#debtNew').addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!await confirmModal('Registrar deuda', 'Recuerda tu promesa: nada nuevo a cuotas. Solo regístrala si ya existe en la vida real, para que el jefe muestre su HP verdadero.')) return;
+  if (!await confirmModal('Registrar deuda', 'Remember your promise: nothing new on installments. Only log it if it already exists in real life, so the boss shows its true HP.')) return;
   const r = await api('/api/debt/new', { body: {
     name: $('#ndName').value, valor: +$('#ndValor').value,
     cuotas: +$('#ndCuotas').value || 0, start: +$('#ndStart').value || 0 } });
   if (r.error) { toast('⚠ ' + r.error, 'err'); return; }
-  toast('☠ Nuevo enemigo registrado en la Alcancía.');
+  toast('☠ New enemy registered in the Debt Boss.');
   e.target.reset();
   load();
 });
@@ -998,20 +1093,20 @@ $('#animeNew').addEventListener('submit', async (e) => {
   const nombre = $('#anName').value.trim();
   if (!nombre) return;
   const campos = [
-    { type: 'number', placeholder: 'Episodios T1', min: 0 },
-    { type: 'number', placeholder: 'Episodios T2 (opcional)', min: 0 },
-    { type: 'number', placeholder: 'Episodios T3 (opcional)', min: 0 },
-    { type: 'number', placeholder: 'Películas (opcional)', min: 0 },
-    { type: 'number', placeholder: 'OVAs (opcional)', min: 0 }
+    { type: 'number', placeholder: 'Episodes S1', min: 0 },
+    { type: 'number', placeholder: 'Episodes S2 (optional)', min: 0 },
+    { type: 'number', placeholder: 'Episodes S3 (optional)', min: 0 },
+    { type: 'number', placeholder: 'Movies (optional)', min: 0 },
+    { type: 'number', placeholder: 'OVAs (optional)', min: 0 }
   ];
-  const r = await modal({ icon: '📺', title: 'Agregar ' + nombre,
-    text: 'Pon cuántos episodios tiene cada parte (puedes editar y agregar T4–T7 después en la tabla).',
-    fields: campos, okText: 'Agregar anime' });
+  const r = await modal({ icon: '📺', title: 'Add ' + nombre,
+    text: 'Enter how many episodes each part has (you can edit and add T4–T7 later in the table).',
+    fields: campos, okText: 'Add anime' });
   if (!r) return;
   const [t1, t2, t3, peliculas, ovas] = r;
   await api('/api/anime/new', { body: { name: nombre, t1, t2, t3, peliculas, ovas } });
   e.target.reset();
-  toast('📺 <b>' + nombre + '</b> agregado a tu lista.');
+  toast('📺 <b>' + nombre + '</b> added to your list.');
   load();
 });
 
