@@ -35,8 +35,9 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 15;
-let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)   // debe coincidir con VERSION en app.py
+const FRONT_V = 16;
+let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
+let ANIME_FILTRO = 'todos';   // debe coincidir con VERSION en app.py
 
 async function api(path, opts) {
   let r;
@@ -811,8 +812,10 @@ function renderAnime() {
     <div class="card gold"><label>Viéndolo ahora 👀</label><strong>${viendo}</strong></div>
     <div class="card green"><label>Finalizados ✅</label><strong>${fin}</strong></div>
     <div class="card"><label>En la lista</label><strong>${S.animes.length}</strong></div>`;
-  const ranked = S.animes.filter(a => a.score != null);
-  const rest = S.animes.filter(a => a.score == null);
+  const pasa = (a) => ANIME_FILTRO === 'todos' || (a.estado || 'Pendiente') === ANIME_FILTRO
+    || (ANIME_FILTRO === 'Pendiente' && !a.estado);
+  const ranked = S.animes.filter(a => a.score != null && pasa(a));
+  const rest = S.animes.filter(a => a.score == null && pasa(a));
   const estados = ['', 'Viéndolo 👀', 'En emisión 📡', 'Finalizado ✅', 'Pendiente'];
   const celda = (a, f) => {
     const total = numTotal(a[f]);
@@ -864,6 +867,20 @@ $('#animeTable').addEventListener('click', async (e) => {
   toast('✨ ' + lbl + ' añadida.');
   load();
 });
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('#animeFilter button');
+  if (!b) return;
+  ANIME_FILTRO = b.dataset.f;
+  document.querySelectorAll('#animeFilter button').forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+  renderAnime();
+});
+// al hacer foco en "voy en" o "total" que muestre 0, se vacía para escribir directo
+document.addEventListener('focus', (e) => {
+  if (e.target.matches('.v-in, .t-in') && e.target.value === '0') {
+    e.target.select();   // selecciona el 0; al teclear lo reemplaza al instante
+  }
+}, true);
 $('#animeTable').addEventListener('change', async (e) => {
   const t = e.target;
   if (t.classList.contains('v-in') || t.classList.contains('t-in') || t.classList.contains('a-edit')) {

@@ -414,3 +414,13 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .peldano.done { background: rgba(54,201,167,.16); border-color: var(--ok); color: var(--ok); }
 .peldano.now { background: rgba(245,185,66,.16); border-color: var(--gold); color: var(--gold); font-weight: 700; }
 @media (max-width: 680px) { .career-card .abono-form { flex-direction: column; } }
+
+/* ====== FILTRO ANIME v16 ====== */
+.anime-filter { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 14px; }
+.anime-filter button {
+  background: var(--panel); border: 1px solid var(--line); color: var(--mut);
+  padding: 6px 13px; border-radius: 99px; cursor: pointer; font-family: inherit;
+  font-size: .82rem; font-weight: 600;
+}
+.anime-filter button:hover { color: var(--txt); border-color: var(--gold); }
+.anime-filter button.active { background: var(--gold); color: #221a06; border-color: var(--gold); }
