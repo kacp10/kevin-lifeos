@@ -423,11 +423,11 @@ $('#closeMonth').addEventListener('click', async (e) => {
 function renderHaki() {
   const wins = S.history.filter(h => h.pct >= 0.7).length;
   const level =
-    wins === 0 ? '😴 Haki dormido' :
+    wins === 0 ? '😴 Haki asleep' :
     wins < 2 ? '👁 Observation Haki' :
     wins < 4 ? '🛡 Armament Haki' :
-    wins < 6 ? '⚡ Advanced Haki' : '👑 HAKI DEL REY CONQUISTADOR';
-  $('#hakiBadge').textContent = `${level} · ${wins} ${wins === 1 ? 'mes' : 'meses'}`;
+    wins < 6 ? '⚡ Advanced Haki' : '👑 CONQUEROR\'S HAKI';
+  $('#hakiBadge').textContent = `${level} · ${wins} ${wins === 1 ? 'month' : 'months'}`;
   $('#hakiHistory').innerHTML = S.history.map(h =>
     `<span class="haki-month ${h.pct >= 0.7 ? 'win' : 'lose'}">
      ${h.label}: ${pct(h.pct)} ${h.pct >= 0.7 ? '✔' : '✘'}</span>`
@@ -898,6 +898,8 @@ function renderAnime() {
   const ranked = S.animes.filter(a => a.score != null && pasa(a));
   const rest = S.animes.filter(a => a.score == null && pasa(a));
   const estados = ['', 'Viéndolo 👀', 'En emisión 📡', 'Finalizado ✅', 'Pendiente'];
+  const estLabel = { '': '—', 'Viéndolo 👀': 'Watching 👀', 'En emisión 📡': 'Airing 📡',
+    'Finalizado ✅': 'Finished ✅', 'Pendiente': 'Pending' };
   const celda = (a, f) => {
     const total = numTotal(a[f]);
     const visto = a['v_' + f] || 0;
@@ -923,7 +925,7 @@ function renderAnime() {
       <td class="an-name ${rank === 1 ? 'rank-1' : ''}">${esc(a.name)} ${addBtn}</td>` +
     BLOQUES.map(([f]) => celda(a, f)).join('') +
     `<td><select class="a-edit" data-id="${a.id}" data-f="estado">
-      ${estados.map(s => `<option value="${s}" ${(a.estado || '') === s ? 'selected' : ''}>${s || '—'}</option>`).join('')}</select></td>
+      ${estados.map(s => `<option value="${s}" ${(a.estado || '') === s ? 'selected' : ''}>${estLabel[s]}</option>`).join('')}</select></td>
     <td><input class="a-edit score-input" type="number" step="0.1" min="0" max="100"
         data-f="score" data-id="${a.id}" value="${a.score ?? ''}" placeholder="0-100"></td>
     <td><button class="del-x" data-type="anime" data-id="${a.id}">✕</button></td></tr>`;
@@ -1100,7 +1102,7 @@ $('#animeNew').addEventListener('submit', async (e) => {
     { type: 'number', placeholder: 'OVAs (optional)', min: 0 }
   ];
   const r = await modal({ icon: '📺', title: 'Add ' + nombre,
-    text: 'Enter how many episodes each part has (you can edit and add T4–T7 later in the table).',
+    text: 'Enter how many episodes each part has (you can edit and add S4–S7 later in the table).',
     fields: campos, okText: 'Add anime' });
   if (!r) return;
   const [t1, t2, t3, peliculas, ovas] = r;
