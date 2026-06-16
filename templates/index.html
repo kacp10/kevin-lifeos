@@ -17,14 +17,14 @@
 </header>
 
 <nav class="tabs" id="tabs">
-  <button data-tab="inicio" class="active">Inicio</button>
-  <button data-tab="alcancia">⚔ Alcancía</button>
-  <button data-tab="habitos">Hábitos</button>
-  <button data-tab="metas">🎯 Metas</button>
+  <button data-tab="inicio" class="active">🏠 Home</button>
+  <button data-tab="alcancia">⚔ Debt Boss</button>
+  <button data-tab="habitos">🔥 Habits</button>
+  <button data-tab="metas">🎯 Goals</button>
   <button data-tab="life">📅 Life</button>
-  <button data-tab="suenos">Sueños</button>
-  <button data-tab="anime">Anime</button>
-  <button data-tab="libros">Libros</button>
+  <button data-tab="suenos">✨ Wishlist</button>
+  <button data-tab="anime">📺 Anime</button>
+  <button data-tab="libros">📚 Books</button>
 </nav>
 
 <main>
@@ -32,14 +32,14 @@
 <!-- ============ INICIO ============ -->
 <section id="tab-inicio" class="tab active">
   <div class="row-between">
-    <h1>Tu mes en números</h1>
+    <h1>🏠 Your month in numbers</h1>
     <select id="monthSel" class="month-select"></select>
   </div>
   <div class="cards" id="kpis"></div>
 
   <div class="panel">
     <div class="row-between">
-      <h2>Checklist de pagos del mes</h2>
+      <h2>Monthly payment checklist</h2>
       <strong id="checkCount" class="gold-txt"></strong>
     </div>
     <div class="grid-2">
@@ -48,7 +48,7 @@
         <div id="checkServicios"></div>
       </div>
       <div>
-        <h3 class="mini-title">Cuotas de deudas</h3>
+        <h3 class="mini-title">Debt payments</h3>
         <div id="checkDeudas"></div>
       </div>
     </div>
@@ -56,11 +56,11 @@
 
   <div class="grid-2">
     <div class="panel">
-      <h2>A dónde va la plata</h2>
+      <h2>Where the money goes</h2>
       <canvas id="pieChart" height="240"></canvas>
     </div>
     <div class="panel">
-      <h2>Pagos del mes</h2>
+      <h2>This month's payments</h2>
       <table class="table" id="pagosTable"></table>
       <p class="diag" id="diagnostico"></p>
     </div>
@@ -78,51 +78,51 @@
     </div>
     <div class="boss-stats">
       <div><label>HP restante</label><strong id="bossRest">—</strong></div>
-      <div><label>Daño total causado</label><strong id="bossDmg" class="gold">—</strong></div>
+      <div><label>Total damage dealt</label><strong id="bossDmg" class="gold">—</strong></div>
       <div><label>HP inicial</label><strong id="bossInit">—</strong></div>
     </div>
   </div>
 
   <div class="grid-2">
     <div class="panel">
-      <h2>Atacar (registrar abono)</h2>
+      <h2>Attack (log a payment)</h2>
       <form id="abonoForm" class="abono-form">
         <select id="abonoDebt"></select>
-        <input type="number" id="abonoValor" placeholder="Valor del abono" min="1" required>
-        <button type="submit" class="btn-attack">⚔ Causar daño</button>
+        <input type="number" id="abonoValor" placeholder="Payment amount" min="1" required>
+        <button type="submit" class="btn-attack">⚔ Deal damage</button>
       </form>
-      <p class="hint">Cada cuota o abono que pagues en la vida real, regístralo aquí y mira la barra bajar.</p>
+      <p class="hint">Every installment or payment you make in real life, log it here and watch the bar go down.</p>
       <h2>Historial de ataques</h2>
       <ul class="abono-list" id="abonoList"></ul>
     </div>
     <div class="panel">
-      <h2>Cada deuda, su barra</h2>
+      <h2>Each debt, its own bar</h2>
       <div id="debtList"></div>
-      <h2 style="margin-top:18px">☠ Apareció un enemigo nuevo</h2>
+      <h2 style="margin-top:18px">☠ A new enemy appeared</h2>
       <form id="debtNew" class="abono-form">
-        <input id="ndName" placeholder="¿Qué deuda? (ej: Falabella)" required>
-        <input id="ndValor" type="number" min="1" placeholder="Valor total" required>
-        <input id="ndCuotas" type="number" min="0" max="60" placeholder="# cuotas (0 = sin cuotas)">
+        <input id="ndName" placeholder="Which debt? (e.g. Falabella)" required>
+        <input id="ndValor" type="number" min="1" placeholder="Total amount" required>
+        <input id="ndCuotas" type="number" min="0" max="60" placeholder="# installments (0 = none)">
         <select id="ndStart"></select>
         <button class="btn-gold" type="submit">+ Registrar deuda</button>
       </form>
-      <p class="hint">Deuda nueva (otra persona u otro banco). Si pones cuotas, su valor mensual sale solo en Inicio desde el mes que elijas y baja en el desglose. Con 0 cuotas queda como saldo para abonar libre. Si usaste una tarjeta que YA existe, usa "compra a cuotas" abajo.</p>
-      <h2 style="margin-top:18px">💳 ¿Usaste una tarjeta? Compra a cuotas</h2>
+      <p class="hint">A brand-new debt (another person or bank). If you set installments, the monthly amount shows up in Home from the month you pick and goes down in the breakdown. With 0 installments it stays as a balance to pay freely. If you used a card that ALREADY exists, use "installment purchase" below.</p>
+      <h2 style="margin-top:18px">💳 Used a card? Installment purchase</h2>
       <form id="compraNew" class="abono-form">
         <select id="cpCred"></select>
-        <input id="cpConcepto" placeholder="¿Qué compraste?" required>
-        <input id="cpValor" type="number" min="1" placeholder="Valor total" required>
-        <input id="cpCuotas" type="number" min="1" max="60" placeholder="# cuotas" required>
+        <input id="cpConcepto" placeholder="What did you buy?" required>
+        <input id="cpValor" type="number" min="1" placeholder="Total amount" required>
+        <input id="cpCuotas" type="number" min="1" max="60" placeholder="# installments" required>
         <select id="cpStart"></select>
-        <button class="btn-gold" type="submit">Registrar compra</button>
+        <button class="btn-gold" type="submit">Log purchase</button>
       </form>
-      <p class="hint">La cuota se suma sola en Inicio desde el mes elegido (📈), infla la barra del enemigo y entra al desglose. Cuando pasen las cuotas, vuelve a la normalidad sola.</p>
+      <p class="hint">The installment adds itself in Home from the chosen month (📈), grows the boss bar, and enters the breakdown. When the installments end, it returns to normal on its own.</p>
       <ul class="abono-list" id="compraList"></ul>
     </div>
   </div>
 
   <div class="panel">
-    <h2>Desglose completo de la deuda — cuota por cuota</h2>
+    <h2>Full debt breakdown — installment by installment</h2>
     <div id="desglose"></div>
   </div>
 </section>
@@ -130,79 +130,82 @@
 <!-- ============ HÁBITOS ============ -->
 <section id="tab-habitos" class="tab">
   <div class="row-between">
-    <h1 id="habitMonthTitle">Hábitos</h1>
-    <button class="btn-gold" id="closeMonth">Cerrar mes → historial de Haki</button>
+    <h1 id="habitMonthTitle">Habits</h1>
+    <button class="btn-gold" id="closeMonth">Close month → Haki history</button>
   </div>
   <div class="cards" id="habitStats"></div>
   <form id="habitNew" class="abono-form" style="margin-bottom:14px">
-    <input id="hbName" placeholder="Nuevo hábito (ej: Cold shower)" required>
-    <button class="btn-gold" type="submit">+ Agregar hábito</button>
+    <input id="hbName" placeholder="New habit (e.g. Cold shower)" required>
+    <button class="btn-gold" type="submit">+ Add habit</button>
   </form>
   <div class="panel scroll-x">
     <table class="habit-grid" id="habitGrid"></table>
   </div>
   <div class="panel">
-    <h2>Historial de Haki — meses conquistados (≥70%)</h2>
+    <h2>Haki history — months conquered (≥70%)</h2>
     <div id="hakiHistory" class="haki-history"></div>
   </div>
 </section>
 
 <!-- ============ METAS ============ -->
 <section id="tab-metas" class="tab">
-  <h1>🎯 Metas — lo que vas a lograr</h1>
+  <h1>🎯 Goals — what you're going to achieve</h1>
   <div class="cards" id="goalStats"></div>
   <form id="goalNew" class="abono-form" style="margin-bottom:14px">
-    <input id="glName" placeholder="¿Qué meta nueva?" required>
-    <button class="btn-gold" type="submit">+ Agregar meta</button>
+    <input id="glName" placeholder="What new goal?" required>
+    <button class="btn-gold" type="submit">+ Add goal</button>
   </form>
   <div class="panel scroll-x">
     <table class="table" id="goalTable"></table>
   </div>
-  <p class="hint">Edita cualquier celda y se guarda sola. Una meta sin "próximo paso" es un deseo: escribe siempre la siguiente acción pequeña.</p>
+  <p class="hint">Edit any cell and it saves itself. A goal without a "next step" is just a wish: always write the next small action.</p>
 </section>
 
 <!-- ============ LIFE (rutina inteligente) ============ -->
 <section id="tab-life" class="tab">
-  <h1>📅 Life — tu rutina diaria inteligente</h1>
-  <p class="hint">Dime tu turno de trabajo por día y armo tu rutina desde las 6am para lograr tus metas. Marca lo que cumplas; si un día no pudiste, dilo.</p>
+  <h1>📅 Life — your smart daily routine</h1>
+  <p class="hint">Tell me your work shift per day and I'll build your routine from 6am to reach your goals. Check off what you complete; if you couldn't do something, say why.</p>
 
   <div class="panel">
-    <h2>1 · Tu semana de trabajo</h2>
+    <h2>1 · Your work week</h2>
     <div id="shiftGrid" class="shift-grid"></div>
-    <h2 style="margin-top:16px">Tu carrera por peldaños</h2>
-    <p class="hint">Cada carrera son 4 peldaños (25% c/u): Fundamentos → Intermedio → Proyectos → Profesional. Tu curso actual aporta su % al peldaño donde estés. Terminar un curso NO completa la meta — solo su pedazo. El 100% llega con el certificado fuerte al final.</p>
+  </div>
+
+  <div class="panel">
+    <h2>2 · Your career path</h2>
+    <p class="hint">Each career has 4 steps (25% each): Fundamentals → Intermediate → Projects → Professional. Your current course adds its % to the step you're on. Finishing one course does NOT complete the goal — only its slice. 100% comes with the strong certificate at the end. One active focus at a time.</p>
     <div id="careerPanel"></div>
-    <h2 style="margin-top:14px">¿Cuál es tu foco esta temporada?</h2>
-    <select id="pfFoco" class="month-select"></select>
   </div>
 
   <div class="panel">
     <div class="row-between">
-      <h2>2 · Tu rutina de hoy</h2>
+      <h2>3 · Your routine</h2>
       <select id="dayPick" class="month-select"></select>
     </div>
     <div id="routineDay"></div>
+    <button class="btn-gold" id="addRoutineBtn" style="margin-top:10px">+ Add activity to this day</button>
+    <p class="hint" id="freeTimeHint" style="margin-top:8px"></p>
   </div>
 
   <div class="panel">
-    <h2>3 · Consejo de la semana</h2>
+    <h2>4 · Weekly advice</h2>
     <p class="diag" id="lifeTip"></p>
   </div>
 </section>
 
 <!-- ============ SUEÑOS ============ -->
 <section id="tab-suenos" class="tab">
-  <h1>Sueños y compras — te esperan al otro lado</h1>
-  <p class="hint">Regla de oro: de contado, nunca a cuotas. Escribe lo que llevas ahorrado para cada uno.</p>
+  <h1>✨ Wishlist — waiting for you on the other side</h1>
+  <p class="hint">Golden rule: pay in full, never in installments. Write down how much you've saved for each one.</p>
   <form id="dreamNew" class="abono-form" style="margin-bottom:14px">
-    <input id="dnCat" list="catList" placeholder="Categoría" required>
+    <input id="dnCat" list="catList" placeholder="Category" required>
     <datalist id="catList">
       <option>Dreams</option><option>Tecnology</option><option>Shopping</option>
       <option>Room</option><option>Leisure</option><option>Personal</option>
     </datalist>
-    <input id="dnName" placeholder="¿Qué sueño?" required>
-    <input id="dnValor" type="number" min="0" placeholder="Valor">
-    <button class="btn-gold" type="submit">+ Agregar sueño</button>
+    <input id="dnName" placeholder="Which wish?" required>
+    <input id="dnValor" type="number" min="0" placeholder="Price">
+    <button class="btn-gold" type="submit">+ Add wish</button>
   </form>
   <div id="dreamList"></div>
 </section>
@@ -212,11 +215,11 @@
   <h1>Anime Tracker</h1>
   <div class="cards" id="animeStats"></div>
   <div class="anime-filter" id="animeFilter">
-    <button data-f="todos" class="active">Todos</button>
-    <button data-f="Viéndolo 👀">Viéndolo 👀</button>
-    <button data-f="En emisión 📡">En emisión 📡</button>
+    <button data-f="todos" class="active">All</button>
+    <button data-f="Viéndolo 👀">Watching 👀</button>
+    <button data-f="En emisión 📡">Airing 📡</button>
     <button data-f="Pendiente">Pendiente</button>
-    <button data-f="Finalizado ✅">Finalizado ✅</button>
+    <button data-f="Finalizado ✅">Finished ✅</button>
   </div>
   <form id="animeNew" class="abono-form" style="margin-bottom:14px">
     <input id="anName" placeholder="Nombre del anime" required>
@@ -229,16 +232,23 @@
 
 <!-- ============ LIBROS ============ -->
 <section id="tab-libros" class="tab">
-  <h1>Biblioteca</h1>
+  <h1>📚 Books</h1>
   <form id="bookNew" class="abono-form" style="margin-bottom:14px">
-    <input id="bkTitle" placeholder="Título del libro" required>
-    <button class="btn-gold" type="submit">+ Agregar libro</button>
+    <input id="bkTitle" placeholder="Book title" required>
+    <button class="btn-gold" type="submit">+ Add book</button>
   </form>
-  <table class="table" id="bookTable"></table>
+  <div class="anime-filter" id="bookFilter">
+    <button data-f="all" class="active">All</button>
+    <button data-f="Por comprar">To buy</button>
+    <button data-f="Por leer">To read</button>
+    <button data-f="Leyendo">Reading</button>
+    <button data-f="Terminado">Finished</button>
+  </div>
+  <div class="panel scroll-x"><table class="table" id="bookTable"></table></div>
 </section>
 
 </main>
-<footer>Hecho por Kevin con Claude · Los datos viven en <code>lifeos.db</code> — cópialo y tienes backup. · <b>v16</b></footer>
-<script src="/static/app.js?v=16"></script>
+<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v17</b></footer>
+<script src="/static/app.js?v=17"></script>
 </body>
 </html>
