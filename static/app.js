@@ -37,7 +37,13 @@ document.getElementById('tabs').addEventListener('click', (e) => {
 
 const FRONT_V = 17;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
-let ANIME_FILTRO = 'todos';   // debe coincidir con VERSION en app.py
+let ANIME_FILTRO = 'todos';
+// Fecha LOCAL del dispositivo (no UTC), en formato YYYY-MM-DD — evita el desfase de zona horaria
+function localISO(d = new Date()) {
+  const off = d.getTimezoneOffset() * 60000;
+  return new Date(d - off).toISOString().slice(0, 10);
+}
+function hoyLocal() { return localISO(new Date()); }   // debe coincidir con VERSION en app.py
 
 async function api(path, opts) {
   let r;
@@ -114,7 +120,7 @@ function checkVersion() {
 }
 
 async function load(animate) {
-  const ym = new Date().toISOString().slice(0, 7);
+  const ym = hoyLocal().slice(0, 7);
   S = await api('/api/state?month=' + ym);
   checkVersion();
   renderInicio();
@@ -220,6 +226,23 @@ document.addEventListener('click', async (e) => {
   if (!c) return;
   await api('/api/check', { body: { item: c.dataset.item, month: c.dataset.mk } });
   load();
+
+// Auto-actualización del día: si cambia la fecha local (pasó la medianoche) o el
+// usuario vuelve a la pestaña, refresca la rutina al día correcto — sin recargar.
+let _diaActual = hoyLocal();
+function chequearCambioDeDia() {
+  const hoy = hoyLocal();
+  if (hoy !== _diaActual) {
+    _diaActual = hoy;
+    const pick = document.getElementById('dayPick');
+    if (pick) pick.value = '';     // forzar volver a HOY
+    if (typeof renderLife === 'function') renderLife();
+  }
+}
+setInterval(chequearCambioDeDia, 60000);                 // revisa cada minuto
+document.addEventListener('visibilitychange', () => {     // y al volver a la pestaña
+  if (!document.hidden) chequearCambioDeDia();
+});
 });
 
 /* ---------- ALCANCÍA / BOSS ---------- */
@@ -373,11 +396,11 @@ function renderDesglose() {
 
 /* ---------- HÁBITOS ---------- */
 function renderHabitos() {
-  const today = new Date(S.today);
-  const ym = S.today.slice(0, 7);
+  const today = new Date();
+  const ym = hoyLocal().slice(0, 7);
   const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
   const elapsed = today.getDate();
-  const monthName = today.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
+  const monthName = today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   $('#habitMonthTitle').textContent = 'Habits · ' + monthName;
 
   const marks = new Set(S.marks);
@@ -546,21 +569,22 @@ function renderLife() {
         ${Object.entries(SHIFTS).map(([k, v]) =>
           `<option value="${k}" ${(sh[wd] || 'libre') === k ? 'selected' : ''}>${v.label}</option>`).join('')}
       </select></div>`).join('');
-  // 2. Selector de día (próximos 7 días desde hoy)
+  // 2. Selector de día (próximos 7 días desde HOY, según la fecha local del navegador)
   const pick = $('#dayPick');
-  if (!pick.dataset.ready) {
-    const base = new Date(S.today);
-    let opts = '';
-    for (let k = 0; k < 7; k++) {
-      const d = new Date(base); d.setDate(base.getDate() + k);
-      const iso = d.toISOString().slice(0, 10);
-      const wd = (d.getDay() + 6) % 7;
-      opts += `<option value="${iso}|${wd}">${k === 0 ? 'TODAY · ' : ''}${DIAS[wd]} ${d.getDate()}/${d.getMonth() + 1}</option>`;
-    }
-    pick.innerHTML = opts;
-    pick.dataset.ready = '1';
-    pick.onchange = renderRoutineDay;
+  const prev = pick.value;                 // conservar selección si el usuario eligió otro día
+  const base = new Date();                 // ahora mismo, hora local del dispositivo
+  base.setHours(12, 0, 0, 0);              // mediodía para evitar saltos por zona horaria
+  let opts = '';
+  for (let k = 0; k < 7; k++) {
+    const d = new Date(base); d.setDate(base.getDate() + k);
+    const iso = localISO(d);
+    const wd = (d.getDay() + 6) % 7;
+    opts += `<option value="${iso}|${wd}">${k === 0 ? 'TODAY · ' : ''}${DIAS[wd]} ${d.getDate()}/${d.getMonth() + 1}</option>`;
   }
+  pick.innerHTML = opts;
+  // si la selección previa sigue existiendo (mismo día), mantenerla; si no, default a HOY
+  if (prev && [...pick.options].some(o => o.value === prev)) pick.value = prev;
+  pick.onchange = renderRoutineDay;
   renderRoutineDay();
 
   // Panel de carreras personalizables
