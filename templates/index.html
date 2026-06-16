@@ -209,9 +209,15 @@
 
 <!-- ============ ANIME ============ -->
 <section id="tab-anime" class="tab">
-  <h1>Otaku Tracker — ranking vivo</h1>
-  <p class="hint">Cada casilla muestra "voy en / total". Sube tu número y al completar una temporada se pinta verde. Cuando termines TODO (temporadas + pelis + ovas), el estado pasa solo a Finalizado ✅. Al agregar uno nuevo te preguntaré cuántos episodios tiene cada parte.</p>
+  <h1>Anime Tracker</h1>
   <div class="cards" id="animeStats"></div>
+  <div class="anime-filter" id="animeFilter">
+    <button data-f="todos" class="active">Todos</button>
+    <button data-f="Viéndolo 👀">Viéndolo 👀</button>
+    <button data-f="En emisión 📡">En emisión 📡</button>
+    <button data-f="Pendiente">Pendiente</button>
+    <button data-f="Finalizado ✅">Finalizado ✅</button>
+  </div>
   <form id="animeNew" class="abono-form" style="margin-bottom:14px">
     <input id="anName" placeholder="Nombre del anime" required>
     <button class="btn-gold" type="submit">+ Agregar anime</button>
@@ -232,7 +238,7 @@
 </section>
 
 </main>
-<footer>Hecho por Kevin con Claude · Los datos viven en <code>lifeos.db</code> — cópialo y tienes backup. · <b>v15</b></footer>
-<script src="/static/app.js?v=15"></script>
+<footer>Hecho por Kevin con Claude · Los datos viven en <code>lifeos.db</code> — cópialo y tienes backup. · <b>v16</b></footer>
+<script src="/static/app.js?v=16"></script>
 </body>
 </html>
