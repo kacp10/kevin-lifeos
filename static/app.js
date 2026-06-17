@@ -1214,14 +1214,23 @@ const SHIFTS = {
 const DIAS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 // inglés A1-A2 → C1: qué tocar cada día de la semana
+// SISTEMA REAL DE INGLÉS — output diario (lo que más cuesta = el centro).
+// Cada día: hablar primero, luego un recurso distinto, y SIEMPRE cerrar hablando con la IA.
 const INGLES_PLAN = [
-  ['English (20 min) — Grammar', 'Language Transfer (audio), 1 lesson. Simple structures: to be, present, past. 20 focused minutes.'],
-  ['English (20 min) — Vocabulary', '15 new words in Anki. Review yesterday\'s. Note the ones you see at work.'],
-  ['English (20 min) — Listening', 'VOA Learning English (beginner). English subtitles, repeat out loud (shadowing).'],
-  ['English (20 min) — Speaking', 'ELSA Speak + describe your day out loud. Record 1 min and listen back.'],
-  ['English (20 min) — Reading', 'Graded readers or VOA news. Underline what you don\'t get, look it up after.'],
-  ['English (20 min) — Review', 'Review the week. If you watch anime today, use English subtitles and note 5 phrases.'],
-  ['English (15 min) — Easy', 'Just what you enjoyed most this week. A rested mind learns too.']
+  ['English — Speak + Book day', '1) Warm-up: talk about your day OUT LOUD 5 min, record it. 2) American School Way 15 min, read ALOUD. 3) Close: tell the AI in English what you read (15 min). Speaking is the goal.'],
+  ['English — Shadowing day', '1) Warm-up talking 5 min. 2) Disney+/Netflix scene you KNOW, English subs. Repeat each line out loud copying the actor (shadowing) 15 min. 3) Summarize the scene to the AI in English.'],
+  ['English — Vocabulary in action', '1) Talk 5 min. 2) Pick 10 words you keep forgetting, build a sentence OUT LOUD with each. 3) Tell the AI a short story using all 10 words.'],
+  ['English — Book deep day', '1) Talk 5 min. 2) American School Way: redo a past unit, read aloud, do the exercises speaking the answers. 3) Explain the grammar point to the AI in your own words, in English.'],
+  ['English — Pure conversation', '1) No warm-up — go straight to talking with the AI for 20-25 min about anything: work, anime, dreams. Push to talk 2 min non-stop. This is the day that breaks A2.'],
+  ['English — Re-watch & produce', '1) Talk 5 min. 2) Re-watch a scene from earlier this week WITHOUT subtitles, see how much you catch. 3) Record yourself retelling it, then send it to the AI to correct.'],
+  ['English — Light immersion', 'Lighter day: watch something you LOVE in English (subs on if needed). Note 5 phrases that sounded natural. Say them out loud 3 times each. Rest is part of learning.']
+];
+// Metas trimestrales (el progreso lo decides TÚ por tu habilidad de hablar)
+const ENGLISH_TRIMESTERS = [
+  { q: 'Q1 · A2 → A2+', goal: 'Talk 2 min straight in English without stopping (errors OK).', book: 'American School Way — Intermediate', subs: 'English subtitles always' },
+  { q: 'Q2 · A2+ → B1', goal: 'Hold a 5-min conversation with the AI about daily topics.', book: 'American School Way — Upper-Intermediate', subs: 'Start removing subs on known scenes' },
+  { q: 'Q3 · B1 → B1+', goal: 'Give opinions, tell stories in past & future, argue a point.', book: 'American School Way — Advanced', subs: 'No subtitles' },
+  { q: 'Q4 · B1+ → B2', goal: 'Discuss abstract topics, understand natives at normal speed.', book: 'American School Way — Advanced / B2-C1', subs: 'Native content, no subs' }
 ];
 
 function renderLife() {
@@ -1254,6 +1263,7 @@ function renderLife() {
 
   // Panel de carreras personalizables
   renderCareer();
+  renderEnglish();
   // sincronizar metas que coincidan por nombre con una carrera
   for (const c of (S.careers || [])) {
     const prog = progresoCareer(c);
@@ -1281,6 +1291,71 @@ function renderLife() {
   tip += ` You have ${studyDays} study ${studyDays === 1 ? 'session' : 'sessions'} logged — every ✓ is real progress. A goal's 100% is never given: you earn it day by day, and YOU decide when you truly got there.`;
     $('#lifeTip').textContent = tip;
 }
+
+function renderEnglish() {
+  const panel = document.getElementById('englishPanel');
+  if (!panel) return;
+  const pf = S.profile || {};
+  const qIdx = Math.min(+(pf.eng_q || 0), ENGLISH_TRIMESTERS.length - 1);
+  const t = ENGLISH_TRIMESTERS[qIdx];
+  const startedQ = pf['eng_q_start_' + qIdx] || '';
+  // días dentro del trimestre actual
+  let diasEnQ = '';
+  if (startedQ) {
+    const d0 = new Date(startedQ), now = new Date();
+    const dias = Math.floor((now - d0) / 86400000);
+    diasEnQ = `${dias} ${dias === 1 ? 'day' : 'days'} into this quarter`;
+  }
+  panel.innerHTML = `
+    <div class="eng-hero">
+      <div class="eng-q">${t.q}</div>
+      <div class="eng-goal">🎯 Speaking goal: <b>${t.goal}</b></div>
+      <div class="eng-meta">📘 ${t.book} · 🎬 ${t.subs}</div>
+      ${diasEnQ ? `<div class="eng-days">${diasEnQ}</div>` : ''}
+    </div>
+    <div class="eng-rule">⚖️ The golden rule: <b>1 minute speaking for every minute listening/reading.</b> Most people do 90% input → they understand but can't talk. You do 50/50. That's what breaks A2.</div>
+    <div class="eng-blocks">
+      <div class="eng-block"><span class="eng-bn">1</span> Warm-up: talk out loud about your day (record it)</div>
+      <div class="eng-block"><span class="eng-bn">2</span> Input: American School Way, read ALOUD</div>
+      <div class="eng-block"><span class="eng-bn">3</span> Shadowing: copy a known scene line by line</div>
+      <div class="eng-block hot"><span class="eng-bn">4</span> Talk to the AI in English — the sacred block ⚔</div>
+    </div>
+    <div class="eng-actions">
+      ${qIdx < ENGLISH_TRIMESTERS.length - 1
+        ? `<button class="btn-gold" id="engNextBtn">✓ I reached the speaking goal → next quarter</button>`
+        : '<span class="eng-final">🏆 Final quarter — you\'re reaching for B2/C1!</span>'}
+      <button class="btn-ghost" id="engTalkBtn">💬 Practice with me now</button>
+    </div>`;
+}
+
+document.addEventListener('click', async (e) => {
+  if (e.target.id === 'engNextBtn') {
+    const pf = S.profile || {};
+    const qIdx = +(pf.eng_q || 0);
+    const t = ENGLISH_TRIMESTERS[qIdx];
+    const ok = await confirmModal('Advance quarter',
+      `Be honest with yourself: did you reach the goal — <b>"${t.goal}"</b>? Only advance if you truly can do it. If not, it's totally fine to repeat the quarter.`, false);
+    if (!ok) return;
+    await api('/api/profile', { body: { key: 'eng_q', value: String(qIdx + 1) } });
+    await api('/api/profile', { body: { key: 'eng_q_start_' + (qIdx + 1), value: hoyLocal() } });
+    celebrate({ icon: '🚀', title: 'LEVEL UP', text: `You moved to <b>${ENGLISH_TRIMESTERS[qIdx + 1].q}</b>. Your English is really growing.` });
+    load();
+    return;
+  }
+  if (e.target.id === 'engTalkBtn') {
+    if (typeof sendPrompt === 'function')
+      sendPrompt("Let's practice English. Talk to me only in English, ask me questions about my day, and gently correct my mistakes. Start now.");
+    else
+      toast('💬 Open a chat and tell me: "practice English with me"');
+    return;
+  }
+  if (e.target.id === 'engHelpBtn') {
+    await modal({ icon: '🔑', title: 'The real secrets',
+      text: '1) Speaking is a PHYSICAL skill, not knowledge — train your mouth daily.<br>2) Comprehensible input: watch what you understand ~85%, not random new shows.<br>3) Depth > breadth: one episode 5 times beats 5 episodes once.<br>4) Forced output: after every input, retell it out loud.<br>5) Shadowing: copy natives out loud, ritme and accent.<br><br>Duolingo and passive Netflix feel like progress but barely build speaking. The discomfort of talking IS the learning.',
+      okText: 'Got it' });
+    return;
+  }
+});
 
 function progresoCareer(c) {
   return Math.min(Math.round((c.step || 0) * 25 + ((c.pct || 0) / 100) * 25), 100);
