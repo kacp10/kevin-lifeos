@@ -335,6 +335,23 @@ def index():
     return render_template('index.html')
 
 
+def _sync_carrera_ingles(d):
+    """La carrera 'Inglés' sube sola según los días con bloque de inglés completado.
+    ~30 días = 1 peldaño (25%)."""
+    eng = d.execute("SELECT * FROM careers WHERE LOWER(name) LIKE '%ingl%' OR LOWER(name) LIKE '%english%'").fetchone()
+    if not eng:
+        return
+    eng = dict(eng)
+    dias = len(set(r['day'] for r in d.execute(
+        "SELECT day FROM routine_done WHERE activity='ingles'").fetchall()))
+    DPP = 30
+    step = min(dias // DPP, 4)
+    pct = round(((dias % DPP) / DPP) * 100) if step < 4 else 0
+    if eng.get('step') != step or (eng.get('pct') or 0) != pct:
+        d.execute('UPDATE careers SET step=?, pct=? WHERE id=?', (step, pct, eng['id']))
+        d.commit()
+
+
 def _aplicar_aportes_fondo(d):
     """Suma automáticamente el aporte mensual de cada concepto del fondo de empresa.
     El aporte cae el día 30. Si han pasado uno o más días 30 desde el último depósito
@@ -416,6 +433,7 @@ def state():
     shifts = {r['weekday']: r['shift'] for r in d.execute('SELECT * FROM week_shifts')}
     profile = {r['key']: r['value'] for r in d.execute('SELECT * FROM study_profile')}
     rdone = [f"{r['day']}|{r['activity']}" for r in d.execute('SELECT day, activity FROM routine_done')]
+    _sync_carrera_ingles(d)
     careers = [dict(r) for r in d.execute('SELECT * FROM careers')]
     courses_done = [dict(r) for r in d.execute('SELECT * FROM courses_done ORDER BY id DESC')]
     routine_extra = [dict(r) for r in d.execute('SELECT * FROM routine_extra')]
