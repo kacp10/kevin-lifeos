@@ -35,7 +35,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 21;
+const FRONT_V = 22;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -203,6 +203,7 @@ async function load(animate) {
   checkVersion();
   renderFreedom();
   renderInicio();
+  renderShopping();
   renderBoss(animate);
   renderHabitos();
   renderSuenos();
@@ -244,6 +245,60 @@ function avisosInteligentes() {
 }
 
 /* ---------- INICIO ---------- */
+const shopForm = document.getElementById('shopNew');
+if (shopForm) shopForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = document.getElementById('shName').value.trim();
+  const slots = +document.getElementById('shSlots').value || 1;
+  if (!name) return;
+  await api('/api/shopping/new', { body: { name, slots } });
+  e.target.reset(); document.getElementById('shSlots').value = 1;
+  toast('🛒 Added to your list'); load();
+});
+document.addEventListener('click', async (e) => {
+  const chk = e.target.closest('.shop-check');
+  if (chk) {
+    await api('/api/shopping/tick', { body: { id: +chk.dataset.id } });
+    load();
+    return;
+  }
+  if (e.target.id === 'clearDoneBtn') {
+    await api('/api/shopping/clear_done', {});
+    toast('🧹 Cleared checked items'); load();
+    return;
+  }
+});
+
+function renderShopping() {
+  const cont = document.getElementById('shoppingList');
+  if (!cont) return;
+  const items = S.shopping || [];
+  if (!items.length) {
+    cont.innerHTML = '<p class="hint">Nothing on the list. Add what you need above. 🛒</p>';
+    return;
+  }
+  cont.innerHTML = items.map(it => {
+    const slots = it.slots || 1;
+    const done = it.done || 0;
+    const complete = slots > 0 && done >= slots;
+    // rayas: una marca por cada sub-tarea (para Cloe = 3)
+    let rayas = '';
+    if (slots > 1) {
+      rayas = '<span class="shop-slots">' +
+        Array.from({ length: slots }, (_, k) =>
+          `<i class="slot ${k < done ? 'on' : ''}"></i>`).join('') + '</span>';
+    }
+    return `<div class="shop-item ${complete ? 'done' : ''}" data-id="${it.id}">
+      <button class="shop-check ${complete ? 'on' : ''}" data-id="${it.id}" title="${slots > 1 ? 'Tap once per task (' + done + '/' + slots + ')' : 'Mark done'}">
+        ${complete ? '✓' : (slots > 1 ? done : '')}
+      </button>
+      <span class="shop-name">${esc(it.name)}</span>
+      ${rayas}
+      <button class="del-x" data-type="shopping" data-id="${it.id}">✕</button>
+    </div>`;
+  }).join('');
+}
+
 function renderFreedom() {
   const panel = document.getElementById('freedomPanel');
   if (!panel) return;
@@ -802,6 +857,8 @@ function chequearCambioDeDia() {
     const pick = document.getElementById('dayPick');
     if (pick) pick.value = '';     // forzar volver a HOY
     if (typeof renderLife === 'function') renderLife();
+    // limpiar compras completadas al cambiar el día (desaparecen al final del día)
+    api('/api/shopping/clear_done', {}).then(() => load());
   }
 }
 setInterval(chequearCambioDeDia, 60000);                 // revisa cada minuto
