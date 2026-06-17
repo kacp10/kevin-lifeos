@@ -42,7 +42,10 @@
   <div class="panel">
     <div class="row-between">
       <h2>💸 Expense tracker</h2>
-      <button class="btn-gold" id="setIncomeBtn">Set this month's income</button>
+      <span style="display:flex;gap:8px">
+        <button class="btn-ghost" id="setPaydayBtn" title="When do you get paid?">📆 Payday</button>
+        <button class="btn-gold" id="setIncomeBtn">Set this month's income</button>
+      </span>
     </div>
     <p class="hint">Log where your money goes. If you pay with a credit card, it adds to that card's installments automatically.</p>
     <form id="expenseNew" class="expense-form">
@@ -57,6 +60,15 @@
     </form>
     <div id="expenseSummary"></div>
     <div id="expenseList"></div>
+    <div class="save-box">
+      <h3 class="mini-title">🐷 Savings this month</h3>
+      <form id="saveNew" class="abono-form">
+        <input id="svName" placeholder="What for? (e.g. Emergency fund)" required>
+        <input id="svAmount" type="number" min="1" placeholder="Amount saved" required>
+        <button class="btn-gold" type="submit">+ Log saving</button>
+      </form>
+      <div id="saveList"></div>
+    </div>
   </div>
 
   <div class="panel">
@@ -64,6 +76,7 @@
       <h2>Monthly payment checklist</h2>
       <strong id="checkCount" class="gold-txt"></strong>
     </div>
+    <div id="incomeBar" class="income-bar"></div>
     <div class="grid-2">
       <div>
         <h3 class="mini-title">Life & services</h3>
@@ -278,7 +291,7 @@
 </section>
 
 </main>
-<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v20</b></footer>
-<script src="/static/app.js?v=20"></script>
+<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v21</b></footer>
+<script src="/static/app.js?v=21"></script>
 </body>
 </html>
