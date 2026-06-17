@@ -1254,9 +1254,13 @@ function renderRoutineDay() {
   const hiddenDay = new Set(S.routine_hidden_day || []);
   let lista = acts.filter(a => !hiddenWeek.has(`${wd}|${a.key}`) && !hiddenDay.has(`${iso}|${a.key}`));
   // extras: por fecha exacta (day == iso), por weekday, o globales (weekday -1 y sin day)
+  // Las Mon-Fri (-2) NO aparecen en día de descanso (respeta tu descanso).
+  const esDescanso = (shiftKey === 'descanso');
   const extras = (S.routine_extra || []).filter(x =>
     (x.day && x.day === iso) ||
-    (!x.day && (x.weekday === -1 || x.weekday === wd)));
+    (!x.day && (x.weekday === -1 ||
+                (x.weekday === -2 && wd <= 4 && !esDescanso) ||
+                x.weekday === wd)));
   for (const x of extras) {
     lista.push({ t: x.time || '—', title: x.title, d: x.descr || '', key: 'extra_' + x.id, extraId: x.id });
   }
@@ -1342,25 +1346,33 @@ document.addEventListener('click', async (e) => {
     const wd = +hideBtn.dataset.wd, key = hideBtn.dataset.key, iso = hideBtn.dataset.day;
     const dayName = DIAS[wd];
     const r = await modal({ icon: '✏️', title: 'Remove or replace',
-      text: `Remove this activity. Replace it? Type the new one (optional). And choose if it's just this ${dayName} or every ${dayName}.`,
+      text: `Remove this activity. Replace it? Type the new one (optional). Choose the scope below.`,
       fields: [
         { type: 'text', placeholder: 'New activity (optional)' },
         { type: 'text', placeholder: 'Time (e.g. 14:00, optional)' },
         { type: 'select', options: [
           { v: 'day', t: `Just this ${dayName} (${iso})` },
-          { v: 'week', t: `Every ${dayName} (recurring)` }
+          { v: 'week', t: `Every ${dayName} (recurring)` },
+          { v: 'mf', t: 'Monday to Friday (weekdays)' }
         ] }
       ], okText: 'Apply' });
     if (r === null) return;
     const scope = r[2] || 'day';
-    await api('/api/routine_hide', { body: { akey: key, scope, weekday: wd, day: iso } });
+    // ocultar: si es mon-fri, ocultar en los 5 días laborales; si week, ese weekday; si no, solo el día
+    if (scope === 'mf') {
+      for (let d = 0; d <= 4; d++) await api('/api/routine_hide', { body: { akey: key, scope: 'week', weekday: d, day: iso } });
+    } else {
+      await api('/api/routine_hide', { body: { akey: key, scope, weekday: wd, day: iso } });
+    }
     if (r[0] && r[0].trim()) {
       const body = { time: r[1] || '', title: r[0], descr: '' };
-      if (scope === 'week') body.weekday = wd; else body.day = iso;
+      if (scope === 'week') body.weekday = wd;
+      else if (scope === 'mf') body.weekday = -2;
+      else body.day = iso;
       await api('/api/routine_extra/new', { body });
       toast('✏️ Activity replaced');
     } else {
-      toast(scope === 'week' ? `✕ Removed every ${dayName}` : '✕ Removed for this day only');
+      toast(scope === 'week' ? `✕ Removed every ${dayName}` : scope === 'mf' ? '✕ Removed Monday to Friday' : '✕ Removed for this day only');
     }
     load();
     return;
@@ -1380,14 +1392,18 @@ document.addEventListener('click', async (e) => {
         { type: 'text', placeholder: 'Short note (optional)' },
         { type: 'select', options: [
           { v: 'day', t: `Just this ${dayName} (${iso})` },
-          { v: 'week', t: `Every ${dayName} (recurring)` }
+          { v: 'week', t: `Every ${dayName} (recurring)` },
+          { v: 'mf', t: 'Monday to Friday (weekdays)' }
         ] }
       ], okText: 'Add' });
     if (!r || !r[1].trim()) return;
     const body = { time: r[0], title: r[1], descr: r[2] };
-    if ((r[3] || 'day') === 'week') body.weekday = CUR_WD; else body.day = iso;
+    const scopeAdd = r[3] || 'day';
+    if (scopeAdd === 'week') body.weekday = CUR_WD;
+    else if (scopeAdd === 'mf') body.weekday = -2;
+    else body.day = iso;
     await api('/api/routine_extra/new', { body });
-    toast((r[3] || 'day') === 'week' ? `➕ Added every ${dayName}` : '➕ Added for this day only');
+    toast(scopeAdd === 'week' ? `➕ Added every ${dayName}` : scopeAdd === 'mf' ? '➕ Added Monday to Friday' : '➕ Added for this day only');
     load();
     return;
   }
