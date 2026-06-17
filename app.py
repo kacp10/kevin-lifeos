@@ -13,7 +13,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 18  # debe coincidir con FRONT_V en static/app.js
+VERSION = 20  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -102,6 +102,17 @@ def init_db():
         weekday INTEGER, akey TEXT, PRIMARY KEY (weekday, akey));
     CREATE TABLE IF NOT EXISTS routine_hidden_day (
         day TEXT, akey TEXT, PRIMARY KEY (day, akey));
+    CREATE TABLE IF NOT EXISTS journal (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, day TEXT, mood TEXT DEFAULT '',
+        note TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS assets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, value INTEGER DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS expenses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, amount INTEGER,
+        method TEXT DEFAULT 'Efectivo', kind TEXT DEFAULT 'once',
+        month TEXT DEFAULT '', created TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS month_income (
+        month TEXT PRIMARY KEY, income INTEGER);
     CREATE TABLE IF NOT EXISTS extra_debts (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, total INTEGER,
         cuota INTEGER DEFAULT 0, cuotas INTEGER DEFAULT 0, start INTEGER DEFAULT 0);
@@ -247,6 +258,11 @@ def init_db():
         con.execute("INSERT INTO config VALUES ('careers_v1','1')")
         con.commit()
         print('  + carreras personalizables activadas')
+    if not con.execute("SELECT 1 FROM config WHERE key='networth_v1'").fetchone():
+        con.execute("INSERT INTO assets (name, value) VALUES (?,?)", ('Company fund savings', 0))
+        con.execute("INSERT OR IGNORE INTO config VALUES ('networth_v1','1')")
+        con.commit()
+        print('  + net worth y diario activados')
     # Postgres: resincronizar contadores SERIAL para que los INSERT nuevos no choquen
     if db_layer.IS_PG and hasattr(con, 'fix_sequences'):
         con.fix_sequences()
@@ -302,9 +318,13 @@ def state():
     routine_extra = [dict(r) for r in d.execute('SELECT * FROM routine_extra')]
     routine_hidden = [f"{r['weekday']}|{r['akey']}" for r in d.execute('SELECT weekday, akey FROM routine_hidden')]
     routine_hidden_day = [f"{r['day']}|{r['akey']}" for r in d.execute('SELECT day, akey FROM routine_hidden_day')]
+    journal = [dict(r) for r in d.execute('SELECT * FROM journal ORDER BY day DESC, id DESC')]
+    assets = [dict(r) for r in d.execute('SELECT * FROM assets')]
+    expenses = [dict(r) for r in d.execute('SELECT * FROM expenses ORDER BY id DESC')]
+    month_income = {r['month']: r['income'] for r in d.execute('SELECT * FROM month_income')}
     extra_debts = [dict(r) for r in d.execute('SELECT * FROM extra_debts')]
     core = [x[0] for x in _SEED['debts']]
-    return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, plan=plan, debts=debts, abonos=abonos, habits=habits,
+    return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
                         marks=marks, history=history, dreams=dreams,
                         animes=animes, books=books,
                         servicios=SERVICIOS, detalle=DETALLE,
@@ -550,6 +570,73 @@ def routine_extra_new():
 @app.delete('/api/routine_extra/<int:i>')
 def routine_extra_del(i):
     db().execute('DELETE FROM routine_extra WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/income')
+def income_set():
+    j = request.json
+    db().execute('INSERT OR REPLACE INTO month_income (month, income) VALUES (?,?)',
+                 (j['month'], int(j['income'] or 0)))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/expense/new')
+def expense_new():
+    j = request.json
+    db().execute('''INSERT INTO expenses (name, amount, method, kind, month, created)
+                    VALUES (?,?,?,?,?,?)''',
+                 (j['name'].strip(), int(j['amount'] or 0), j.get('method', 'Efectivo'),
+                  j.get('kind', 'once'), j.get('month', ''), date.today().isoformat()))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete('/api/expense/<int:i>')
+def expense_del(i):
+    db().execute('DELETE FROM expenses WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/journal/new')
+def journal_new():
+    j = request.json
+    db().execute('INSERT INTO journal (day, mood, note) VALUES (?,?,?)',
+                 (j.get('day', date.today().isoformat()), j.get('mood', ''), j['note'].strip()))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete('/api/journal/<int:i>')
+def journal_del(i):
+    db().execute('DELETE FROM journal WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/asset/new')
+def asset_new():
+    j = request.json
+    db().execute('INSERT INTO assets (name, value) VALUES (?,?)',
+                 (j['name'].strip(), int(j.get('value') or 0)))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/asset')
+def asset_update():
+    j = request.json
+    db().execute('UPDATE assets SET value=? WHERE id=?', (int(j['value'] or 0), int(j['id'])))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete('/api/asset/<int:i>')
+def asset_del(i):
+    db().execute('DELETE FROM assets WHERE id=?', (i,))
     db().commit()
     return jsonify(ok=True)
 
