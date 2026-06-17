@@ -25,6 +25,7 @@
   <button data-tab="suenos">✨ Wishlist</button>
   <button data-tab="anime">📺 Anime</button>
   <button data-tab="libros">📚 Books</button>
+  <button data-tab="logros">🏆 Achievements</button>
 </nav>
 
 <main>
@@ -37,6 +38,26 @@
     <select id="monthSel" class="month-select"></select>
   </div>
   <div class="cards" id="kpis"></div>
+
+  <div class="panel">
+    <div class="row-between">
+      <h2>💸 Expense tracker</h2>
+      <button class="btn-gold" id="setIncomeBtn">Set this month's income</button>
+    </div>
+    <p class="hint">Log where your money goes. If you pay with a credit card, it adds to that card's installments automatically.</p>
+    <form id="expenseNew" class="expense-form">
+      <input id="exName" placeholder="What was it? (e.g. Groceries, Netflix)" required>
+      <input id="exAmount" type="number" min="1" placeholder="Amount" required>
+      <select id="exMethod"></select>
+      <select id="exKind">
+        <option value="once">One-time</option>
+        <option value="monthly">Monthly (recurring)</option>
+      </select>
+      <button class="btn-gold" type="submit">+ Log expense</button>
+    </form>
+    <div id="expenseSummary"></div>
+    <div id="expenseList"></div>
+  </div>
 
   <div class="panel">
     <div class="row-between">
@@ -249,8 +270,15 @@
   <div class="panel scroll-x"><table class="table" id="bookTable"></table></div>
 </section>
 
+<!-- ============ ACHIEVEMENTS ============ -->
+<section id="tab-logros" class="tab">
+  <h1>🏆 Achievements</h1>
+  <p class="hint">Medals you unlock by playing the long game. Locked ones show what's next.</p>
+  <div class="achievements-grid" id="achievementsGrid"></div>
+</section>
+
 </main>
-<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v18</b></footer>
-<script src="/static/app.js?v=18"></script>
+<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v20</b></footer>
+<script src="/static/app.js?v=20"></script>
 </body>
 </html>
