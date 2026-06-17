@@ -35,7 +35,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 27;
+const FRONT_V = 28;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -989,7 +989,7 @@ $('#abonoList').addEventListener('click', async (e) => {
 
 /* ---------- DESGLOSE ---------- */
 function calcItem(it, i) {
-  const [nombre, cuota, pagadas, total, fijo] = it;
+  const [nombre, cuota, pagadas, total, fijo, detId] = it;
   if (total == null) {                       // cargo fijo o saldo libre, no envejece
     return { label: nombre, cuota, saldo: fijo || 0, done: false };
   }
@@ -998,7 +998,8 @@ function calcItem(it, i) {
     return { label: nombre, cuota: 0, saldo: 0, done: true };
   }
   return { label: `${nombre} · installment ${num}/${total}`, cuota,
-           saldo: cuota * (total - num), done: false };
+           saldo: cuota * (total - num), done: false,
+           redefer: detId ? { type: 'detalle', id: detId, cuotas: total } : null };
 }
 
 function renderDesglose() {
@@ -1910,6 +1911,8 @@ document.addEventListener('click', async (e) => {
     if (d) { pagadas = Math.max(0, Math.min(MES - d.start, d.cuotas)); actualesTxt = `${d.cuotas} installments`; }
   } else if (tipo === 'creditor') {
     actualesTxt = 'this debt';
+  } else if (tipo === 'detalle') {
+    actualesTxt = `${btn.dataset.cuotas} installments`;
   }
   const r = await modal({ icon: '🔄', title: 'Reschedule installments',
     text: `Reschedule <b>${actualesTxt}</b>. Type ANY new number of installments — 1 (pay it all next month), 6, 12, 24, whatever you want. I take what you still owe and split it into that many, starting the month you pick. Just like the bank.`,
@@ -1927,6 +1930,9 @@ document.addEventListener('click', async (e) => {
   } else if (tipo === 'extra_debt') {
     endpoint = '/api/extra_debt/redefer';
     body = { id: +btn.dataset.id, cuotas: nuevas, start, pagadas };
+  } else if (tipo === 'detalle') {
+    endpoint = '/api/detalle/redefer';
+    body = { id: +btn.dataset.id, cuotas: nuevas };
   } else {
     endpoint = '/api/creditor/redefer';
     body = { name: btn.dataset.name, cuotas: nuevas, start };
