@@ -13,7 +13,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 23  # debe coincidir con FRONT_V en static/app.js
+VERSION = 24  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -356,6 +356,40 @@ def index():
     return render_template('index.html')
 
 
+def _sync_metas_carreras(d):
+    """Sincroniza el % de cada meta de Goals con el progreso de su carrera (por palabras clave).
+    Blindada: si algo falla, no tumba la app."""
+    try:
+        import re as _re
+        stop = {'learn', 'get', 'to', 'the', 'a', 'my', 'of', 'and', 'analytics', 'analysis'}
+        def keys(name):
+            name = (name or '').lower()
+            ws = set(w for w in _re.sub(r'[^a-záéíóúñ ]', ' ', name).split() if w and w not in stop)
+            if _re.search(r'data|anal[íi]t|analy', name): ws.add('data')
+            if _re.search(r'cyber|ciber|secur', name): ws.add('cyber')
+            if _re.search(r'ingl|english', name): ws.add('english')
+            return ws
+        careers = [dict(r) for r in d.execute('SELECT * FROM careers').fetchall()]
+        goals = [dict(r) for r in d.execute('SELECT * FROM goals').fetchall()]
+        for c in careers:
+            prog = min(round((c.get('step') or 0) * 25 + ((c.get('pct') or 0) / 100) * 25), 100)
+            ck = keys(c.get('name'))
+            best, bestscore = None, 0
+            for g in goals:
+                score = len(ck & keys(g.get('name')))
+                if score > bestscore:
+                    bestscore = score; best = g
+            if best and bestscore > 0 and (best.get('pct') or 0) != prog:
+                d.execute('UPDATE goals SET pct=? WHERE id=?', (prog, best['id']))
+        d.commit()
+    except Exception as e:
+        print('  (aviso) no se pudo sincronizar metas-carreras:', e)
+        try:
+            d.rollback()
+        except Exception:
+            pass
+
+
 def _sync_carrera_ingles(d):
     """La carrera 'Inglés' sube sola según los días con bloque de inglés completado.
     ~30 días = 1 peldaño (25%). Blindada: si algo falla, no tumba la app."""
@@ -466,11 +500,12 @@ def state():
         'SELECT * FROM animes ORDER BY score DESC NULLS LAST, name')]
     books = [dict(r) for r in d.execute('SELECT * FROM books')]
     compras = [dict(r) for r in d.execute('SELECT * FROM compras ORDER BY id DESC')]
+    _sync_carrera_ingles(d)
+    _sync_metas_carreras(d)
     goals = [dict(r) for r in d.execute('SELECT * FROM goals')]
     shifts = {r['weekday']: r['shift'] for r in d.execute('SELECT * FROM week_shifts')}
     profile = {r['key']: r['value'] for r in d.execute('SELECT * FROM study_profile')}
     rdone = [f"{r['day']}|{r['activity']}" for r in d.execute('SELECT day, activity FROM routine_done')]
-    _sync_carrera_ingles(d)
     careers = [dict(r) for r in d.execute('SELECT * FROM careers')]
     courses_done = [dict(r) for r in d.execute('SELECT * FROM courses_done ORDER BY id DESC')]
     routine_extra = [dict(r) for r in d.execute('SELECT * FROM routine_extra')]
