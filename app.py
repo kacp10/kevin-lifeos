@@ -120,6 +120,12 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, quota INTEGER DEFAULT 0,
         frequency TEXT DEFAULT 'Monthly', last_deposit TEXT DEFAULT '',
         saved INTEGER DEFAULT 0);
+    CREATE TABLE IF NOT EXISTS piggy (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, kind TEXT DEFAULT 'free',
+        monthly INTEGER DEFAULT 0, started TEXT DEFAULT '', icon TEXT DEFAULT '🐷');
+    CREATE TABLE IF NOT EXISTS piggy_moves (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, piggy_id INTEGER, amount INTEGER,
+        day TEXT, note TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS extra_debts (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, total INTEGER,
         cuota INTEGER DEFAULT 0, cuotas INTEGER DEFAULT 0, start INTEGER DEFAULT 0);
@@ -321,6 +327,57 @@ def index():
     return render_template('index.html')
 
 
+def _aplicar_aportes_fondo(d):
+    """Suma automáticamente el aporte mensual de cada concepto del fondo de empresa.
+    El aporte cae el día 30. Si han pasado uno o más días 30 desde el último depósito
+    registrado, suma la cuota por cada mes pendiente y actualiza la fecha."""
+    from datetime import date as _date
+    hoy = _date.today()
+    for f in d.execute('SELECT * FROM fund').fetchall():
+        f = dict(f)
+        quota = f.get('quota') or 0
+        if quota <= 0 or (f.get('frequency') or '').lower() not in ('monthly', 'mensual'):
+            continue
+        last = f.get('last_deposit') or ''
+        try:
+            y, m, dd = [int(x) for x in last.split('-')]
+            last_d = _date(y, m, dd)
+        except Exception:
+            continue
+        # contar cuántos "día 30" han pasado entre last_d y hoy
+        meses = 0
+        cur_y, cur_m = last_d.year, last_d.month
+        while True:
+            # siguiente fecha de aporte: el día 28-30 del mes siguiente al último
+            cur_m += 1
+            if cur_m > 12:
+                cur_m = 1; cur_y += 1
+            import calendar
+            diap = min(30, calendar.monthrange(cur_y, cur_m)[1])
+            prox = _date(cur_y, cur_m, diap)
+            if prox <= hoy:
+                meses += 1
+            else:
+                break
+            if meses > 60:
+                break
+        if meses > 0:
+            nuevo_saved = (f.get('saved') or 0) + quota * meses
+            import calendar
+            diap = min(30, calendar.monthrange(cur_y if cur_m != 1 else cur_y, cur_m)[1])
+            # fecha del último aporte aplicado
+            ly, lm = last_d.year, last_d.month
+            for _ in range(meses):
+                lm += 1
+                if lm > 12:
+                    lm = 1; ly += 1
+            ld = min(30, calendar.monthrange(ly, lm)[1])
+            nueva_fecha = f"{ly:04d}-{lm:02d}-{ld:02d}"
+            d.execute('UPDATE fund SET saved=?, last_deposit=? WHERE id=?',
+                      (nuevo_saved, nueva_fecha, f['id']))
+    d.commit()
+
+
 @app.get('/api/state')
 def state():
     d = db()
@@ -361,13 +418,16 @@ def state():
     expenses = [dict(r) for r in d.execute('SELECT * FROM expenses ORDER BY id DESC')]
     month_income = {r['month']: r['income'] for r in d.execute('SELECT * FROM month_income')}
     services = [dict(r) for r in d.execute('SELECT * FROM services ORDER BY id')]
+    _aplicar_aportes_fondo(d)
     fund = [dict(r) for r in d.execute('SELECT * FROM fund ORDER BY id')]
+    piggy = [dict(r) for r in d.execute('SELECT * FROM piggy ORDER BY id')]
+    piggy_moves = [dict(r) for r in d.execute('SELECT * FROM piggy_moves ORDER BY id DESC')]
     extra_debts = [dict(r) for r in d.execute('SELECT * FROM extra_debts')]
     core = [x[0] for x in _SEED['debts']]
     return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
                         marks=marks, history=history, dreams=dreams,
                         animes=animes, books=books,
-                        servicios=services, fund=fund, detalle=DETALLE,
+                        servicios=services, fund=fund, piggy=piggy, piggy_moves=piggy_moves, detalle=DETALLE,
                         checks=[f"{r['item']}|{r['month']}" for r in d.execute(
                             'SELECT item, month FROM payment_checks')],
                         today=date.today().isoformat()))
@@ -619,6 +679,41 @@ def routine_extra_new():
 @app.delete('/api/routine_extra/<int:i>')
 def routine_extra_del(i):
     db().execute('DELETE FROM routine_extra WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/piggy/new')
+def piggy_new():
+    j = request.json
+    db().execute('INSERT INTO piggy (name, kind, monthly, started, icon) VALUES (?,?,?,?,?)',
+                 (j['name'].strip(), j.get('kind', 'free'), int(j.get('monthly') or 0),
+                  j.get('started', date.today().isoformat()), j.get('icon', '🐷')))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/piggy/add')
+def piggy_add():
+    j = request.json
+    db().execute('INSERT INTO piggy_moves (piggy_id, amount, day, note) VALUES (?,?,?,?)',
+                 (int(j['piggy_id']), int(j['amount'] or 0),
+                  j.get('day', date.today().isoformat()), j.get('note', '')))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete('/api/piggy_move/<int:i>')
+def piggy_move_del(i):
+    db().execute('DELETE FROM piggy_moves WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete('/api/piggy/<int:i>')
+def piggy_del(i):
+    db().execute('DELETE FROM piggy_moves WHERE piggy_id=?', (i,))
+    db().execute('DELETE FROM piggy WHERE id=?', (i,))
     db().commit()
     return jsonify(ok=True)
 

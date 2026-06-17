@@ -124,7 +124,7 @@ else:
             # Todo idempotente: se puede correr muchas veces sin daño y sin borrar datos.
             tablas = ['debts', 'abonos', 'habits', 'dreams', 'animes', 'books',
                       'compras', 'goals', 'extra_debts', 'careers', 'courses_done',
-                      'routine_extra', 'journal', 'assets', 'expenses', 'services', 'fund']
+                      'routine_extra', 'journal', 'assets', 'expenses', 'services', 'fund', 'piggy', 'piggy_moves']
             for t in tablas:
                 cur = self._con.cursor()
                 try:
