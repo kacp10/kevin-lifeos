@@ -13,7 +13,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 21  # debe coincidir con FRONT_V en static/app.js
+VERSION = 22  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -127,6 +127,9 @@ def init_db():
     CREATE TABLE IF NOT EXISTS piggy_moves (
         id INTEGER PRIMARY KEY AUTOINCREMENT, piggy_id INTEGER, amount INTEGER,
         day TEXT, note TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS shopping (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, slots INTEGER DEFAULT 1,
+         done INTEGER DEFAULT 0, created TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS extra_debts (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, total INTEGER,
         cuota INTEGER DEFAULT 0, cuotas INTEGER DEFAULT 0, start INTEGER DEFAULT 0);
@@ -291,6 +294,17 @@ def init_db():
             pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('piggy_goal_v1','1')")
         con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='shopping_v1'").fetchone():
+        items = [
+            ('Eye drops', 1), ('Cloe (my cat) 🐱', 3), ('Black pants', 1),
+            ('Gym clothes', 1), ('Deodorant', 1), ('Clean the mirror', 1),
+        ]
+        for nm, sl in items:
+            con.execute('INSERT INTO shopping (name, slots, done, created) VALUES (?,?,?,?)',
+                        (nm, sl, 0, date.today().isoformat()))
+        con.execute("INSERT OR IGNORE INTO config VALUES ('shopping_v1','1')")
+        con.commit()
+        print('  + lista de compras activada')
     if not con.execute("SELECT 1 FROM config WHERE key='fund_v1'").fetchone():
         fondo = [
             ('Ahorros permanentes', 36000, 'Monthly', '2026-05-30', 320198),
@@ -464,12 +478,13 @@ def state():
     fund = [dict(r) for r in d.execute('SELECT * FROM fund ORDER BY id')]
     piggy = [dict(r) for r in d.execute('SELECT * FROM piggy ORDER BY id')]
     piggy_moves = [dict(r) for r in d.execute('SELECT * FROM piggy_moves ORDER BY id DESC')]
+    shopping = [dict(r) for r in d.execute('SELECT * FROM shopping ORDER BY done, id')]
     extra_debts = [dict(r) for r in d.execute('SELECT * FROM extra_debts')]
     core = [x[0] for x in _SEED['debts']]
     return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
                         marks=marks, history=history, dreams=dreams,
                         animes=animes, books=books,
-                        servicios=services, fund=fund, piggy=piggy, piggy_moves=piggy_moves, detalle=DETALLE,
+                        servicios=services, fund=fund, piggy=piggy, piggy_moves=piggy_moves, shopping=shopping, detalle=DETALLE,
                         checks=[f"{r['item']}|{r['month']}" for r in d.execute(
                             'SELECT item, month FROM payment_checks')],
                         today=date.today().isoformat()))
@@ -721,6 +736,46 @@ def routine_extra_new():
 @app.delete('/api/routine_extra/<int:i>')
 def routine_extra_del(i):
     db().execute('DELETE FROM routine_extra WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/shopping/new')
+def shopping_new():
+    j = request.json
+    db().execute('INSERT INTO shopping (name, slots, done, created) VALUES (?,?,?,?)',
+                 (j['name'].strip(), int(j.get('slots') or 1), 0, date.today().isoformat()))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/shopping/tick')
+def shopping_tick():
+    """Suma una raya. Cuando done == slots, el item queda completado (tachado)."""
+    j = request.json
+    row = db().execute('SELECT slots, done FROM shopping WHERE id=?', (int(j['id']),)).fetchone()
+    if not row:
+        return jsonify(error='not found'), 404
+    row = dict(row)
+    nuevo = row['done'] + 1
+    if nuevo > row['slots']:
+        nuevo = 0   # si ya estaba completo y vuelven a tocar, reinicia (des-completar)
+    db().execute('UPDATE shopping SET done=? WHERE id=?', (nuevo, int(j['id'])))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete('/api/shopping/<int:i>')
+def shopping_del(i):
+    db().execute('DELETE FROM shopping WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/shopping/clear_done')
+def shopping_clear():
+    """Borra los items ya completados (done >= slots)."""
+    db().execute('DELETE FROM shopping WHERE done >= slots AND slots > 0')
     db().commit()
     return jsonify(ok=True)
 
