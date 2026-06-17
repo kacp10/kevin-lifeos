@@ -13,7 +13,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 20  # debe coincidir con FRONT_V en static/app.js
+VERSION = 21  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -59,7 +59,7 @@ def init_db():
         id INTEGER PRIMARY KEY, name TEXT, initial INTEGER);
     CREATE TABLE IF NOT EXISTS abonos (
         id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, debt_id INTEGER,
-        valor INTEGER, FOREIGN KEY(debt_id) REFERENCES debts(id));
+        valor INTEGER, nota TEXT DEFAULT '', FOREIGN KEY(debt_id) REFERENCES debts(id));
     CREATE TABLE IF NOT EXISTS habits (id INTEGER PRIMARY KEY, name TEXT);
     CREATE TABLE IF NOT EXISTS habit_marks (
         habit_id INTEGER, day TEXT, PRIMARY KEY (habit_id, day));
@@ -113,6 +113,9 @@ def init_db():
         month TEXT DEFAULT '', created TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS month_income (
         month TEXT PRIMARY KEY, income INTEGER);
+    CREATE TABLE IF NOT EXISTS services (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, amount INTEGER,
+        method TEXT DEFAULT 'Efectivo', payday TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS extra_debts (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, total INTEGER,
         cuota INTEGER DEFAULT 0, cuotas INTEGER DEFAULT 0, start INTEGER DEFAULT 0);
@@ -263,6 +266,26 @@ def init_db():
         con.execute("INSERT OR IGNORE INTO config VALUES ('networth_v1','1')")
         con.commit()
         print('  + net worth y diario activados')
+    if not con.execute("SELECT 1 FROM config WHERE key='abono_nota_v1'").fetchone():
+        try:
+            con.execute("ALTER TABLE abonos ADD COLUMN nota TEXT DEFAULT ''")
+        except Exception:
+            pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('abono_nota_v1','1')")
+        con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='services_v1'").fetchone():
+        with open(os.path.join(BASE, 'seed_data.json'), encoding='utf-8') as f:
+            seed = json.load(f)
+        for s in seed.get('servicios', []):
+            nombre = s[0]
+            monto = s[1] if len(s) > 1 else 0
+            metodo = s[2] if len(s) > 2 and s[2] not in ('—', '', None) else 'Efectivo'
+            payday = s[3] if len(s) > 3 else ''
+            con.execute('INSERT INTO services (name, amount, method, payday) VALUES (?,?,?,?)',
+                        (nombre, monto, metodo, payday))
+        con.execute("INSERT OR IGNORE INTO config VALUES ('services_v1','1')")
+        con.commit()
+        print('  + servicios editables activados')
     # Postgres: resincronizar contadores SERIAL para que los INSERT nuevos no choquen
     if db_layer.IS_PG and hasattr(con, 'fix_sequences'):
         con.fix_sequences()
@@ -322,12 +345,13 @@ def state():
     assets = [dict(r) for r in d.execute('SELECT * FROM assets')]
     expenses = [dict(r) for r in d.execute('SELECT * FROM expenses ORDER BY id DESC')]
     month_income = {r['month']: r['income'] for r in d.execute('SELECT * FROM month_income')}
+    services = [dict(r) for r in d.execute('SELECT * FROM services ORDER BY id')]
     extra_debts = [dict(r) for r in d.execute('SELECT * FROM extra_debts')]
     core = [x[0] for x in _SEED['debts']]
     return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
                         marks=marks, history=history, dreams=dreams,
                         animes=animes, books=books,
-                        servicios=SERVICIOS, detalle=DETALLE,
+                        servicios=services, detalle=DETALLE,
                         checks=[f"{r['item']}|{r['month']}" for r in d.execute(
                             'SELECT item, month FROM payment_checks')],
                         today=date.today().isoformat()))
@@ -399,14 +423,23 @@ def ping():
 @app.post('/api/check')
 def check():
     j = request.json
+    item, month = j['item'], j['month']
+    debt_id = j.get('debt_id')          # si viene, es un pago de deuda -> abono real
+    valor = int(j.get('valor') or 0)
     cur = db().execute('SELECT 1 FROM payment_checks WHERE item=? AND month=?',
-                       (j['item'], j['month'])).fetchone()
+                       (item, month)).fetchone()
     if cur:
-        db().execute('DELETE FROM payment_checks WHERE item=? AND month=?',
-                     (j['item'], j['month']))
+        # desmarcar: quitar el check y, si era deuda, borrar el abono que creó este check
+        db().execute('DELETE FROM payment_checks WHERE item=? AND month=?', (item, month))
+        if debt_id:
+            db().execute('DELETE FROM abonos WHERE debt_id=? AND nota=?',
+                         (int(debt_id), f'check:{item}:{month}'))
     else:
-        db().execute('INSERT INTO payment_checks VALUES (?,?)',
-                     (j['item'], j['month']))
+        # marcar: registrar el check y, si era deuda, crear un abono real (baja el Debt Boss)
+        db().execute('INSERT INTO payment_checks VALUES (?,?)', (item, month))
+        if debt_id and valor > 0:
+            db().execute('INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
+                         (int(debt_id), date.today().isoformat(), valor, f'check:{item}:{month}'))
     db().commit()
     return jsonify(ok=True)
 
@@ -570,6 +603,35 @@ def routine_extra_new():
 @app.delete('/api/routine_extra/<int:i>')
 def routine_extra_del(i):
     db().execute('DELETE FROM routine_extra WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/service/new')
+def service_new():
+    j = request.json
+    db().execute('INSERT INTO services (name, amount, method, payday) VALUES (?,?,?,?)',
+                 (j['name'].strip(), int(j.get('amount') or 0),
+                  j.get('method', 'Efectivo'), j.get('payday', '')))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/service')
+def service_update():
+    j = request.json
+    field = j['field']
+    if field not in ('name', 'amount', 'method', 'payday'):
+        return jsonify(error='Field not allowed'), 400
+    val = int(j['value'] or 0) if field == 'amount' else j['value']
+    db().execute(f'UPDATE services SET {field}=? WHERE id=?', (val, int(j['id'])))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete('/api/service/<int:i>')
+def service_del(i):
+    db().execute('DELETE FROM services WHERE id=?', (i,))
     db().commit()
     return jsonify(ok=True)
 

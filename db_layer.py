@@ -61,7 +61,8 @@ else:
             'config': 'key', 'study_profile': 'key',
             'months_history': 'label', 'week_shifts': 'weekday',
             'payment_checks': '(item, month)', 'habit_marks': '(habit_id, day)',
-            'routine_done': '(day, activity)',
+            'routine_done': '(day, activity)', 'month_income': 'month',
+            'routine_hidden': '(weekday, akey)', 'routine_hidden_day': '(day, akey)',
         }
 
         def _translate(self, sql):
@@ -88,6 +89,7 @@ else:
             cols = {
                 'config': ['value'], 'study_profile': ['value'],
                 'months_history': ['pct'], 'week_shifts': ['shift'],
+                'month_income': ['income'],
             }.get(tabla, ['value'])
             return ', '.join(f'{c}=EXCLUDED.{c}' for c in cols)
 
@@ -122,7 +124,7 @@ else:
             # Todo idempotente: se puede correr muchas veces sin daño y sin borrar datos.
             tablas = ['debts', 'abonos', 'habits', 'dreams', 'animes', 'books',
                       'compras', 'goals', 'extra_debts', 'careers', 'courses_done',
-                      'routine_extra', 'journal', 'assets']
+                      'routine_extra', 'journal', 'assets', 'expenses', 'services']
             for t in tablas:
                 cur = self._con.cursor()
                 try:
