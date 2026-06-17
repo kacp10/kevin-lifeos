@@ -13,7 +13,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 25  # debe coincidir con FRONT_V en static/app.js
+VERSION = 26  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -1019,38 +1019,86 @@ def compra():
     return jsonify(ok=True)
 
 
+@app.post('/api/creditor/redefer')
+def creditor_redefer():
+    """Redifiere una deuda principal del plan (Tarjeta DV, Crédito Nicole, etc.).
+    Toma el saldo restante desde el mes actual y lo reparte en N cuotas iguales."""
+    j = request.json
+    nombre = j['name']
+    nuevas = int(j['cuotas'])
+    desde = int(j.get('start', 0))    # mes desde el que aplica el nuevo plan
+    if nuevas < 1:
+        return jsonify(error='cuotas inválidas'), 400
+    row = db().execute("SELECT value FROM config WHERE key='plan'").fetchone()
+    if not row:
+        return jsonify(error='sin plan'), 404
+    plan = json.loads(dict(row)['value'])
+    cred = plan.get('creditors', {})
+    if nombre not in cred:
+        return jsonify(error='deuda no encontrada'), 404
+    arr = cred[nombre]
+    # saldo restante = suma de las cuotas desde 'desde' en adelante
+    saldo = sum(arr[desde:])
+    cuota = round(saldo / nuevas)
+    # reescribir el array: 0 antes de 'desde', luego 'nuevas' cuotas, luego 0
+    nuevo_arr = []
+    for i in range(len(arr)):
+        if i < desde:
+            nuevo_arr.append(0)               # ya no se debe nada antes del nuevo plan
+        elif i < desde + nuevas:
+            nuevo_arr.append(cuota)
+        else:
+            nuevo_arr.append(0)
+    # si las nuevas cuotas se pasan de los 12 meses, ajustamos la última visible
+    cred[nombre] = nuevo_arr
+    plan['creditors'] = cred
+    db().execute("UPDATE config SET value=? WHERE key='plan'",
+                 (json.dumps(plan, ensure_ascii=False),))
+    db().commit()
+    return jsonify(ok=True, cuota=cuota, saldo=saldo)
+
+
 @app.post('/api/compra/redefer')
 def compra_redefer():
-    """Redifiere una compra a cuotas: cambia el número de cuotas restantes.
-    El saldo pendiente se reparte en las nuevas cuotas, desde el mes actual."""
+    """Redifiere una compra: toma el SALDO RESTANTE (lo que falta por pagar) y lo
+    reparte en el nuevo número de cuotas, desde el mes elegido. Como un banco."""
     j = request.json
     cid = int(j['id'])
     nuevas = int(j['cuotas'])
     start = int(j.get('start', 0))
+    pagadas = int(j.get('pagadas', 0))   # cuántas cuotas ya se pagaron (lo calcula el frontend)
     c = db().execute('SELECT * FROM compras WHERE id=?', (cid,)).fetchone()
     if not c or nuevas < 1:
         return jsonify(error='datos inválidos'), 400
     c = dict(c)
-    # el valor total de la compra no cambia; solo cómo se reparte de aquí en adelante
-    db().execute('UPDATE compras SET cuotas=?, start=? WHERE id=?', (nuevas, start, cid))
+    cuota_vieja = round(c['valor'] / c['cuotas']) if c['cuotas'] else 0
+    pagadas = max(0, min(pagadas, c['cuotas']))
+    saldo = max(c['valor'] - cuota_vieja * pagadas, 0)   # lo que falta por pagar
+    # el nuevo "valor" de la compra pasa a ser el saldo, repartido en las nuevas cuotas
+    db().execute('UPDATE compras SET valor=?, cuotas=?, start=? WHERE id=?',
+                 (saldo, nuevas, start, cid))
     db().commit()
     return jsonify(ok=True)
 
 
 @app.post('/api/extra_debt/redefer')
 def extra_debt_redefer():
-    """Redifiere una deuda registrada: nuevo número de cuotas para el saldo."""
+    """Redifiere una deuda registrada: toma el saldo restante y lo reparte en
+    el nuevo número de cuotas, desde el mes elegido."""
     j = request.json
     did = int(j['id'])
     nuevas = int(j['cuotas'])
     start = int(j.get('start', 0))
+    pagadas = int(j.get('pagadas', 0))
     d = db().execute('SELECT * FROM extra_debts WHERE id=?', (did,)).fetchone()
     if not d or nuevas < 1:
         return jsonify(error='datos inválidos'), 400
     d = dict(d)
-    nueva_cuota = round(d['total'] / nuevas)
-    db().execute('UPDATE extra_debts SET cuotas=?, cuota=?, start=? WHERE id=?',
-                 (nuevas, nueva_cuota, start, did))
+    pagadas = max(0, min(pagadas, d['cuotas'] or 0))
+    saldo = max(d['total'] - (d['cuota'] or 0) * pagadas, 0)
+    nueva_cuota = round(saldo / nuevas)
+    db().execute('UPDATE extra_debts SET total=?, cuotas=?, cuota=?, start=? WHERE id=?',
+                 (saldo, nuevas, nueva_cuota, start, did))
     db().commit()
     return jsonify(ok=True)
 
