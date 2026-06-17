@@ -35,9 +35,29 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 18;
+const FRONT_V = 20;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
+// Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
+const PAY_METHODS = [
+  { id: 'Efectivo', label: 'Cash', logo: '💵', card: false },
+  { id: 'Nequi', label: 'Nequi', logo: '🟣', card: false },
+  { id: 'Daviplata', label: 'Daviplata', logo: '🔴', card: false },
+  { id: 'NU', label: 'NU (debit)', logo: '🟪', card: false },
+  { id: 'Bancolombia', label: 'Bancolombia (debit)', logo: '🟡', card: false },
+  { id: 'Tarjeta Nicole', label: 'Nicole (credit)', logo: '💳', card: true },
+  { id: 'Davivienda', label: 'Davivienda (credit)', logo: '🔻', card: true },
+  { id: 'Codensa', label: 'Codensa (credit)', logo: '🟠', card: true },
+  { id: 'Banco de Bogotá', label: 'Banco de Bogotá (credit)', logo: '🔵', card: true }
+];
+const payMethod = (id) => PAY_METHODS.find(m => m.id === id) || PAY_METHODS[0];
+// el ingreso del mes actual (editable) o el del plan por defecto
+function ingresoDelMes(i) {
+  const monthKey2 = S.plan.months[i];
+  const mi = S.month_income || {};
+  if (mi[monthKey2] != null) return mi[monthKey2];
+  return S.plan.salario + (S.plan.extra[i] || 0);
+}
 // Fecha LOCAL del dispositivo (no UTC), en formato YYYY-MM-DD — evita el desfase de zona horaria
 function localISO(d = new Date()) {
   const off = d.getTimezoneOffset() * 60000;
@@ -188,6 +208,7 @@ async function load(animate) {
   renderGoals();
   renderLife();
   renderHaki();
+  renderAchievements();
   setTimeout(avisosInteligentes, 1200);
 }
 
@@ -273,14 +294,19 @@ function renderInicio() {
   const i = +sel.value || 0;
   MES = i;
   const p = S.plan;
-  const ingreso = p.salario + p.extra[i];
+  const ingreso = ingresoDelMes(i);
   const deudas = Object.entries(p.creditors)
     .map(([n, arr]) => [n, arr[i] + extraCuota(n, i), extraCuota(n, i)])
     .filter(d => d[1] > 0);
   (S.extra_debts || []).filter(d => d.cuotas >= 1 && i >= d.start && i < d.start + d.cuotas)
     .forEach(d => deudas.push([d.name + ' (registrada)', d.cuota, 0]));
   const totalDeudas = deudas.reduce((s, d) => s + d[1], 0);
-  const egresos = p.vida + p.ahorro + totalDeudas;
+  // gastos del mes actual que NO son a crédito (los de crédito ya cuentan como cuota)
+  const mesKey = p.months[i];
+  const gastosMes = (S.expenses || []).filter(x =>
+    (x.kind === 'monthly' || x.month === mesKey) && !payMethod(x.method).card)
+    .reduce((s, x) => s + x.amount, 0);
+  const egresos = p.vida + p.ahorro + totalDeudas + gastosMes;
   const saldo = ingreso - egresos;
 
   $('#kpis').innerHTML = `
@@ -326,8 +352,82 @@ function renderInicio() {
   });
 
   renderChecklist(i, deudas);
-  renderDesglose();
+  renderExpenses(i);
 }
+
+/* ====== EXPENSE TRACKER (Inicio) ====== */
+function renderExpenses(i) {
+  // llenar el select de medios de pago con logos (una vez)
+  const ms = $('#exMethod');
+  if (ms && !ms.options.length) {
+    ms.innerHTML = PAY_METHODS.map(m => `<option value="${m.id}">${m.logo} ${m.label}</option>`).join('');
+  }
+  const mesKey = S.plan.months[i];
+  // gastos visibles: recurrentes (todos los meses) + los de ESTE mes
+  const visibles = (S.expenses || []).filter(x => x.kind === 'monthly' || x.month === mesKey);
+  const totalMes = visibles.reduce((s, x) => s + x.amount, 0);
+  const credito = visibles.filter(x => payMethod(x.method).card).reduce((s, x) => s + x.amount, 0);
+
+  const sum = $('#expenseSummary');
+  if (sum) sum.innerHTML = visibles.length
+    ? `<div class="exp-summary">Spent in ${mesKey}: <b>${fmt(totalMes)}</b>${credito ? ` · on credit (adds to cards): <b class="nw-debt">${fmt(credito)}</b>` : ''}</div>`
+    : '';
+
+  const list = $('#expenseList');
+  if (list) list.innerHTML = visibles.map(x => {
+    const m = payMethod(x.method);
+    return `<div class="exp-row">
+      <span class="exp-name">${esc(x.name)} ${x.kind === 'monthly' ? '<small class="exp-tag">monthly</small>' : ''}</span>
+      <span class="exp-method" title="${m.label}">${m.logo} ${m.id}${m.card ? ' 💳' : ''}</span>
+      <span class="exp-amt">${fmt(x.amount)}</span>
+      <button class="del-x" data-type="expense" data-id="${x.id}">✕</button>
+    </div>`;
+  }).join('') || '<p class="hint">No expenses logged for this month yet.</p>';
+}
+
+$('#expenseNew').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = $('#exName').value.trim();
+  const amount = +$('#exAmount').value || 0;
+  const method = $('#exMethod').value;
+  const kind = $('#exKind').value;
+  if (!name || amount <= 0) return;
+  const mesKey = S.plan.months[MES];
+  const m = payMethod(method);
+
+  // Si es tarjeta de crédito: preguntar a cuántas cuotas y crear la "compra a cuotas"
+  if (m.card) {
+    const r = await modal({ icon: m.logo, title: 'Paid with ' + m.id,
+      text: `This is a credit-card payment. In how many installments? It will add to <b>${m.id}</b>'s debt automatically.`,
+      fields: [{ type: 'number', placeholder: '# installments (1 = single)', min: 1, value: '1' }],
+      okText: 'Add to card' });
+    if (!r) return;
+    const cuotas = Math.max(1, +r[0] || 1);
+    // crear la compra a cuotas (reusa la lógica existente). start = mes actual MES.
+    await api('/api/compra', { body: { creditor: method, concepto: name, valor: amount, cuotas, start: MES } });
+    // y registrar el gasto también (para el historial del mes)
+    await api('/api/expense/new', { body: { name, amount, method, kind, month: kind === 'monthly' ? '' : mesKey } });
+    toast(`💳 ${fmt(amount)} added to ${m.id} (${cuotas} ${cuotas === 1 ? 'installment' : 'installments'})`);
+  } else {
+    await api('/api/expense/new', { body: { name, amount, method, kind, month: kind === 'monthly' ? '' : mesKey } });
+    toast(`${m.logo} Expense logged: ${fmt(amount)}`);
+  }
+  e.target.reset();
+  load();
+});
+
+$('#setIncomeBtn').addEventListener('click', async () => {
+  const mesKey = S.plan.months[MES];
+  const actual = ingresoDelMes(MES);
+  const r = await modal({ icon: '💰', title: `Income for ${mesKey}`,
+    text: 'How much did you actually receive this month? (your payday is the 5th)',
+    fields: [{ type: 'number', placeholder: 'Net income', min: 0, value: actual }],
+    okText: 'Save income' });
+  if (!r) return;
+  await api('/api/income', { body: { month: mesKey, income: +r[0] || 0 } });
+  toast('💰 Income updated for ' + mesKey);
+  load();
+});
 
 /* ---------- CHECKLIST DE PAGOS ---------- */
 function renderChecklist(i, deudas) {
@@ -599,6 +699,47 @@ $('#closeMonth').addEventListener('click', async (e) => {
   await load();
   if (+p >= 0.7) celebrate({ icon: '👑', title: 'MONTH CONQUERED', text: `<b>${label}</b> closed at <b>${(p * 100).toFixed(0)}%</b>. Your Haki grows stronger.` });
 });
+
+/* ====== ACHIEVEMENTS ====== */
+function renderAchievements() {
+  const grid = document.getElementById('achievementsGrid');
+  if (!grid) return;
+  const dmg = (S.debts || []).reduce((s, d) => s + d.abonado, 0);
+  const enemigosMuertos = (S.debts || []).filter(d => (d.initial + compradoEn(d.name) - d.abonado) <= 0).length;
+  const mesesGanados = (S.history || []).filter(h => h.pct >= 0.7).length;
+  const metasLogradas = (S.goals || []).filter(g => g.status === 'Lograda 🏆').length;
+  const abonos = (S.abonos || []).length;
+  const cursosFin = (S.courses_done || []).length;
+  const maxRacha = Math.max(0, ...(S.habits || []).map(h => rachaHabito(h.id, new Set(S.marks))));
+  const librosFin = (S.books || []).filter(b => b.status === 'Terminado').length;
+  const ahorroTotal = (S.dreams || []).reduce((s, d) => s + (d.saved || 0), 0);
+  const totalDebts = (S.debts || []).length;
+
+  const LOGROS = [
+    { icon: '⚔', name: 'First Blood', desc: 'Log your first payment', got: abonos >= 1 },
+    { icon: '☠', name: 'Slayer', desc: 'Defeat your first debt', got: enemigosMuertos >= 1 },
+    { icon: '💀', name: 'Hunter', desc: 'Defeat 3 debts', got: enemigosMuertos >= 3 },
+    { icon: '⚔', name: 'Warlord', desc: 'Pay 10M in total damage', got: dmg >= 10000000 },
+    { icon: '👑', name: 'Liberator', desc: 'Defeat ALL debts — total freedom', got: enemigosMuertos >= totalDebts && totalDebts > 0 },
+    { icon: '🔥', name: 'On Fire', desc: '7-day habit streak', got: maxRacha >= 7 },
+    { icon: '⚡', name: 'Unstoppable', desc: '30-day habit streak', got: maxRacha >= 30 },
+    { icon: '🛡', name: 'Disciplined', desc: 'Conquer your first month (≥70%)', got: mesesGanados >= 1 },
+    { icon: '👁', name: 'Haki Master', desc: 'Conquer 6 months', got: mesesGanados >= 6 },
+    { icon: '🎓', name: 'Student', desc: 'Finish your first course', got: cursosFin >= 1 },
+    { icon: '🎯', name: 'Achiever', desc: 'Complete a goal', got: metasLogradas >= 1 },
+    { icon: '📚', name: 'Reader', desc: 'Finish your first book', got: librosFin >= 1 },
+    { icon: '📖', name: 'Bookworm', desc: 'Finish 5 books', got: librosFin >= 5 },
+    { icon: '🐷', name: 'Saver', desc: 'Save 500K toward your dreams', got: ahorroTotal >= 500000 },
+    { icon: '💎', name: 'Big Saver', desc: 'Save 2M toward your dreams', got: ahorroTotal >= 2000000 }
+  ];
+  const got = LOGROS.filter(l => l.got).length;
+  grid.innerHTML = `<div class="ach-count">${got} / ${LOGROS.length} unlocked</div>` +
+    LOGROS.map(l => `<div class="ach-card ${l.got ? 'got' : 'locked'}">
+      <div class="ach-icon">${l.got ? l.icon : '🔒'}</div>
+      <div class="ach-name">${l.name}</div>
+      <div class="ach-desc">${l.desc}</div>
+    </div>`).join('');
+}
 
 function renderHaki() {
   const wins = S.history.filter(h => h.pct >= 0.7).length;
