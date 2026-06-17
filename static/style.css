@@ -563,3 +563,19 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .fund-tbl input.wide { width: 100%; box-sizing: border-box; }
 .fund-total td { font-weight: 800; color: var(--gold); border-top: 2px solid var(--line); }
 @media (max-width: 680px) { .fund-tbl { display: block; overflow-x: auto; } .fund-hval { font-size: 1.4rem; } }
+
+/* ====== PIGGY BANKS v21 ====== */
+.piggy-box { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.piggy-card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px 16px; margin-bottom: 12px; }
+.piggy-head { display: flex; justify-content: space-between; align-items: flex-start; }
+.piggy-name { font-weight: 800; display: block; }
+.piggy-kind { color: var(--mut); font-size: .76rem; }
+.piggy-total { font-family: 'Russo One', sans-serif; font-size: 1.5rem; color: var(--ok); }
+.piggy-since { color: var(--mut); font-size: .76rem; margin: 6px 0; }
+.piggy-actions { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+.piggy-actions .btn-gold { padding: 7px 14px; font-size: .82rem; }
+.piggy-hist summary { color: var(--mut); font-size: .8rem; cursor: pointer; padding: 4px 0; }
+.pig-move { display: flex; justify-content: space-between; font-size: .82rem;
+  padding: 6px 0; border-bottom: 1px solid var(--line); }
+.pig-plus { color: var(--ok); }

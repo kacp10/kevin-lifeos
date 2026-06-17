@@ -410,6 +410,80 @@ document.addEventListener('click', async (e) => {
   toast('🏦 Fund concept added'); load();
 });
 
+/* ====== PIGGY BANKS (alcancías personales) ====== */
+function renderPiggy() {
+  const cont = document.getElementById('piggyList');
+  if (!cont) return;
+  const piggies = S.piggy || [];
+  const moves = S.piggy_moves || [];
+  if (!piggies.length) {
+    cont.innerHTML = '<p class="hint">No piggy banks yet. Create one to start saving toward something.</p>';
+    return;
+  }
+  cont.innerHTML = piggies.map(p => {
+    const mine = moves.filter(m => m.piggy_id === p.id);
+    const total = mine.reduce((s, m) => s + m.amount, 0);
+    const kindTxt = p.kind === 'monthly'
+      ? `Monthly · ${fmt(p.monthly)}/mo target`
+      : 'Free jar · add anytime';
+    const hist = mine.length
+      ? mine.map(m => `<div class="pig-move">
+          <span>${fmtFecha(m.day)}${m.note ? ' · ' + esc(m.note) : ''}</span>
+          <span class="${m.amount < 0 ? 'nw-debt' : 'pig-plus'}">${m.amount < 0 ? '' : '+'}${fmt(m.amount)}
+          <button class="del-x" data-type="piggy_move" data-id="${m.id}">✕</button></span>
+        </div>`).join('')
+      : '<p class="hint" style="margin:6px 0">No moves yet.</p>';
+    return `<div class="piggy-card">
+      <div class="piggy-head">
+        <div><span class="piggy-name">${p.icon || '🐷'} ${esc(p.name)}</span>
+          <span class="piggy-kind">${kindTxt}</span></div>
+        <div class="piggy-total">${fmt(total)}</div>
+      </div>
+      <div class="piggy-since">Started: ${fmtFecha(p.started)}</div>
+      <div class="piggy-actions">
+        <button class="btn-gold pig-add" data-id="${p.id}" data-name="${esc(p.name)}">+ Add money</button>
+        <button class="del-x" data-type="piggy" data-id="${p.id}" title="Delete piggy">✕</button>
+      </div>
+      <details class="piggy-hist"><summary>History (${mine.length})</summary>${hist}</details>
+    </div>`;
+  }).join('');
+}
+
+document.addEventListener('click', async (e) => {
+  // crear alcancía
+  if (e.target.id === 'addPiggyBtn') {
+    const r = await modal({ icon: '🐖', title: 'New piggy bank',
+      text: 'A savings goal you control. Choose if it has a monthly target or it\'s a free jar you fill anytime.',
+      fields: [
+        { type: 'text', placeholder: 'Name (e.g. Trip, Emergency, NU pocket)' },
+        { type: 'text', placeholder: 'Emoji (optional)', value: '🐷' },
+        { type: 'select', options: [
+          { v: 'free', t: 'Free jar — add whenever I want' },
+          { v: 'monthly', t: 'Monthly target — I aim for an amount each month' }
+        ] },
+        { type: 'number', placeholder: 'Monthly target (only if monthly)' }
+      ], okText: 'Create' });
+    if (!r || !r[0].trim()) return;
+    await api('/api/piggy/new', { body: { name: r[0], icon: r[1] || '🐷', kind: r[2], monthly: +r[3] || 0, started: hoyLocal() } });
+    toast('🐖 Piggy bank created'); load();
+    return;
+  }
+  // agregar plata a una alcancía
+  const addBtn = e.target.closest('.pig-add');
+  if (addBtn) {
+    const r = await modal({ icon: '💰', title: 'Add to ' + addBtn.dataset.name,
+      text: 'How much are you putting in? (use a negative number if you took money out)',
+      fields: [
+        { type: 'number', placeholder: 'Amount' },
+        { type: 'text', placeholder: 'Note (optional)' }
+      ], okText: 'Add' });
+    if (!r || !r[0]) return;
+    await api('/api/piggy/add', { body: { piggy_id: +addBtn.dataset.id, amount: +r[0] || 0, note: r[1], day: hoyLocal() } });
+    toast(+r[0] >= 0 ? '🐷 Money added!' : '↩ Withdrawal logged'); load();
+    return;
+  }
+});
+
 /* ====== EXPENSE TRACKER (Inicio) ====== */
 function renderExpenses(i) {
   // llenar el select de medios de pago con logos (una vez)
@@ -443,6 +517,7 @@ function renderExpenses(i) {
   const ahorros = visibles.filter(x => x.method === 'Ahorro');
   const totalAhorro = ahorros.reduce((s, x) => s + x.amount, 0);
   renderFund();
+  renderPiggy();
   const sl = $('#saveList');
   if (sl) sl.innerHTML = (ahorros.length
     ? `<div class="save-total">Saved this month: <b>${fmt(totalAhorro)}</b> 🐷</div>` +
