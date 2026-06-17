@@ -50,6 +50,20 @@ const ACT_TO_HABIT = {
   skincare: 'Take care my face and body'
 };
 // Sub-tareas del bloque de inglés (para preguntar una por una al marcar)
+// Extrae los pasos numerados (1) 2) 3)) de la rutina de inglés de un día concreto
+function pasosInglesDelDia(wd) {
+  const plan = INGLES_PLAN[wd] || INGLES_PLAN[0];
+  const titulo = plan[0];      // ej: "English — Shadowing day"
+  const desc = plan[1];        // ej: "1) ... 2) ... 3) ..."
+  // partir por los marcadores "N)"
+  const partes = desc.replace(/^\d\)\s*/, '').split(/\d\)\s*/).map(s => s.trim()).filter(Boolean);
+  if (partes.length <= 1) {
+    // día sin pasos numerados (ej. Light immersion): un solo paso con toda la descripción
+    return { titulo, pasos: [{ t: titulo, d: desc }] };
+  }
+  return { titulo, pasos: partes.map((p, i) => ({ t: `Step ${i + 1}`, d: p })) };
+}
+
 const ENGLISH_TASKS = [
   { t: 'Talk 5 min', d: 'Warm-up: talk OUT LOUD about your day for 5 minutes. Record yourself.' },
   { t: 'Main activity', d: 'The day\'s core: book / shadowing / vocabulary / conversation (see the activity text).' },
@@ -1748,9 +1762,11 @@ document.addEventListener('click', async (e) => {
   if (marcando) {
     // CASO ESPECIAL: inglés pregunta tarea por tarea
     if (act === 'ingles') {
-      for (const task of ENGLISH_TASKS) {
-        const r = await modal({ icon: '🗣', title: 'Did you do it?',
-          text: `<b>${task.t}</b><br><br>${task.d}`,
+      const { titulo, pasos } = pasosInglesDelDia(CUR_WD);
+      for (let k = 0; k < pasos.length; k++) {
+        const task = pasos[k];
+        const r = await modal({ icon: '🗣', title: `${titulo} · ${k + 1}/${pasos.length}`,
+          text: `Did you do this part?<br><br><b>${task.d}</b>`,
           okText: 'Yes, done ✓', extraBtn: 'Not yet' });
         if (r === 'EXTRA' || r === null) {
           toast('No worries — finish the rest and check it again. 💪');
