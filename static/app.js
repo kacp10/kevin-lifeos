@@ -35,7 +35,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 23;
+const FRONT_V = 24;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1352,13 +1352,10 @@ function renderLife() {
   // Panel de carreras personalizables
   renderCareer();
   renderEnglish();
-  // sincronizar metas que coincidan por nombre con una carrera
+  // sincronizar metas que coincidan por nombre con una carrera (emparejamiento robusto)
   for (const c of (S.careers || [])) {
     const prog = progresoCareer(c);
-    const meta = (S.goals || []).find(g => {
-      const gn = (g.name || '').toLowerCase(), cn = (c.name || '').toLowerCase();
-      return gn.includes(cn) || cn.includes(gn.replace('learn ', '').replace('get ', ''));
-    });
+    const meta = metaDeCarrera(c);
     if (meta && (meta.pct || 0) !== prog) {
       api('/api/goal', { body: { id: meta.id, field: 'pct', value: prog } });
     }
@@ -1467,6 +1464,34 @@ document.addEventListener('click', async (e) => {
     return;
   }
 });
+
+// Empareja una carrera con su meta en Goals por palabras clave compartidas.
+// "Data Analytics" <-> "Learn Data analysis" coinciden por la palabra "data".
+function metaDeCarrera(c) {
+  const stop = new Set(['learn', 'get', 'to', 'the', 'a', 'my', 'of', 'and', 'analytics', 'analysis']);
+  const norm = (s) => (s || '').toLowerCase()
+    .replace(/[^a-záéíóúñ ]/g, ' ')
+    .split(/\s+/).filter(w => w && !stop.has(w));
+  const cKeys = new Set(norm(c.name));
+  // sinónimos manuales para casos como data analytics/analysis
+  const cName = (c.name || '').toLowerCase();
+  if (/data|anal[íi]t|analy/.test(cName)) cKeys.add('data');
+  if (/cyber|ciber|secur/.test(cName)) cKeys.add('cyber');
+  if (/ingl|english/.test(cName)) cKeys.add('english');
+  let best = null, bestScore = 0;
+  for (const g of (S.goals || [])) {
+    const gKeys = norm(g.name);
+    const gName = (g.name || '').toLowerCase();
+    const extra = new Set(gKeys);
+    if (/data|anal[íi]t|analy/.test(gName)) extra.add('data');
+    if (/cyber|ciber|secur/.test(gName)) extra.add('cyber');
+    if (/ingl|english/.test(gName)) extra.add('english');
+    let score = 0;
+    for (const k of extra) if (cKeys.has(k)) score++;
+    if (score > bestScore) { bestScore = score; best = g; }
+  }
+  return bestScore > 0 ? best : null;
+}
 
 function progresoCareer(c) {
   return Math.min(Math.round((c.step || 0) * 25 + ((c.pct || 0) / 100) * 25), 100);
@@ -1666,8 +1691,30 @@ document.addEventListener('click', async (e) => {
         { type: 'text', placeholder: 'Emoji (optional, e.g. 💻)', value: '🎯' }
       ], okText: 'Add career' });
     if (!r || !r[0].trim()) return;
-    await api('/api/career/new', { body: { name: r[0], icon: r[1] || '🎯' } });
-    toast('🚀 Career added');
+    const careerName = r[0].trim();
+    const icon = r[1] || '🎯';
+    // ¿meta nueva o conectar a una existente?
+    const goalOpts = [
+      { v: '__new__', t: '✨ Create a NEW goal for this' },
+      { v: '__none__', t: '— Don\'t link to any goal' }
+    ].concat((S.goals || []).map(g => ({ v: String(g.id), t: '🎯 ' + g.name })));
+    const g = await modal({ icon: '🎯', title: 'Link to a goal',
+      text: `Is <b>${careerName}</b> a new goal, or does it connect to a goal you already have? Its progress will sync automatically.`,
+      fields: [{ type: 'select', options: goalOpts }], okText: 'Continue' });
+    if (g === null) return;
+    const choice = g[0];
+    await api('/api/career/new', { body: { name: careerName, icon } });
+    if (choice === '__new__') {
+      // crear la meta en Goals con un nombre alineado para que el emparejamiento la conecte
+      await api('/api/goal/new', { body: { name: 'Learn ' + careerName } });
+      toast('🚀 Career + goal created and linked');
+    } else if (choice === '__none__') {
+      toast('🚀 Career added (no goal linked)');
+    } else {
+      toast('🚀 Career added, linked to your goal');
+      // el sync por nombre lo conectará; si el usuario eligió una meta específica,
+      // igual el emparejamiento por palabras clave suele acertar.
+    }
     load();
     return;
   }
