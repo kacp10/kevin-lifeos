@@ -365,6 +365,19 @@ function fmtFecha(iso) {
   const p = iso.split('-');
   return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : iso;
 }
+function proximoAporteTxt() {
+  const hoy = new Date();
+  let y = hoy.getFullYear(), m = hoy.getMonth();
+  // próximo día 30 (o último día si el mes no tiene 30)
+  let dia = 30;
+  const finMes = new Date(y, m + 1, 0).getDate();
+  const diaEste = Math.min(30, finMes);
+  let prox;
+  if (hoy.getDate() < diaEste) prox = new Date(y, m, diaEste);
+  else { const fin2 = new Date(y, m + 2, 0).getDate(); prox = new Date(y, m + 1, Math.min(30, fin2)); }
+  const dias = Math.ceil((prox - hoy) / 86400000);
+  return `next deposit in ${dias} ${dias === 1 ? 'day' : 'days'}`;
+}
 function renderFund() {
   const cont = document.getElementById('fundTable');
   if (!cont) return;
@@ -383,7 +396,7 @@ function renderFund() {
     <div class="fund-hero">
       <div><span class="fund-hlabel">Total saved in your fund</span>
         <span class="fund-hval">${fmt(totalSaved)}</span></div>
-      <div class="fund-hsub">Growing ${fmt(totalQuota)} every month 🐷</div>
+      <div class="fund-hsub">Growing ${fmt(totalQuota)} every month 🐷 · ${proximoAporteTxt()}</div>
     </div>
     <table class="table fund-tbl">
       <tr><th>Concept</th><th>Quota</th><th>Frequency</th><th>Last deposit</th><th>Saved</th><th></th></tr>
@@ -423,9 +436,12 @@ function renderPiggy() {
   cont.innerHTML = piggies.map(p => {
     const mine = moves.filter(m => m.piggy_id === p.id);
     const total = mine.reduce((s, m) => s + m.amount, 0);
-    const kindTxt = p.kind === 'monthly'
-      ? `Monthly · ${fmt(p.monthly)}/mo target`
-      : 'Free jar · add anytime';
+    const goal = p.goal || 0;
+    const hasGoal = goal > 0;
+    const pct = hasGoal ? Math.min((total / goal) * 100, 100) : 0;
+    const falta = Math.max(goal - total, 0);
+    const done = hasGoal && total >= goal;
+
     const hist = mine.length
       ? mine.map(m => `<div class="pig-move">
           <span>${fmtFecha(m.day)}${m.note ? ' · ' + esc(m.note) : ''}</span>
@@ -433,13 +449,28 @@ function renderPiggy() {
           <button class="del-x" data-type="piggy_move" data-id="${m.id}">✕</button></span>
         </div>`).join('')
       : '<p class="hint" style="margin:6px 0">No moves yet.</p>';
-    return `<div class="piggy-card">
+
+    // bloque de meta o de jar libre
+    let progreso;
+    if (hasGoal) {
+      progreso = done
+        ? `<div class="pig-done">🎉 Goal reached! You saved the ${fmt(goal)} you wanted. Congrats, Kevin!</div>`
+        : `<div class="pig-goal-row">
+             <span>Saved <b>${fmt(total)}</b> of <b>${fmt(goal)}</b></span>
+             <span class="pig-left">${fmt(falta)} to go</span>
+           </div>
+           <div class="pig-bar"><i style="width:${pct}%"></i></div>`;
+    } else {
+      progreso = `<div class="pig-free">Free jar — <b>${fmt(total)}</b> saved so far</div>`;
+    }
+
+    return `<div class="piggy-card ${done ? 'pig-complete' : ''}">
       <div class="piggy-head">
         <div><span class="piggy-name">${p.icon || '🐷'} ${esc(p.name)}</span>
-          <span class="piggy-kind">${kindTxt}</span></div>
+          <span class="piggy-kind">${hasGoal ? 'Goal' : 'Free jar'} · started ${fmtFecha(p.started)}</span></div>
         <div class="piggy-total">${fmt(total)}</div>
       </div>
-      <div class="piggy-since">Started: ${fmtFecha(p.started)}</div>
+      ${progreso}
       <div class="piggy-actions">
         <button class="btn-gold pig-add" data-id="${p.id}" data-name="${esc(p.name)}">+ Add money</button>
         <button class="del-x" data-type="piggy" data-id="${p.id}" title="Delete piggy">✕</button>
@@ -452,20 +483,17 @@ function renderPiggy() {
 document.addEventListener('click', async (e) => {
   // crear alcancía
   if (e.target.id === 'addPiggyBtn') {
-    const r = await modal({ icon: '🐖', title: 'New piggy bank',
-      text: 'A savings goal you control. Choose if it has a monthly target or it\'s a free jar you fill anytime.',
+    const r = await modal({ icon: '🎯', title: 'New savings goal',
+      text: 'First: how much do you want to save? (leave the goal at 0 for a free jar with no target). Then name it.',
       fields: [
-        { type: 'text', placeholder: 'Name (e.g. Trip, Emergency, NU pocket)' },
-        { type: 'text', placeholder: 'Emoji (optional)', value: '🐷' },
-        { type: 'select', options: [
-          { v: 'free', t: 'Free jar — add whenever I want' },
-          { v: 'monthly', t: 'Monthly target — I aim for an amount each month' }
-        ] },
-        { type: 'number', placeholder: 'Monthly target (only if monthly)' }
+        { type: 'number', placeholder: 'Goal amount (0 = free jar)' },
+        { type: 'text', placeholder: 'Name (e.g. Trip to the coast, New phone)' },
+        { type: 'text', placeholder: 'Emoji (optional)', value: '🐷' }
       ], okText: 'Create' });
-    if (!r || !r[0].trim()) return;
-    await api('/api/piggy/new', { body: { name: r[0], icon: r[1] || '🐷', kind: r[2], monthly: +r[3] || 0, started: hoyLocal() } });
-    toast('🐖 Piggy bank created'); load();
+    if (!r || !r[1].trim()) return;
+    const goal = +r[0] || 0;
+    await api('/api/piggy/new', { body: { name: r[1], icon: r[2] || '🐷', goal, kind: goal > 0 ? 'goal' : 'free', started: hoyLocal() } });
+    toast(goal > 0 ? `🎯 Goal created: save ${fmt(goal)}` : '🐷 Free jar created'); load();
     return;
   }
   // agregar plata a una alcancía
@@ -478,8 +506,17 @@ document.addEventListener('click', async (e) => {
         { type: 'text', placeholder: 'Note (optional)' }
       ], okText: 'Add' });
     if (!r || !r[0]) return;
-    await api('/api/piggy/add', { body: { piggy_id: +addBtn.dataset.id, amount: +r[0] || 0, note: r[1], day: hoyLocal() } });
-    toast(+r[0] >= 0 ? '🐷 Money added!' : '↩ Withdrawal logged'); load();
+    const pid = +addBtn.dataset.id;
+    const p = (S.piggy || []).find(x => x.id === pid) || {};
+    const antesTotal = (S.piggy_moves || []).filter(m => m.piggy_id === pid).reduce((s, m) => s + m.amount, 0);
+    await api('/api/piggy/add', { body: { piggy_id: pid, amount: +r[0] || 0, note: r[1], day: hoyLocal() } });
+    await load();
+    const despues = antesTotal + (+r[0] || 0);
+    if ((p.goal || 0) > 0 && antesTotal < p.goal && despues >= p.goal) {
+      celebrate({ icon: '🎉', title: 'GOAL REACHED', text: `You saved the <b>${fmt(p.goal)}</b> for <b>${esc(p.name)}</b>. You did it, Kevin!` });
+    } else {
+      toast(+r[0] >= 0 ? '🐷 Money added!' : '↩ Withdrawal logged');
+    }
     return;
   }
 });
@@ -557,16 +594,6 @@ $('#expenseNew').addEventListener('submit', async (e) => {
   }
   e.target.reset();
   load();
-});
-
-const saveForm = document.getElementById('saveNew');
-if (saveForm) saveForm.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const name = $('#svName').value.trim();
-  const amount = +$('#svAmount').value || 0;
-  if (!name || amount <= 0) return;
-  await api('/api/expense/new', { body: { name, amount, method: 'Ahorro', kind: 'once', month: S.plan.months[MES] } });
-  e.target.reset(); toast('🐷 Saving logged! Future you says thanks.'); load();
 });
 
 const PAYDAY_OPTS = [

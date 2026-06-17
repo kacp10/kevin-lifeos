@@ -579,3 +579,14 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .pig-move { display: flex; justify-content: space-between; font-size: .82rem;
   padding: 6px 0; border-bottom: 1px solid var(--line); }
 .pig-plus { color: var(--ok); }
+
+/* ====== PIGGY GOALS v21 ====== */
+.pig-goal-row { display: flex; justify-content: space-between; font-size: .82rem; color: var(--mut); margin: 8px 0 4px; }
+.pig-goal-row b { color: var(--txt); }
+.pig-left { color: var(--gold); }
+.pig-bar { height: 12px; background: #0f0c1d; border-radius: 99px; overflow: hidden; border: 1px solid var(--line); }
+.pig-bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--ok), var(--gold)); border-radius: 99px; transition: width .9s cubic-bezier(.22,1,.36,1); }
+.pig-free { color: var(--mut); font-size: .85rem; margin: 8px 0; }
+.pig-free b { color: var(--ok); }
+.pig-done { background: rgba(54,201,167,.15); border: 1px solid var(--ok); border-radius: 10px; padding: 10px 12px; margin: 8px 0; color: var(--ok); font-size: .86rem; font-weight: 600; }
+.piggy-card.pig-complete { border-color: var(--ok); box-shadow: 0 0 18px rgba(54,201,167,.18); }
