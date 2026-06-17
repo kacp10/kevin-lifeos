@@ -13,7 +13,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 27  # debe coincidir con FRONT_V en static/app.js
+VERSION = 28  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -130,6 +130,10 @@ def init_db():
     CREATE TABLE IF NOT EXISTS shopping (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, slots INTEGER DEFAULT 1,
          done INTEGER DEFAULT 0, created TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS detalle_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, grupo TEXT, nombre TEXT,
+        cuota INTEGER DEFAULT 0, pagadas INTEGER DEFAULT 0, total INTEGER DEFAULT 0,
+        fijo INTEGER DEFAULT 0, orden INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS extra_debts (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, total INTEGER,
         cuota INTEGER DEFAULT 0, cuotas INTEGER DEFAULT 0, start INTEGER DEFAULT 0);
@@ -301,6 +305,24 @@ def init_db():
             pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('piggy_goal_v1','1')")
         con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='detalle_v1'").fetchone():
+        with open(os.path.join(BASE, 'seed_data.json'), encoding='utf-8') as f:
+            _sd = json.load(f)
+        orden = 0
+        for grupo, items in _sd.get('detalle', {}).items():
+            for it in items:
+                nombre = it[0]
+                cuota = it[1] if len(it) > 1 and it[1] is not None else 0
+                pagadas = it[2] if len(it) > 2 and it[2] is not None else 0
+                total = it[3] if len(it) > 3 and it[3] is not None else 0
+                fijo = it[4] if len(it) > 4 and it[4] is not None else 0
+                con.execute('''INSERT INTO detalle_items (grupo, nombre, cuota, pagadas, total, fijo, orden)
+                               VALUES (?,?,?,?,?,?,?)''',
+                            (grupo, nombre, cuota, pagadas, total, fijo, orden))
+                orden += 1
+        con.execute("INSERT OR IGNORE INTO config VALUES ('detalle_v1','1')")
+        con.commit()
+        print('  + desglose de deudas migrado a tabla editable')
     if not con.execute("SELECT 1 FROM config WHERE key='shopping_v1'").fetchone():
         items = [
             ('Eye drops', 1), ('Cloe (my cat) 🐱', 3), ('Black pants', 1),
@@ -347,6 +369,20 @@ with open(os.path.join(BASE, 'seed_data.json'), encoding='utf-8') as _f:
     _SEED = json.load(_f)
 SERVICIOS = _SEED.get('servicios', [])
 DETALLE = _SEED.get('detalle', {})
+
+
+def _detalle_actual(d):
+    """Reconstruye el desglose desde la tabla editable, con el formato [nombre,cuota,pagadas,total,fijo]."""
+    out = {}
+    rows = d.execute('SELECT * FROM detalle_items ORDER BY orden, id').fetchall()
+    for r in rows:
+        r = dict(r)
+        out.setdefault(r['grupo'], []).append(
+            [r['nombre'], r['cuota'],
+             r['pagadas'] if r['total'] else None,
+             r['total'] if r['total'] else None,
+             r['fijo'], r['id']])
+    return out
 
 
 # ---------------------- API ----------------------
@@ -526,7 +562,7 @@ def state():
     return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
                         marks=marks, history=history, dreams=dreams,
                         animes=animes, books=books,
-                        servicios=services, fund=fund, piggy=piggy, piggy_moves=piggy_moves, shopping=shopping, detalle=DETALLE,
+                        servicios=services, fund=fund, piggy=piggy, piggy_moves=piggy_moves, shopping=shopping, detalle=_detalle_actual(d),
                         checks=[f"{r['item']}|{r['month']}" for r in d.execute(
                             'SELECT item, month FROM payment_checks')],
                         today=date.today().isoformat()))
@@ -1017,6 +1053,30 @@ def compra():
                  (j['creditor'], j['concepto'].strip(), valor, cuotas, start))
     db().commit()
     return jsonify(ok=True)
+
+
+@app.post('/api/detalle/redefer')
+def detalle_redefer():
+    """Redifiere una compra del desglose original: toma el saldo restante y lo
+    reparte en N cuotas nuevas. id = id del detalle_items."""
+    j = request.json
+    iid = int(j['id'])
+    nuevas = int(j['cuotas'])
+    if nuevas < 1:
+        return jsonify(error='cuotas inválidas'), 400
+    row = db().execute('SELECT * FROM detalle_items WHERE id=?', (iid,)).fetchone()
+    if not row:
+        return jsonify(error='no encontrado'), 404
+    it = dict(row)
+    # saldo restante = cuota * (total - pagadas)
+    restantes = max((it['total'] or 0) - (it['pagadas'] or 0), 0)
+    saldo = (it['cuota'] or 0) * restantes
+    nueva_cuota = round(saldo / nuevas)
+    # reiniciar: nuevas cuotas, 0 pagadas
+    db().execute('UPDATE detalle_items SET cuota=?, pagadas=0, total=? WHERE id=?',
+                 (nueva_cuota, nuevas, iid))
+    db().commit()
+    return jsonify(ok=True, cuota=nueva_cuota, saldo=saldo)
 
 
 @app.post('/api/creditor/redefer')
