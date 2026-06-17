@@ -13,7 +13,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 22  # debe coincidir con FRONT_V en static/app.js
+VERSION = 23  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -97,7 +97,7 @@ def init_db():
         finished_on TEXT);
     CREATE TABLE IF NOT EXISTS routine_extra (
         id INTEGER PRIMARY KEY AUTOINCREMENT, time TEXT, title TEXT, descr TEXT,
-        weekday INTEGER DEFAULT -1, day TEXT DEFAULT '');
+        weekday INTEGER DEFAULT -1, day TEXT DEFAULT '', habit TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS routine_hidden (
         weekday INTEGER, akey TEXT, PRIMARY KEY (weekday, akey));
     CREATE TABLE IF NOT EXISTS routine_hidden_day (
@@ -260,6 +260,13 @@ def init_db():
         con.execute("INSERT INTO config VALUES ('life_v1','1')")
         con.commit()
         print('  + pestaña Life (rutina inteligente) activada')
+    if not con.execute("SELECT 1 FROM config WHERE key='routine_habit_v1'").fetchone():
+        try:
+            con.execute("ALTER TABLE routine_extra ADD COLUMN habit TEXT DEFAULT ''")
+        except Exception:
+            pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('routine_habit_v1','1')")
+        con.commit()
     if not con.execute("SELECT 1 FROM config WHERE key='routine_day_v1'").fetchone():
         try:
             con.execute("ALTER TABLE routine_extra ADD COLUMN day TEXT DEFAULT ''")
@@ -726,9 +733,9 @@ def routine_hide():
 @app.post('/api/routine_extra/new')
 def routine_extra_new():
     j = request.json
-    db().execute('INSERT INTO routine_extra (time, title, descr, weekday, day) VALUES (?,?,?,?,?)',
+    db().execute('INSERT INTO routine_extra (time, title, descr, weekday, day, habit) VALUES (?,?,?,?,?,?)',
                  (j.get('time', ''), j['title'].strip(), j.get('descr', ''),
-                  int(j.get('weekday', -1)), j.get('day', '')))
+                  int(j.get('weekday', -1)), j.get('day', ''), j.get('habit', '')))
     db().commit()
     return jsonify(ok=True)
 
