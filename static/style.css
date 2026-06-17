@@ -641,3 +641,8 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .shop-slots { display: inline-flex; gap: 4px; margin-right: 4px; }
 .shop-slots .slot { width: 16px; height: 4px; border-radius: 2px; background: #3a3358; transition: background .25s; }
 .shop-slots .slot.on { background: var(--gold); box-shadow: 0 0 6px rgba(245,185,66,.5); }
+
+/* botón rediferir individual (mini) */
+.redefer-btn.mini { background: none; border: none; cursor: pointer; font-size: .85rem;
+  padding: 0 4px; opacity: .6; vertical-align: middle; }
+.redefer-btn.mini:hover { opacity: 1; }

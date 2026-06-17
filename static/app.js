@@ -35,7 +35,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 26;
+const FRONT_V = 27;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1029,9 +1029,9 @@ function renderDesglose() {
         label: activa ? `Cuota ${num}/${d.cuotas}` : `${d.cuotas} cuotas desde ${S.plan.months[d.start] || '—'}`,
         cuota: activa ? d.cuota : 0,
         saldo: Math.max(d.total - d.cuota * pagadas, 0),
-        done: num > d.cuotas
+        done: num > d.cuotas,
+        redefer: num <= d.cuotas ? { type: 'extra_debt', id: d.id, cuotas: d.cuotas } : null
       }];
-      if (num <= d.cuotas) grupoRedefer[g] = { type: 'extra_debt', id: d.id, cuotas: d.cuotas };
     } else {
       filas[g] = [{ label: 'Saldo (sin cuotas)', cuota: 0, saldo: d.total, done: false }];
     }
@@ -1046,9 +1046,8 @@ function renderDesglose() {
       cuota: activa ? cuotaDe(c) : 0,
       saldo: Math.max(c.valor - cuotaDe(c) * pagadas, 0),
       done: num > c.cuotas,
-      compraId: c.id, compraCuotas: c.cuotas
+      redefer: num <= c.cuotas ? { type: 'compra', id: c.id, cuotas: c.cuotas } : null
     });
-    if (num <= c.cuotas) grupoRedefer[g] = { type: 'compra', id: c.id, cuotas: c.cuotas };
   }
   let total = 0;
   let html = `<p class="hint">Calculated for <b>${S.plan.months[i]}</b> — change it with the month selector in Home and watch installments advance on their own.</p>`;
@@ -1061,12 +1060,14 @@ function renderDesglose() {
       <tr><th>Item</th><th>This month</th><th>Balance after paying</th></tr>` +
       items.map(it => it.done
         ? `<tr class="done-row"><td>✓ ${it.label} — TERMINADA</td><td class="num">—</td><td class="num">$0</td></tr>`
-        : `<tr><td>${it.label}</td>
+        : `<tr><td>${it.label}${it.redefer
+            ? ` <button class="redefer-btn mini" data-type="${it.redefer.type}" data-id="${it.redefer.id}" data-cuotas="${it.redefer.cuotas}" title="Reschedule this purchase">🔄</button>`
+            : ''}</td>
            <td class="num">${it.cuota ? fmt(it.cuota) : '—'}</td>
            <td class="num">${it.saldo ? fmt(it.saldo) : '—'}</td></tr>`).join('') +
       '</table>' +
-      (grupoRedefer[grupo]
-        ? `<button class="btn-ghost redefer-btn" data-type="${grupoRedefer[grupo].type}" data-id="${grupoRedefer[grupo].id || ''}" data-name="${grupoRedefer[grupo].name || ''}" data-cuotas="${grupoRedefer[grupo].cuotas || ''}" style="margin:8px 0">🔄 Reschedule installments</button>`
+      (grupoRedefer[grupo] && grupoRedefer[grupo].type === 'creditor'
+        ? `<button class="btn-ghost redefer-btn" data-type="creditor" data-name="${grupoRedefer[grupo].name}" style="margin:8px 0">🔄 Reschedule the whole ${grupo}</button>`
         : '') +
       '</details>';
   }).join('');
@@ -1911,9 +1912,9 @@ document.addEventListener('click', async (e) => {
     actualesTxt = 'this debt';
   }
   const r = await modal({ icon: '🔄', title: 'Reschedule installments',
-    text: `Reschedule <b>${actualesTxt}</b>. Enter the NEW number of installments. I'll take what you still owe (the remaining balance) and split it into the new plan, starting the month you pick. Just like the bank.`,
+    text: `Reschedule <b>${actualesTxt}</b>. Type ANY new number of installments — 1 (pay it all next month), 6, 12, 24, whatever you want. I take what you still owe and split it into that many, starting the month you pick. Just like the bank.`,
     fields: [
-      { type: 'number', placeholder: 'New number of installments', value: 6, min: 1, max: 60 },
+      { type: 'number', placeholder: 'New number of installments (e.g. 1, 6, 12...)', min: 1, max: 60 },
       { type: 'select', value: String(MES), options: S.plan.months.map((m, i) => ({ v: String(i), t: 'Start: ' + m })) }
     ], okText: 'Reschedule' });
   if (!r || !r[0]) return;
