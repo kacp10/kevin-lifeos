@@ -122,7 +122,8 @@ def init_db():
         saved INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS piggy (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, kind TEXT DEFAULT 'free',
-        monthly INTEGER DEFAULT 0, started TEXT DEFAULT '', icon TEXT DEFAULT '🐷');
+        monthly INTEGER DEFAULT 0, started TEXT DEFAULT '', icon TEXT DEFAULT '🐷',
+        goal INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS piggy_moves (
         id INTEGER PRIMARY KEY AUTOINCREMENT, piggy_id INTEGER, amount INTEGER,
         day TEXT, note TEXT DEFAULT '');
@@ -282,6 +283,13 @@ def init_db():
         except Exception:
             pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('abono_nota_v1','1')")
+        con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='piggy_goal_v1'").fetchone():
+        try:
+            con.execute("ALTER TABLE piggy ADD COLUMN goal INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('piggy_goal_v1','1')")
         con.commit()
     if not con.execute("SELECT 1 FROM config WHERE key='fund_v1'").fetchone():
         fondo = [
@@ -686,9 +694,10 @@ def routine_extra_del(i):
 @app.post('/api/piggy/new')
 def piggy_new():
     j = request.json
-    db().execute('INSERT INTO piggy (name, kind, monthly, started, icon) VALUES (?,?,?,?,?)',
+    db().execute('INSERT INTO piggy (name, kind, monthly, started, icon, goal) VALUES (?,?,?,?,?,?)',
                  (j['name'].strip(), j.get('kind', 'free'), int(j.get('monthly') or 0),
-                  j.get('started', date.today().isoformat()), j.get('icon', '🐷')))
+                  j.get('started', date.today().isoformat()), j.get('icon', '🐷'),
+                  int(j.get('goal') or 0)))
     db().commit()
     return jsonify(ok=True)
 
