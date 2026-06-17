@@ -116,6 +116,10 @@ def init_db():
     CREATE TABLE IF NOT EXISTS services (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, amount INTEGER,
         method TEXT DEFAULT 'Efectivo', payday TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS fund (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, quota INTEGER DEFAULT 0,
+        frequency TEXT DEFAULT 'Monthly', last_deposit TEXT DEFAULT '',
+        saved INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS extra_debts (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, total INTEGER,
         cuota INTEGER DEFAULT 0, cuotas INTEGER DEFAULT 0, start INTEGER DEFAULT 0);
@@ -273,6 +277,17 @@ def init_db():
             pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('abono_nota_v1','1')")
         con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='fund_v1'").fetchone():
+        fondo = [
+            ('Ahorros permanentes', 36000, 'Monthly', '2026-05-30', 320198),
+            ('Aportes sociales', 144000, 'Monthly', '2026-05-30', 1218960),
+            ('Revalorización aportes', 0, '', '2026-04-30', 510),
+        ]
+        for f in fondo:
+            con.execute('INSERT INTO fund (name, quota, frequency, last_deposit, saved) VALUES (?,?,?,?,?)', f)
+        con.execute("INSERT OR IGNORE INTO config VALUES ('fund_v1','1')")
+        con.commit()
+        print('  + fondo de empresa activado')
     if not con.execute("SELECT 1 FROM config WHERE key='services_v1'").fetchone():
         with open(os.path.join(BASE, 'seed_data.json'), encoding='utf-8') as f:
             seed = json.load(f)
@@ -346,12 +361,13 @@ def state():
     expenses = [dict(r) for r in d.execute('SELECT * FROM expenses ORDER BY id DESC')]
     month_income = {r['month']: r['income'] for r in d.execute('SELECT * FROM month_income')}
     services = [dict(r) for r in d.execute('SELECT * FROM services ORDER BY id')]
+    fund = [dict(r) for r in d.execute('SELECT * FROM fund ORDER BY id')]
     extra_debts = [dict(r) for r in d.execute('SELECT * FROM extra_debts')]
     core = [x[0] for x in _SEED['debts']]
     return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
                         marks=marks, history=history, dreams=dreams,
                         animes=animes, books=books,
-                        servicios=services, detalle=DETALLE,
+                        servicios=services, fund=fund, detalle=DETALLE,
                         checks=[f"{r['item']}|{r['month']}" for r in d.execute(
                             'SELECT item, month FROM payment_checks')],
                         today=date.today().isoformat()))
@@ -603,6 +619,35 @@ def routine_extra_new():
 @app.delete('/api/routine_extra/<int:i>')
 def routine_extra_del(i):
     db().execute('DELETE FROM routine_extra WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/fund/new')
+def fund_new():
+    j = request.json
+    db().execute('INSERT INTO fund (name, quota, frequency, last_deposit, saved) VALUES (?,?,?,?,?)',
+                 (j['name'].strip(), int(j.get('quota') or 0), j.get('frequency', 'Monthly'),
+                  j.get('last_deposit', ''), int(j.get('saved') or 0)))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/fund')
+def fund_update():
+    j = request.json
+    field = j['field']
+    if field not in ('name', 'quota', 'frequency', 'last_deposit', 'saved'):
+        return jsonify(error='Field not allowed'), 400
+    val = int(j['value'] or 0) if field in ('quota', 'saved') else j['value']
+    db().execute(f'UPDATE fund SET {field}=? WHERE id=?', (val, int(j['id'])))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete('/api/fund/<int:i>')
+def fund_del(i):
+    db().execute('DELETE FROM fund WHERE id=?', (i,))
     db().commit()
     return jsonify(ok=True)
 
