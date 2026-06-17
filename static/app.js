@@ -35,10 +35,27 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 22;
+const FRONT_V = 23;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
+// Conexión Life -> Habits: qué hábito marca cada actividad de la rutina.
+// Varias actividades pueden marcar el MISMO hábito (ej: ejercicio o gym -> Exercise).
+const ACT_TO_HABIT = {
+  ejercicio: 'Exercise', gym: 'Exercise',
+  ingles: 'English',
+  estudio: 'Study and hard work', proyecto: 'Study and hard work',
+  leer: 'Read',
+  dormir: 'Sleep well',
+  skincare: 'Take care my face and body'
+};
+// Sub-tareas del bloque de inglés (para preguntar una por una al marcar)
+const ENGLISH_TASKS = [
+  { t: 'Talk 5 min', d: 'Warm-up: talk OUT LOUD about your day for 5 minutes. Record yourself.' },
+  { t: 'Main activity', d: 'The day\'s core: book / shadowing / vocabulary / conversation (see the activity text).' },
+  { t: 'Tell the AI', d: 'Close by telling the AI in English what you did/read/watched. The sacred speaking block.' }
+];
+
 const PAY_METHODS = [
   { id: 'Efectivo', label: 'Cash', logo: '💵', card: false },
   { id: 'Nequi', label: 'Nequi', logo: '🟣', card: false },
@@ -1696,12 +1713,15 @@ document.addEventListener('click', async (e) => {
       : `Free after ${sh.work[1] + 1}:00`;
     const iso = ($('#dayPick').value || '').split('|')[0];
     const dayName = DIAS[CUR_WD];
+    const habitOpts = [{ v: '', t: '— Free (no habit)' }]
+      .concat((S.habits || []).map(h => ({ v: h.name, t: '🔥 ' + h.name })));
     const r = await modal({ icon: '➕', title: 'Add activity',
-      text: `Add something. ${sugerencia}. Choose if it's just this ${dayName} or every ${dayName}.`,
+      text: `Add something. ${sugerencia}. Pick which habit it counts for (or Free), and the scope.`,
       fields: [
         { type: 'text', placeholder: 'Time (e.g. 20:00)' },
         { type: 'text', placeholder: 'Activity name' },
         { type: 'text', placeholder: 'Short note (optional)' },
+        { type: 'select', options: habitOpts },
         { type: 'select', options: [
           { v: 'day', t: `Just this ${dayName} (${iso})` },
           { v: 'week', t: `Every ${dayName} (recurring)` },
@@ -1709,8 +1729,8 @@ document.addEventListener('click', async (e) => {
         ] }
       ], okText: 'Add' });
     if (!r || !r[1].trim()) return;
-    const body = { time: r[0], title: r[1], descr: r[2] };
-    const scopeAdd = r[3] || 'day';
+    const body = { time: r[0], title: r[1], descr: r[2], habit: r[3] || '' };
+    const scopeAdd = r[4] || 'day';
     if (scopeAdd === 'week') body.weekday = CUR_WD;
     else if (scopeAdd === 'mf') body.weekday = -2;
     else body.day = iso;
@@ -1723,19 +1743,74 @@ document.addEventListener('click', async (e) => {
   const c = e.target.closest('.rb-check');
   if (!c) return;
   const day = c.dataset.day, act = c.dataset.act;
-  if (!c.classList.contains('on')) {
-    // permitir registrar por qué no se hizo (opcional) -> aquí solo lo marca hecho
+  const marcando = !c.classList.contains('on');
+
+  if (marcando) {
+    // CASO ESPECIAL: inglés pregunta tarea por tarea
+    if (act === 'ingles') {
+      for (const task of ENGLISH_TASKS) {
+        const r = await modal({ icon: '🗣', title: 'Did you do it?',
+          text: `<b>${task.t}</b><br><br>${task.d}`,
+          okText: 'Yes, done ✓', extraBtn: 'Not yet' });
+        if (r === 'EXTRA' || r === null) {
+          toast('No worries — finish the rest and check it again. 💪');
+          return;   // no marca si falta alguna
+        }
+      }
+    }
     await api('/api/routine', { body: { day, activity: act } });
     toast('✓ Done! One more step toward your goals.');
+    // marcar el hábito sinónimo en Habits
+    await sincronizarHabito(act, day, true);
   } else {
     const why = await modal({ icon: '🤔', title: 'Uncheck?',
       text: "Didn't get to do this? That's okay, life happens. You can note why.",
       fields: [{ type: 'text', placeholder: 'e.g. doctor appointment, plans... (optional)' }], okText: 'Uncheck' });
     if (why === null) return;
     await api('/api/routine', { body: { day, activity: act, note: why[0] || '' } });
+    // al desmarcar, revisar si el hábito sinónimo debe desmarcarse
+    await sincronizarHabito(act, day, false);
   }
   load();
 });
+
+// Marca/desmarca el hábito en Habits según una actividad de Life.
+// Respeta sinónimos: Exercise se marca si ejercicio O gym; se desmarca solo si NINGUNA queda hecha.
+function habitoDeActividad(act) {
+  // actividad fija (mapa) o actividad extra (su hábito guardado en routine_extra)
+  if (ACT_TO_HABIT[act]) return ACT_TO_HABIT[act];
+  if (act && act.startsWith('extra_')) {
+    const id = +act.slice(6);
+    const ex = (S.routine_extra || []).find(x => x.id === id);
+    return ex && ex.habit ? ex.habit : null;
+  }
+  return null;
+}
+async function sincronizarHabito(act, day, marcado) {
+  const habitName = habitoDeActividad(act);
+  if (!habitName) return;   // actividad libre, no afecta hábitos
+  const habit = (S.habits || []).find(h => h.name === habitName);
+  if (!habit) return;
+  // ¿qué otras actividades apuntan al mismo hábito? (sinónimos: fijas + extras)
+  const sinonimos = Object.keys(ACT_TO_HABIT).filter(k => ACT_TO_HABIT[k] === habitName);
+  for (const ex of (S.routine_extra || [])) {
+    if (ex.habit === habitName) sinonimos.push('extra_' + ex.id);
+  }
+  // hechas hoy según rdone (refrescamos desde S, que aún no incluye el cambio recién hecho)
+  const hechasHoy = new Set((S.rdone || [])
+    .filter(x => x.startsWith(day + '|'))
+    .map(x => x.split('|')[1]));
+  // aplicar el cambio que acabamos de hacer (S aún no lo refleja)
+  if (marcado) hechasHoy.add(act); else hechasHoy.delete(act);
+  const algunaHecha = sinonimos.some(s => hechasHoy.has(s));
+  const marcadoActual = (S.marks || []).includes(`${habit.id}|${day}`);
+  // si debe estar marcado y no lo está -> marcar; si no debe y lo está -> desmarcar
+  if (algunaHecha && !marcadoActual) {
+    await api('/api/habit', { body: { habit_id: habit.id, day } });
+  } else if (!algunaHecha && marcadoActual) {
+    await api('/api/habit', { body: { habit_id: habit.id, day } });
+  }
+}
 
 /* ---------- SUEÑOS ---------- */
 function renderSuenos() {
