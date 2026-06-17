@@ -337,71 +337,87 @@ def index():
 
 def _sync_carrera_ingles(d):
     """La carrera 'Inglés' sube sola según los días con bloque de inglés completado.
-    ~30 días = 1 peldaño (25%)."""
-    eng = d.execute("SELECT * FROM careers WHERE LOWER(name) LIKE '%ingl%' OR LOWER(name) LIKE '%english%'").fetchone()
-    if not eng:
-        return
-    eng = dict(eng)
-    dias = len(set(r['day'] for r in d.execute(
-        "SELECT day FROM routine_done WHERE activity='ingles'").fetchall()))
-    DPP = 30
-    step = min(dias // DPP, 4)
-    pct = round(((dias % DPP) / DPP) * 100) if step < 4 else 0
-    if eng.get('step') != step or (eng.get('pct') or 0) != pct:
-        d.execute('UPDATE careers SET step=?, pct=? WHERE id=?', (step, pct, eng['id']))
-        d.commit()
+    ~30 días = 1 peldaño (25%). Blindada: si algo falla, no tumba la app."""
+    try:
+        eng = d.execute("SELECT * FROM careers WHERE LOWER(name) LIKE '%ingl%' OR LOWER(name) LIKE '%english%'").fetchone()
+        if not eng:
+            return
+        eng = dict(eng)
+        dias = len(set(r['day'] for r in d.execute(
+            "SELECT day FROM routine_done WHERE activity='ingles'").fetchall()))
+        DPP = 30
+        step = min(dias // DPP, 4)
+        pct = round(((dias % DPP) / DPP) * 100) if step < 4 else 0
+        if eng.get('step') != step or (eng.get('pct') or 0) != pct:
+            d.execute('UPDATE careers SET step=?, pct=? WHERE id=?', (step, pct, eng['id']))
+            d.commit()
+    except Exception as e:
+        print('  (aviso) no se pudo sincronizar carrera inglés:', e)
+        try:
+            d.rollback()
+        except Exception:
+            pass
 
 
 def _aplicar_aportes_fondo(d):
     """Suma automáticamente el aporte mensual de cada concepto del fondo de empresa.
     El aporte cae el día 30. Si han pasado uno o más días 30 desde el último depósito
     registrado, suma la cuota por cada mes pendiente y actualiza la fecha."""
-    from datetime import date as _date
-    hoy = _date.today()
-    for f in d.execute('SELECT * FROM fund').fetchall():
-        f = dict(f)
-        quota = f.get('quota') or 0
-        if quota <= 0 or (f.get('frequency') or '').lower() not in ('monthly', 'mensual'):
-            continue
-        last = f.get('last_deposit') or ''
-        try:
-            y, m, dd = [int(x) for x in last.split('-')]
-            last_d = _date(y, m, dd)
-        except Exception:
-            continue
-        # contar cuántos "día 30" han pasado entre last_d y hoy
-        meses = 0
-        cur_y, cur_m = last_d.year, last_d.month
-        while True:
-            # siguiente fecha de aporte: el día 28-30 del mes siguiente al último
-            cur_m += 1
-            if cur_m > 12:
-                cur_m = 1; cur_y += 1
-            import calendar
-            diap = min(30, calendar.monthrange(cur_y, cur_m)[1])
-            prox = _date(cur_y, cur_m, diap)
-            if prox <= hoy:
-                meses += 1
-            else:
-                break
-            if meses > 60:
-                break
-        if meses > 0:
-            nuevo_saved = (f.get('saved') or 0) + quota * meses
-            import calendar
-            diap = min(30, calendar.monthrange(cur_y if cur_m != 1 else cur_y, cur_m)[1])
-            # fecha del último aporte aplicado
-            ly, lm = last_d.year, last_d.month
-            for _ in range(meses):
-                lm += 1
-                if lm > 12:
-                    lm = 1; ly += 1
-            ld = min(30, calendar.monthrange(ly, lm)[1])
-            nueva_fecha = f"{ly:04d}-{lm:02d}-{ld:02d}"
-            d.execute('UPDATE fund SET saved=?, last_deposit=? WHERE id=?',
-                      (nuevo_saved, nueva_fecha, f['id']))
-    d.commit()
+    try:
+        from datetime import date as _date
+        hoy = _date.today()
+        for f in d.execute('SELECT * FROM fund').fetchall():
+            f = dict(f)
+            quota = f.get('quota') or 0
+            if quota <= 0 or (f.get('frequency') or '').lower() not in ('monthly', 'mensual'):
+                continue
+            last = f.get('last_deposit') or ''
+            try:
+                y, m, dd = [int(x) for x in last.split('-')]
+                last_d = _date(y, m, dd)
+            except Exception:
+                continue
+            # contar cuántos "día 30" han pasado entre last_d y hoy
+            meses = 0
+            cur_y, cur_m = last_d.year, last_d.month
+            while True:
+                # siguiente fecha de aporte: el día 28-30 del mes siguiente al último
+                cur_m += 1
+                if cur_m > 12:
+                    cur_m = 1; cur_y += 1
+                import calendar
+                diap = min(30, calendar.monthrange(cur_y, cur_m)[1])
+                prox = _date(cur_y, cur_m, diap)
+                if prox <= hoy:
+                    meses += 1
+                else:
+                    break
+                if meses > 60:
+                    break
+            if meses > 0:
+                nuevo_saved = (f.get('saved') or 0) + quota * meses
+                import calendar
+                diap = min(30, calendar.monthrange(cur_y if cur_m != 1 else cur_y, cur_m)[1])
+                # fecha del último aporte aplicado
+                ly, lm = last_d.year, last_d.month
+                for _ in range(meses):
+                    lm += 1
+                    if lm > 12:
+                        lm = 1; ly += 1
+                ld = min(30, calendar.monthrange(ly, lm)[1])
+                nueva_fecha = f"{ly:04d}-{lm:02d}-{ld:02d}"
+                d.execute('UPDATE fund SET saved=?, last_deposit=? WHERE id=?',
+                          (nuevo_saved, nueva_fecha, f['id']))
+        d.commit()
 
+
+
+    except Exception as e:
+        print('  (aviso) no se pudo aplicar aportes del fondo:', e)
+        try:
+            d.rollback()
+        except Exception:
+            pass
 
 @app.get('/api/state')
 def state():
