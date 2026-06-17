@@ -550,3 +550,16 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .save-total b { color: var(--ok); }
 .m-extra { background: transparent; border: 1px solid var(--hp); color: var(--hp); border-radius: 9px; padding: 9px 14px; cursor: pointer; }
 .m-extra:hover { background: rgba(224,68,92,.12); }
+
+/* ====== COMPANY FUND v21 ====== */
+.fund-box { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.fund-hero { background: linear-gradient(135deg, #1f3d35, var(--panel)); border: 1px solid var(--line);
+  border-radius: 12px; padding: 14px 16px; margin: 10px 0; }
+.fund-hlabel { display: block; color: var(--mut); font-size: .78rem; text-transform: uppercase; letter-spacing: 1.5px; }
+.fund-hval { font-family: 'Russo One', sans-serif; font-size: 1.8rem; color: var(--ok); }
+.fund-hsub { color: var(--mut); font-size: .82rem; margin-top: 4px; }
+.fund-tbl { font-size: .82rem; }
+.fund-tbl input { background: #151126; color: var(--txt); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+.fund-tbl input.wide { width: 100%; box-sizing: border-box; }
+.fund-total td { font-weight: 800; color: var(--gold); border-top: 2px solid var(--line); }
+@media (max-width: 680px) { .fund-tbl { display: block; overflow-x: auto; } .fund-hval { font-size: 1.4rem; } }

@@ -359,6 +359,57 @@ function renderInicio() {
   renderExpenses(i);
 }
 
+/* ====== COMPANY FUND ====== */
+function fmtFecha(iso) {
+  if (!iso) return '—';
+  const p = iso.split('-');
+  return p.length === 3 ? `${p[2]}-${p[1]}-${p[0]}` : iso;
+}
+function renderFund() {
+  const cont = document.getElementById('fundTable');
+  if (!cont) return;
+  const fund = S.fund || [];
+  const totalQuota = fund.reduce((s, f) => s + (f.quota || 0), 0);
+  const totalSaved = fund.reduce((s, f) => s + (f.saved || 0), 0);
+  const rows = fund.map(f => `<tr>
+    <td><input class="fund-edit wide" data-id="${f.id}" data-f="name" value="${esc(f.name)}"></td>
+    <td><input class="fund-edit" type="number" data-id="${f.id}" data-f="quota" value="${f.quota || 0}" style="width:90px"></td>
+    <td><input class="fund-edit" data-id="${f.id}" data-f="frequency" value="${esc(f.frequency || '')}" style="width:90px"></td>
+    <td><input class="fund-edit" type="date" data-id="${f.id}" data-f="last_deposit" value="${f.last_deposit || ''}" style="width:140px"></td>
+    <td><input class="fund-edit" type="number" data-id="${f.id}" data-f="saved" value="${f.saved || 0}" style="width:110px"></td>
+    <td><button class="del-x" data-type="fund" data-id="${f.id}">✕</button></td>
+  </tr>`).join('');
+  cont.innerHTML = `
+    <div class="fund-hero">
+      <div><span class="fund-hlabel">Total saved in your fund</span>
+        <span class="fund-hval">${fmt(totalSaved)}</span></div>
+      <div class="fund-hsub">Growing ${fmt(totalQuota)} every month 🐷</div>
+    </div>
+    <table class="table fund-tbl">
+      <tr><th>Concept</th><th>Quota</th><th>Frequency</th><th>Last deposit</th><th>Saved</th><th></th></tr>
+      ${rows}
+      <tr class="fund-total"><td>TOTAL</td><td>${fmt(totalQuota)}</td><td></td><td></td><td>${fmt(totalSaved)}</td><td></td></tr>
+    </table>`;
+}
+document.addEventListener('change', async (e) => {
+  if (!e.target.classList.contains('fund-edit')) return;
+  await api('/api/fund', { body: { id: +e.target.dataset.id, field: e.target.dataset.f, value: e.target.value } });
+  load();
+});
+document.addEventListener('click', async (e) => {
+  if (e.target.id !== 'addFundBtn') return;
+  const r = await modal({ icon: '🏦', title: 'Add fund concept',
+    text: 'Add a savings line to your company fund.',
+    fields: [
+      { type: 'text', placeholder: 'Concept (e.g. Permanent savings)' },
+      { type: 'number', placeholder: 'Monthly quota' },
+      { type: 'number', placeholder: 'Already saved' }
+    ], okText: 'Add' });
+  if (!r || !r[0].trim()) return;
+  await api('/api/fund/new', { body: { name: r[0], quota: +r[1] || 0, saved: +r[2] || 0, frequency: 'Monthly', last_deposit: hoyLocal() } });
+  toast('🏦 Fund concept added'); load();
+});
+
 /* ====== EXPENSE TRACKER (Inicio) ====== */
 function renderExpenses(i) {
   // llenar el select de medios de pago con logos (una vez)
@@ -391,6 +442,7 @@ function renderExpenses(i) {
   // Ahorros del mes (method == 'Ahorro')
   const ahorros = visibles.filter(x => x.method === 'Ahorro');
   const totalAhorro = ahorros.reduce((s, x) => s + x.amount, 0);
+  renderFund();
   const sl = $('#saveList');
   if (sl) sl.innerHTML = (ahorros.length
     ? `<div class="save-total">Saved this month: <b>${fmt(totalAhorro)}</b> 🐷</div>` +
