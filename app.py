@@ -13,7 +13,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 24  # debe coincidir con FRONT_V en static/app.js
+VERSION = 25  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -1015,6 +1015,42 @@ def compra():
         return jsonify(error='Revisa: valor > 0, cuotas >= 1, mes válido y concepto'), 400
     db().execute('INSERT INTO compras (creditor, concepto, valor, cuotas, start) VALUES (?,?,?,?,?)',
                  (j['creditor'], j['concepto'].strip(), valor, cuotas, start))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/compra/redefer')
+def compra_redefer():
+    """Redifiere una compra a cuotas: cambia el número de cuotas restantes.
+    El saldo pendiente se reparte en las nuevas cuotas, desde el mes actual."""
+    j = request.json
+    cid = int(j['id'])
+    nuevas = int(j['cuotas'])
+    start = int(j.get('start', 0))
+    c = db().execute('SELECT * FROM compras WHERE id=?', (cid,)).fetchone()
+    if not c or nuevas < 1:
+        return jsonify(error='datos inválidos'), 400
+    c = dict(c)
+    # el valor total de la compra no cambia; solo cómo se reparte de aquí en adelante
+    db().execute('UPDATE compras SET cuotas=?, start=? WHERE id=?', (nuevas, start, cid))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/extra_debt/redefer')
+def extra_debt_redefer():
+    """Redifiere una deuda registrada: nuevo número de cuotas para el saldo."""
+    j = request.json
+    did = int(j['id'])
+    nuevas = int(j['cuotas'])
+    start = int(j.get('start', 0))
+    d = db().execute('SELECT * FROM extra_debts WHERE id=?', (did,)).fetchone()
+    if not d or nuevas < 1:
+        return jsonify(error='datos inválidos'), 400
+    d = dict(d)
+    nueva_cuota = round(d['total'] / nuevas)
+    db().execute('UPDATE extra_debts SET cuotas=?, cuota=?, start=? WHERE id=?',
+                 (nuevas, nueva_cuota, start, did))
     db().commit()
     return jsonify(ok=True)
 
