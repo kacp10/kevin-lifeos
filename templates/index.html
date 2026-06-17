@@ -39,6 +39,20 @@
   </div>
   <div class="cards" id="kpis"></div>
 
+  <div class="panel shopping-panel">
+    <div class="row-between">
+      <h2>🛒 Shopping & to-buy</h2>
+      <button class="btn-ghost" id="clearDoneBtn" title="Remove checked items">Clear done</button>
+    </div>
+    <p class="hint">Quick list so you don't forget. Tap to cross out. Checked items clear at the end of the day.</p>
+    <form id="shopNew" class="shop-form">
+      <input id="shName" placeholder="What to buy / do? (e.g. Eye drops)" required>
+      <input id="shSlots" type="number" min="1" max="9" value="1" title="How many sub-tasks?" style="width:70px">
+      <button class="btn-gold" type="submit">+ Add</button>
+    </form>
+    <div id="shoppingList"></div>
+  </div>
+
   <div class="panel">
     <div class="row-between">
       <h2>💸 Expense tracker</h2>
@@ -306,7 +320,7 @@
 </section>
 
 </main>
-<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v21</b></footer>
-<script src="/static/app.js?v=21"></script>
+<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v22</b></footer>
+<script src="/static/app.js?v=22"></script>
 </body>
 </html>
