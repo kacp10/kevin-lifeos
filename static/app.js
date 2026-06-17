@@ -35,7 +35,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 25;
+const FRONT_V = 26;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1007,7 +1007,18 @@ function renderDesglose() {
   for (const [g, items] of Object.entries(S.detalle)) {
     filas[g] = items.map(it => calcItem(it, i));
   }
-  const grupoRedefer = {};   // grupo -> {type, id} para el botón de rediferir
+  const grupoRedefer = {};   // grupo -> {type, id/name} para el botón de rediferir
+  // deudas principales del plan (creditors): rediferibles por nombre
+  const creditorNames = Object.keys((S.plan && S.plan.creditors) || {});
+  for (const [g, items] of Object.entries(S.detalle)) {
+    // ¿este grupo corresponde a un creditor con saldo vivo?
+    const cred = creditorNames.find(cn => cn === g || g.includes(cn) || cn.includes(g));
+    if (cred) {
+      const arr = S.plan.creditors[cred];
+      const saldoVivo = arr.slice(MES).reduce((s, v) => s + v, 0);
+      if (saldoVivo > 0) grupoRedefer[g] = { type: 'creditor', name: cred };
+    }
+  }
   for (const d of (S.extra_debts || [])) {
     const g = '☠ ' + d.name;
     if (d.cuotas >= 1) {
@@ -1055,7 +1066,7 @@ function renderDesglose() {
            <td class="num">${it.saldo ? fmt(it.saldo) : '—'}</td></tr>`).join('') +
       '</table>' +
       (grupoRedefer[grupo]
-        ? `<button class="btn-ghost redefer-btn" data-type="${grupoRedefer[grupo].type}" data-id="${grupoRedefer[grupo].id}" data-cuotas="${grupoRedefer[grupo].cuotas}" style="margin:8px 0">🔄 Reschedule installments</button>`
+        ? `<button class="btn-ghost redefer-btn" data-type="${grupoRedefer[grupo].type}" data-id="${grupoRedefer[grupo].id || ''}" data-name="${grupoRedefer[grupo].name || ''}" data-cuotas="${grupoRedefer[grupo].cuotas || ''}" style="margin:8px 0">🔄 Reschedule installments</button>`
         : '') +
       '</details>';
   }).join('');
@@ -1887,18 +1898,39 @@ async function sincronizarHabito(act, day, marcado) {
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('.redefer-btn');
   if (!btn) return;
-  const actuales = +btn.dataset.cuotas;
+  const tipo = btn.dataset.type;
+  // calcular cuántas cuotas ya se pagaron, según el tipo
+  let pagadas = 0, actualesTxt = '';
+  if (tipo === 'compra') {
+    const c = (S.compras || []).find(x => x.id === +btn.dataset.id);
+    if (c) { pagadas = Math.max(0, Math.min(MES - c.start, c.cuotas)); actualesTxt = `${c.cuotas} installments`; }
+  } else if (tipo === 'extra_debt') {
+    const d = (S.extra_debts || []).find(x => x.id === +btn.dataset.id);
+    if (d) { pagadas = Math.max(0, Math.min(MES - d.start, d.cuotas)); actualesTxt = `${d.cuotas} installments`; }
+  } else if (tipo === 'creditor') {
+    actualesTxt = 'this debt';
+  }
   const r = await modal({ icon: '🔄', title: 'Reschedule installments',
-    text: `This debt is currently in <b>${actuales} installments</b>. Enter the new number of installments (fewer = bigger monthly, more = smaller monthly). The balance gets split into the new plan from the current month.`,
+    text: `Reschedule <b>${actualesTxt}</b>. Enter the NEW number of installments. I'll take what you still owe (the remaining balance) and split it into the new plan, starting the month you pick. Just like the bank.`,
     fields: [
-      { type: 'number', placeholder: 'New number of installments', value: actuales, min: 1, max: 60 },
-      { type: 'select', options: S.plan.months.map((m, i) => ({ v: String(i), t: 'Start: ' + m })) }
+      { type: 'number', placeholder: 'New number of installments', value: 6, min: 1, max: 60 },
+      { type: 'select', value: String(MES), options: S.plan.months.map((m, i) => ({ v: String(i), t: 'Start: ' + m })) }
     ], okText: 'Reschedule' });
   if (!r || !r[0]) return;
   const nuevas = Math.max(1, +r[0]);
-  const start = +r[1] || MES;
-  const endpoint = btn.dataset.type === 'compra' ? '/api/compra/redefer' : '/api/extra_debt/redefer';
-  await api(endpoint, { body: { id: +btn.dataset.id, cuotas: nuevas, start } });
+  const start = +r[1];
+  let endpoint, body;
+  if (tipo === 'compra') {
+    endpoint = '/api/compra/redefer';
+    body = { id: +btn.dataset.id, cuotas: nuevas, start, pagadas };
+  } else if (tipo === 'extra_debt') {
+    endpoint = '/api/extra_debt/redefer';
+    body = { id: +btn.dataset.id, cuotas: nuevas, start, pagadas };
+  } else {
+    endpoint = '/api/creditor/redefer';
+    body = { name: btn.dataset.name, cuotas: nuevas, start };
+  }
+  await api(endpoint, { body });
   toast(`🔄 Rescheduled to ${nuevas} installments`);
   load();
 });
