@@ -608,3 +608,8 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
   border-radius: 50%; background: var(--gold); color: #1a1530; font-weight: 800; font-size: .8rem; flex-shrink: 0; }
 .eng-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .eng-final { color: var(--gold); font-weight: 700; }
+
+/* aviso de progreso automático de inglés */
+.eng-auto { background: rgba(245,185,66,.08); border-radius: 8px; padding: 8px 10px;
+  font-size: .78rem; color: var(--mut); margin: 4px 0 8px; line-height: 1.4; }
+.eng-auto b { color: var(--gold); }

@@ -1292,6 +1292,29 @@ function renderLife() {
     $('#lifeTip').textContent = tip;
 }
 
+// Cuenta cuántos días distintos completaste el bloque de inglés
+function diasInglesHechos() {
+  const dias = new Set();
+  for (const x of (S.rdone || [])) {
+    if (x.endsWith('|ingles')) dias.add(x.split('|')[0]);
+  }
+  return dias.size;
+}
+// Sincroniza la carrera "Inglés" con tu práctica real: 30 días = 1 peldaño (25%)
+async function syncCarreraIngles() {
+  const careers = S.careers || [];
+  const eng = careers.find(c => /ingl|english/i.test(c.name || ''));
+  if (!eng) return;
+  const dias = diasInglesHechos();
+  const DIAS_POR_PELDANO = 30;
+  const step = Math.min(Math.floor(dias / DIAS_POR_PELDANO), 4);
+  const pctDelPeldano = Math.round(((dias % DIAS_POR_PELDANO) / DIAS_POR_PELDANO) * 100);
+  // solo actualizar si cambió, para no spamear el servidor
+  if (eng.step !== step) await api('/api/career', { body: { id: eng.id, field: 'step', value: step } });
+  if ((eng.pct || 0) !== pctDelPeldano && step < 4)
+    await api('/api/career', { body: { id: eng.id, field: 'pct', value: pctDelPeldano } });
+}
+
 function renderEnglish() {
   const panel = document.getElementById('englishPanel');
   if (!panel) return;
@@ -1367,6 +1390,8 @@ function renderCareer() {
   const done = S.courses_done || [];
   const card = (c) => {
     const prog = progresoCareer(c);
+    const esIngles = /ingl|english/i.test(c.name || '');
+    const diasIng = esIngles ? diasInglesHechos() : 0;
     const dots = PELDANOS.map((p, i) =>
       `<span class="peldano ${i < c.step ? 'done' : i === c.step ? 'now' : ''}">${i < c.step ? '✓' : i + 1}. ${p}</span>`).join('');
     const myCourses = done.filter(d => d.career === c.name);
@@ -1389,6 +1414,7 @@ function renderCareer() {
         <input data-career="${c.id}" data-f="pct" type="number" min="0" max="100" value="${c.pct || 0}" placeholder="% course" style="flex:1">
       </div>
       <p class="hint" style="margin:6px 0 8px">${STEP_DESC[c.step] || ''}</p>
+      ${esIngles ? `<div class="eng-auto">🔥 <b>${diasIng} days</b> of English practice logged · this bar rises on its own as you complete your daily English block (≈30 days per step). Your effort moves it, not a manual number.</div>` : ''}
       <div class="career-foot">
         ${c.active ? '<span class="active-badge">★ Active focus</span>'
           : `<button class="set-active" data-career="${c.id}">Set as focus</button>`}
