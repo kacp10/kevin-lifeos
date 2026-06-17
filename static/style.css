@@ -528,3 +528,25 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .exp-method { color: var(--mut); font-size: .82rem; }
 .exp-amt { color: var(--txt); font-weight: 700; text-align: right; }
 @media (max-width: 680px) { .exp-row { grid-template-columns: 1fr auto auto; } .exp-method { display: none; } }
+
+/* ====== INGRESO / AHORRO / SERVICIOS EDITABLES v21 ====== */
+.income-bar { background: #15112680; border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 14px; margin: 10px 0 4px; }
+.income-top, .income-foot { display: flex; justify-content: space-between; font-size: .84rem; color: var(--mut); }
+.income-top b, .income-foot b { color: var(--txt); }
+.income-track { height: 12px; background: #0f0c1d; border-radius: 99px; overflow: hidden; margin: 8px 0; border: 1px solid var(--line); }
+.income-track i { display: block; height: 100%; background: linear-gradient(90deg, var(--gold), var(--hp)); border-radius: 99px; transition: width .9s cubic-bezier(.22,1,.36,1); }
+.btn-ghost { background: transparent; border: 1px solid var(--line); color: var(--txt);
+  border-radius: 9px; padding: 8px 12px; cursor: pointer; font-size: .82rem; }
+.btn-ghost:hover { border-color: var(--gold); }
+.svc-edit { background: none; border: none; color: var(--mut); cursor: pointer; font-size: .9rem; opacity: .6; margin-left: 4px; }
+.svc-edit:hover { opacity: 1; color: var(--gold); }
+.btn-add-svc { background: transparent; border: 1px dashed var(--line); color: var(--mut);
+  border-radius: 9px; padding: 8px; cursor: pointer; width: 100%; margin-top: 8px; font-size: .82rem; }
+.btn-add-svc:hover { border-color: var(--gold); color: var(--gold); }
+.check-item.debt small { color: #e0a3b0; }
+.save-box { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.save-total { background: rgba(54,201,167,.1); border-radius: 9px; padding: 8px 12px; margin-bottom: 8px; font-size: .86rem; }
+.save-total b { color: var(--ok); }
+.m-extra { background: transparent; border: 1px solid var(--hp); color: var(--hp); border-radius: 9px; padding: 9px 14px; cursor: pointer; }
+.m-extra:hover { background: rgba(224,68,92,.12); }

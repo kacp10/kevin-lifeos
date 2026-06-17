@@ -35,7 +35,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 20;
+const FRONT_V = 21;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -150,12 +150,12 @@ function snapshotDeudasVivas() {
   return set;
 }
 
-function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Confirmar', danger = false }) {
+function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Confirmar', danger = false, extraBtn = null }) {
   return new Promise((resolve) => {
     const back = document.createElement('div');
     back.className = 'modal-back';
     const fieldsHtml = fields.map((f, i) => f.type === 'select'
-      ? `<select data-i="${i}">${f.options.map(o => `<option value="${o.v ?? o}">${o.t ?? o}</option>`).join('')}</select>`
+      ? `<select data-i="${i}">${f.options.map(o => { const v = o.v ?? o; const t = o.t ?? o; const sel = (f.value != null && String(f.value) === String(v)) ? ' selected' : ''; return `<option value="${v}"${sel}>${t}</option>`; }).join('')}</select>`
       : `<input data-i="${i}" type="${f.type || 'text'}" placeholder="${f.placeholder || ''}" value="${f.value ?? ''}" ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''}>`
     ).join('');
     back.innerHTML = `<div class="modal-card">
@@ -164,6 +164,7 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
       ${fieldsHtml}
       <div class="modal-btns">
         ${fields.length || !danger ? '<button class="m-cancel">Cancel</button>' : ''}
+        ${extraBtn ? `<button class="m-extra danger">${extraBtn}</button>` : ''}
         <button class="m-ok ${danger ? 'danger' : ''}">${okText}</button>
       </div></div>`;
     document.body.appendChild(back);
@@ -175,6 +176,8 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
         close(vals);
       } else close(true);
     };
+    const extra = back.querySelector('.m-extra');
+    if (extra) extra.onclick = () => close('EXTRA');
     const cancel = back.querySelector('.m-cancel');
     if (cancel) cancel.onclick = () => close(null);
     back.onclick = (e) => { if (e.target === back) close(null); };
@@ -210,6 +213,7 @@ async function load(animate) {
   renderHaki();
   renderAchievements();
   setTimeout(avisosInteligentes, 1200);
+  setTimeout(preguntaPagoDelDia, 2000);
 }
 
 let _avisosMostrados = false;
@@ -304,7 +308,7 @@ function renderInicio() {
   // gastos del mes actual que NO son a crédito (los de crédito ya cuentan como cuota)
   const mesKey = p.months[i];
   const gastosMes = (S.expenses || []).filter(x =>
-    (x.kind === 'monthly' || x.month === mesKey) && !payMethod(x.method).card)
+    (x.kind === 'monthly' || x.month === mesKey) && !payMethod(x.method).card && x.method !== 'Ahorro')
     .reduce((s, x) => s + x.amount, 0);
   const egresos = p.vida + p.ahorro + totalDeudas + gastosMes;
   const saldo = ingreso - egresos;
@@ -374,7 +378,7 @@ function renderExpenses(i) {
     : '';
 
   const list = $('#expenseList');
-  if (list) list.innerHTML = visibles.map(x => {
+  if (list) list.innerHTML = visibles.filter(x => x.method !== 'Ahorro').map(x => {
     const m = payMethod(x.method);
     return `<div class="exp-row">
       <span class="exp-name">${esc(x.name)} ${x.kind === 'monthly' ? '<small class="exp-tag">monthly</small>' : ''}</span>
@@ -383,6 +387,18 @@ function renderExpenses(i) {
       <button class="del-x" data-type="expense" data-id="${x.id}">✕</button>
     </div>`;
   }).join('') || '<p class="hint">No expenses logged for this month yet.</p>';
+
+  // Ahorros del mes (method == 'Ahorro')
+  const ahorros = visibles.filter(x => x.method === 'Ahorro');
+  const totalAhorro = ahorros.reduce((s, x) => s + x.amount, 0);
+  const sl = $('#saveList');
+  if (sl) sl.innerHTML = (ahorros.length
+    ? `<div class="save-total">Saved this month: <b>${fmt(totalAhorro)}</b> 🐷</div>` +
+      ahorros.map(x => `<div class="exp-row">
+        <span class="exp-name">${esc(x.name)}</span>
+        <span class="exp-amt">${fmt(x.amount)}</span>
+        <button class="del-x" data-type="expense" data-id="${x.id}">✕</button></div>`).join('')
+    : '<p class="hint">No savings logged this month. Even a little counts.</p>');
 }
 
 $('#expenseNew').addEventListener('submit', async (e) => {
@@ -416,6 +432,70 @@ $('#expenseNew').addEventListener('submit', async (e) => {
   load();
 });
 
+const saveForm = document.getElementById('saveNew');
+if (saveForm) saveForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = $('#svName').value.trim();
+  const amount = +$('#svAmount').value || 0;
+  if (!name || amount <= 0) return;
+  await api('/api/expense/new', { body: { name, amount, method: 'Ahorro', kind: 'once', month: S.plan.months[MES] } });
+  e.target.reset(); toast('🐷 Saving logged! Future you says thanks.'); load();
+});
+
+const PAYDAY_OPTS = [
+  { v: '5', t: 'Monthly — the 5th' },
+  { v: '30', t: 'Monthly — the 30th' },
+  { v: '15,30', t: 'Twice a month — 15th & 30th' },
+  { v: 'custom', t: 'Another day of the month' }
+];
+const setPaydayBtn = document.getElementById('setPaydayBtn');
+if (setPaydayBtn) setPaydayBtn.addEventListener('click', async () => {
+  const actual = (S.profile || {}).payday || '5';
+  const r = await modal({ icon: '📆', title: 'When do you get paid?',
+    text: 'This sets when the app asks if your pay arrived. You can change it anytime (new job, biweekly, etc.).',
+    fields: [{ type: 'select', value: PAYDAY_OPTS.some(o => o.v === actual) ? actual : 'custom', options: PAYDAY_OPTS },
+             { type: 'number', placeholder: 'If "another day": which day? (1-31)', min: 1, max: 31, value: /^\d+$/.test(actual) ? actual : '' }],
+    okText: 'Save payday' });
+  if (!r) return;
+  let pd = r[0];
+  if (pd === 'custom') pd = String(+r[1] || 5);
+  await api('/api/profile', { body: { key: 'payday', value: pd } });
+  toast('📆 Payday saved'); load();
+});
+
+// Pregunta inteligente del día de pago: "¿ya te llegó?"
+function preguntaPagoDelDia() {
+  const prof = S.profile || {};
+  const payday = prof.payday || '5';
+  const dias = payday.split(',').map(x => x.trim());
+  const hoy = new Date();
+  const diaHoy = String(hoy.getDate());
+  if (!dias.includes(diaHoy)) return;          // hoy no es día de pago
+  const mk = S.plan.months[MES];
+  const yaRegistro = (S.month_income || {})[mk] != null;
+  if (yaRegistro) return;                        // ya lo registró manual este mes
+  // ¿ya preguntamos y dijo "no, todavía"? esperar 8h
+  const key = 'askpay_' + mk;
+  const snooze = prof[key];
+  if (snooze) {
+    const last = new Date(snooze);
+    if ((Date.now() - last.getTime()) < 8 * 3600 * 1000) return;   // aún dentro de las 8h
+  }
+  setTimeout(async () => {
+    const r = await modal({ icon: '💰', title: 'Payday!',
+      text: `Today is a payday (${mk}). Did your salary arrive yet?`,
+      okText: 'Yes, register it', extraBtn: 'Not yet' });
+    if (r === 'EXTRA' || r === null) {
+      // "todavía no" -> guardar timestamp para repreguntar en 8h
+      await api('/api/profile', { body: { key, value: new Date().toISOString() } });
+      if (r === 'EXTRA') toast('👍 I\'ll ask again in about 8 hours.');
+      return;
+    }
+    // dijo que sí -> abrir el registro de ingreso
+    document.getElementById('setIncomeBtn').click();
+  }, 1500);
+}
+
 $('#setIncomeBtn').addEventListener('click', async () => {
   const mesKey = S.plan.months[MES];
   const actual = ingresoDelMes(MES);
@@ -433,28 +513,130 @@ $('#setIncomeBtn').addEventListener('click', async () => {
 function renderChecklist(i, deudas) {
   const mk = monthKey(i);
   const checks = new Set(S.checks);
-  const row = (item, val, extra) => {
-    const paid = checks.has(`${item}|${mk}`);
-    return `<div class="check-item ${paid ? 'paid' : ''}" data-item="${item}" data-mk="${mk}">
+  // fila de servicio (editable): objeto {id,name,amount,method,payday}
+  const svcRow = (s) => {
+    const paid = checks.has(`${s.name}|${mk}`);
+    const m = payMethod(s.method);
+    return `<div class="check-item ${paid ? 'paid' : ''}" data-item="${s.name}" data-mk="${mk}">
       <div class="box">${paid ? '✓' : ''}</div>
-      <span class="cname">${item}</span>
-      <small>${extra || ''}</small>
+      <span class="cname">${esc(s.name)}</span>
+      <small>${m.logo} ${esc(s.method || '—')} · ${esc(s.payday || '')}</small>
+      <span class="cval">${fmt(s.amount)}</span>
+      <button class="svc-edit" data-id="${s.id}" title="Edit">✎</button></div>`;
+  };
+  // fila de deuda: lleva debt_id y valor para abonar de verdad
+  const debtRow = (d) => {
+    const [item, val] = d;
+    const debtName = CRED_TO_DEBT[item] || item;
+    const debt = S.debts.find(x => x.name === debtName);
+    const paid = checks.has(`${item}|${mk}`);
+    return `<div class="check-item debt ${paid ? 'paid' : ''}" data-item="${item}" data-mk="${mk}"
+            data-debt="${debt ? debt.id : ''}" data-val="${val}">
+      <div class="box">${paid ? '✓' : ''}</div>
+      <span class="cname">${esc(item)}</span>
+      <small>⚔ this month's installment${debt ? ' · hits the boss' : ''}</small>
       <span class="cval">${fmt(val)}</span></div>`;
   };
-  $('#checkServicios').innerHTML = S.servicios
-    .map(s => row(s[0], s[1], `${s[2]} · ${s[3]}`)).join('');
-  $('#checkDeudas').innerHTML = deudas
-    .map(d => row(d[0], d[1], 'cuota del mes')).join('');
-  const total = S.servicios.length + deudas.length;
+  $('#checkServicios').innerHTML = (S.servicios || []).map(svcRow).join('')
+    + `<button class="btn-add-svc" id="addServiceBtn">+ Add service</button>`;
+  $('#checkDeudas').innerHTML = deudas.map(debtRow).join('');
+  const total = (S.servicios || []).length + deudas.length;
   const done = [...checks].filter(c => c.endsWith('|' + mk)).length;
-  $('#checkCount').textContent = `${done} / ${total} pagados`;
+  $('#checkCount').textContent = `${done} / ${total} paid`;
+
+  // ===== Barra de ingreso: gastado vs disponible (opción C) =====
+  renderIncomeBar(i, mk, deudas);
+}
+
+function renderIncomeBar(i, mk, deudas) {
+  const cont = document.getElementById('incomeBar');
+  if (!cont) return;
+  const ingreso = ingresoDelMes(i);
+  const checks = new Set(S.checks);
+  // lo "pagado" del mes = servicios marcados + deudas marcadas (lo que dio check)
+  let pagado = 0;
+  for (const s of (S.servicios || [])) if (checks.has(`${s.name}|${mk}`)) pagado += s.amount;
+  for (const d of deudas) if (checks.has(`${d[0]}|${mk}`)) pagado += d[1];
+  // + gastos sueltos del mes que no son a crédito
+  const mesKey = S.plan.months[i];
+  for (const x of (S.expenses || []))
+    if ((x.kind === 'monthly' || x.month === mesKey) && !payMethod(x.method).card && x.method !== 'Ahorro') pagado += x.amount;
+  const disponible = ingreso - pagado;
+  const pctGastado = ingreso > 0 ? Math.min((pagado / ingreso) * 100, 100) : 0;
+  cont.innerHTML = `
+    <div class="income-top">
+      <span>💰 Income: <b>${fmt(ingreso)}</b></span>
+      <span class="${disponible < 0 ? 'nw-debt' : ''}">Available: <b>${fmt(disponible)}</b></span>
+    </div>
+    <div class="income-track"><i style="width:${pctGastado}%"></i></div>
+    <div class="income-foot">
+      <span>Spent/paid: <b>${fmt(pagado)}</b></span>
+      <span>${pctGastado.toFixed(0)}% of income used</span>
+    </div>`;
 }
 
 document.addEventListener('click', async (e) => {
+  // Editar servicio
+  const ed = e.target.closest('.svc-edit');
+  if (ed) {
+    e.stopPropagation();
+    const s = (S.servicios || []).find(x => x.id === +ed.dataset.id);
+    if (!s) return;
+    const r = await modal({ icon: '✎', title: 'Edit service',
+      text: `Edit <b>${esc(s.name)}</b>. Change amount, payment method or payday.`,
+      fields: [
+        { type: 'text', placeholder: 'Name', value: s.name },
+        { type: 'number', placeholder: 'Amount', value: s.amount },
+        { type: 'select', value: s.method, options: PAY_METHODS.map(m => ({ v: m.id, t: `${m.logo} ${m.label}` })) },
+        { type: 'text', placeholder: 'Payday (e.g. 5th of each month)', value: s.payday }
+      ], okText: 'Save', danger: false, extraBtn: 'Delete' });
+    if (r === null) return;
+    if (r === 'EXTRA') {   // botón Delete
+      if (await confirmModal('Delete service', `Remove <b>${esc(s.name)}</b> from your services?`)) {
+        await api('/api/service/' + s.id, { method: 'DELETE' });
+        toast('🗑 Service removed'); load();
+      }
+      return;
+    }
+    // guardar cambios campo por campo
+    await api('/api/service', { body: { id: s.id, field: 'name', value: r[0] } });
+    await api('/api/service', { body: { id: s.id, field: 'amount', value: +r[1] || 0 } });
+    await api('/api/service', { body: { id: s.id, field: 'method', value: r[2] } });
+    await api('/api/service', { body: { id: s.id, field: 'payday', value: r[3] } });
+    toast('✓ Service updated'); load();
+    return;
+  }
+  // Agregar servicio
+  if (e.target.id === 'addServiceBtn') {
+    const r = await modal({ icon: '➕', title: 'Add service',
+      text: 'A recurring monthly expense (rent, gym, subscriptions...).',
+      fields: [
+        { type: 'text', placeholder: 'Name (e.g. Spotify)' },
+        { type: 'number', placeholder: 'Amount' },
+        { type: 'select', options: PAY_METHODS.map(m => ({ v: m.id, t: `${m.logo} ${m.label}` })) },
+        { type: 'text', placeholder: 'Payday (e.g. 5th of each month)' }
+      ], okText: 'Add service' });
+    if (!r || !r[0].trim()) return;
+    await api('/api/service/new', { body: { name: r[0], amount: +r[1] || 0, method: r[2], payday: r[3] } });
+    toast('➕ Service added'); load();
+    return;
+  }
+  // Marcar/desmarcar pago (servicio o deuda)
   const c = e.target.closest('.check-item');
   if (!c) return;
-  await api('/api/check', { body: { item: c.dataset.item, month: c.dataset.mk } });
-  load();
+  const body = { item: c.dataset.item, month: c.dataset.mk };
+  if (c.dataset.debt) { body.debt_id = +c.dataset.debt; body.valor = +c.dataset.val || 0; }
+  await api('/api/check', { body });
+  await load();
+  // si marcó una deuda, celebrar si la derrotó
+  if (c.dataset.debt && !c.classList.contains('paid')) {
+    const dn = CRED_TO_DEBT[c.dataset.item] || c.dataset.item;
+    const debt = S.debts.find(x => x.name === dn);
+    if (debt && (debt.initial + compradoEn(debt.name) - debt.abonado) <= 0)
+      celebrate({ icon: '☠', title: 'ENEMY DEFEATED', text: `<b>${dn}</b> is down. Paid in full. 🔥` });
+  }
+  return;
+});
 
 // Auto-actualización del día: si cambia la fecha local (pasó la medianoche) o el
 // usuario vuelve a la pestaña, refresca la rutina al día correcto — sin recargar.
@@ -471,7 +653,6 @@ function chequearCambioDeDia() {
 setInterval(chequearCambioDeDia, 60000);                 // revisa cada minuto
 document.addEventListener('visibilitychange', () => {     // y al volver a la pestaña
   if (!document.hidden) chequearCambioDeDia();
-});
 });
 
 /* ---------- ALCANCÍA / BOSS ---------- */
