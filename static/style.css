@@ -646,3 +646,28 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .redefer-btn.mini { background: none; border: none; cursor: pointer; font-size: .85rem;
   padding: 0 4px; opacity: .6; vertical-align: middle; }
 .redefer-btn.mini:hover { opacity: 1; }
+
+/* ====== TROFEO DE DEUDAS DERROTADAS v30 ====== */
+.debt-trophy { background: rgba(245,185,66,.1); border: 1px solid var(--gold); border-radius: 10px;
+  padding: 9px 12px; margin-bottom: 10px; font-size: .82rem; color: var(--gold); font-weight: 600; }
+.debt-victory { background: linear-gradient(135deg, #2a2347, var(--panel)); border: 1px solid var(--ok);
+  border-radius: 12px; padding: 18px; text-align: center; color: var(--ok); font-weight: 700; }
+
+/* ====== FLASH DE DERROTA v32 ====== */
+.defeat-flash { position: fixed; inset: 0; z-index: 9998; display: flex; align-items: center;
+  justify-content: center; pointer-events: none; opacity: 0; transition: opacity .2s; }
+.defeat-flash.go { opacity: 1; }
+.defeat-flash.out { opacity: 0; }
+.defeat-slash { position: absolute; width: 0; height: 6px; background: linear-gradient(90deg, transparent, var(--gold), #fff, var(--gold), transparent);
+  box-shadow: 0 0 30px var(--gold); transform: rotate(-18deg); }
+.defeat-flash.go .defeat-slash { width: 130%; transition: width .35s cubic-bezier(.2,.8,.2,1); }
+.defeat-text { position: relative; font-family: 'Russo One', sans-serif; font-size: 3rem; color: #fff;
+  text-shadow: 0 0 24px var(--gold), 0 4px 12px rgba(0,0,0,.8); transform: scale(.4); opacity: 0;
+  text-align: center; letter-spacing: 3px; }
+.defeat-flash.go .defeat-text { animation: defeatPop .5s .15s cubic-bezier(.2,1.4,.4,1) forwards; }
+.defeat-text span { display: block; font-family: inherit; font-size: 1.3rem; color: var(--gold); margin-top: 8px; letter-spacing: 1px; }
+@keyframes defeatPop { to { transform: scale(1); opacity: 1; } }
+
+/* botón editar deuda registrada */
+.ed-extra { background: none; border: none; cursor: pointer; opacity: .6; font-size: .9rem; padding: 0 4px; }
+.ed-extra:hover { opacity: 1; }

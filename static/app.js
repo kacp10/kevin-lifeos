@@ -35,7 +35,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 29;
+const FRONT_V = 32;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -152,6 +152,17 @@ function confetti(duration = 2600) {
     if (el < duration) requestAnimationFrame(frame);
     else cv.remove();
   })(t0);
+}
+
+// Flash rápido de "DERROTADO" que cruza la pantalla un instante
+function flashDerrota(nombre) {
+  const f = document.createElement('div');
+  f.className = 'defeat-flash';
+  f.innerHTML = `<div class="defeat-slash"></div>
+    <div class="defeat-text">☠ DEFEATED<span>${nombre}</span></div>`;
+  document.body.appendChild(f);
+  requestAnimationFrame(() => f.classList.add('go'));
+  setTimeout(() => { f.classList.add('out'); setTimeout(() => f.remove(), 400); }, 1100);
 }
 
 function celebrate({ icon = '🎉', title = '', text = '', confettiOn = true }) {
@@ -393,6 +404,17 @@ function renderInicio() {
     .filter(d => d[1] > 0);
   (S.extra_debts || []).filter(d => d.cuotas >= 1 && i >= d.start && i < d.start + d.cuotas)
     .forEach(d => deudas.push([d.name + ' (registrada)', d.cuota, 0]));
+  // deudas libres con fecha de pago prometida que caen en el mes seleccionado
+  const mesSel = p.months[i];
+  (S.extra_debts || []).filter(d => !(d.cuotas >= 1) && d.due_date)
+    .forEach(d => {
+      // due_date guardado como 'YYYY-MM-DD' o como índice de mes; comparar por mes
+      const mesDue = mesDeFecha(d.due_date);
+      if (mesDue === i) {
+        const restante = Math.max(d.total - (d.abonado || 0), 0);
+        if (restante > 0) deudas.push([d.name + ' (promised)', restante, 0, 'extra:' + d.id]);
+      }
+    });
   const totalDeudas = deudas.reduce((s, d) => s + d[1], 0);
   // gastos del mes actual que NO son a crédito (los de crédito ya cuentan como cuota)
   const mesKey = p.months[i];
@@ -753,6 +775,22 @@ $('#setIncomeBtn').addEventListener('click', async () => {
 });
 
 /* ---------- CHECKLIST DE PAGOS ---------- */
+// Convierte una fecha YYYY-MM-DD al índice del mes en el plan (o -1 si no encaja)
+function mesDeFecha(fecha) {
+  if (!fecha) return -1;
+  const m = fecha.slice(0, 7);   // 'YYYY-MM'
+  // los meses del plan son nombres en español; mapear por año-mes real
+  const meses = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const [y, mm] = m.split('-').map(Number);
+  const nombre = meses[mm - 1];
+  if (!nombre) return -1;
+  // buscar en los nombres del plan (ej: "Julio 2026") ignorando mayúsculas
+  return (S.plan.months || []).findIndex(pm => {
+    const low = pm.toLowerCase();
+    return low.includes(nombre) && low.includes(String(y));
+  });
+}
+
 function renderChecklist(i, deudas) {
   const mk = monthKey(i);
   const checks = new Set(S.checks);
@@ -769,15 +807,18 @@ function renderChecklist(i, deudas) {
   };
   // fila de deuda: lleva debt_id y valor para abonar de verdad
   const debtRow = (d) => {
-    const [item, val] = d;
+    const [item, val, , extraTag] = d;
     const debtName = CRED_TO_DEBT[item] || item;
     const debt = S.debts.find(x => x.name === debtName);
     const paid = checks.has(`${item}|${mk}`);
+    // extraTag tipo 'extra:ID' -> deuda registrada prometida (abona a esa deuda)
+    const extraAttr = extraTag ? ` data-extra="${extraTag.split(':')[1]}"` : '';
+    const hits = (debt || extraTag) ? ' · hits the boss' : '';
     return `<div class="check-item debt ${paid ? 'paid' : ''}" data-item="${item}" data-mk="${mk}"
-            data-debt="${debt ? debt.id : ''}" data-val="${val}">
+            data-debt="${debt ? debt.id : ''}"${extraAttr} data-val="${val}">
       <div class="box">${paid ? '✓' : ''}</div>
       <span class="cname">${esc(item)}</span>
-      <small>⚔ this month's installment${debt ? ' · hits the boss' : ''}</small>
+      <small>⚔ ${extraTag ? 'promised payment' : "this month's installment"}${hits}</small>
       <span class="cval">${fmt(val)}</span></div>`;
   };
   $('#checkServicios').innerHTML = (S.servicios || []).map(svcRow).join('')
@@ -867,16 +908,21 @@ document.addEventListener('click', async (e) => {
   // Marcar/desmarcar pago (servicio o deuda)
   const c = e.target.closest('.check-item');
   if (!c) return;
+  const estabaMarcado = c.classList.contains('paid');
   const body = { item: c.dataset.item, month: c.dataset.mk };
   if (c.dataset.debt) { body.debt_id = +c.dataset.debt; body.valor = +c.dataset.val || 0; }
+  if (c.dataset.extra) { body.extra_id = +c.dataset.extra; body.valor = +c.dataset.val || 0; }
+  const vivasAntes = snapshotDeudasVivas();
   await api('/api/check', { body });
   await load();
-  // si marcó una deuda, celebrar si la derrotó
-  if (c.dataset.debt && !c.classList.contains('paid')) {
-    const dn = CRED_TO_DEBT[c.dataset.item] || c.dataset.item;
-    const debt = S.debts.find(x => x.name === dn);
-    if (debt && (debt.initial + compradoEn(debt.name) - debt.abonado) <= 0)
-      celebrate({ icon: '☠', title: 'ENEMY DEFEATED', text: `<b>${dn}</b> is down. Paid in full. 🔥` });
+  // si marcó una deuda (principal o prometida) y la derrotó, animar
+  if ((c.dataset.debt || c.dataset.extra) && !estabaMarcado) {
+    const dn = CRED_TO_DEBT[c.dataset.item] || c.dataset.item.replace(' (promised)', '').replace(' (registrada)', '');
+    const vivasAhora = snapshotDeudasVivas();
+    if (vivasAntes.has(dn) && !vivasAhora.has(dn)) {
+      flashDerrota(dn);
+      setTimeout(() => celebrate({ icon: '☠', title: 'ENEMY DEFEATED', text: `<b>${dn}</b> is down. Paid in full. 🔥` }), 700);
+    }
   }
   return;
 });
@@ -922,32 +968,49 @@ function renderBoss(animate) {
     .map(d => `<option value="x:${d.id}">${d.name} (${fmt(d.total - (d.abonado || 0))})</option>`).join('');
   sel.innerHTML = optsCore + optsExtra;
 
-  const extraBars = (S.extra_debts || []).map(d => {
-    const ab = d.abonado || 0;
-    const rest = Math.max(d.total - ab, 0);
-    const w = d.total ? (rest / d.total) * 100 : 0;
-    const cuotaTxt = d.cuotas >= 1
-      ? `${d.cuotas} cuotas de ${fmt(d.cuota)} desde ${S.plan.months[d.start] || '—'}`
-      : 'no installments (pay it down when you can)';
-    return `<div class="debt-item ${rest <= 0 ? 'dead' : ''}">
-      <div class="row-between"><span>☠ ${d.name}
-        <button class="del-x" data-type="debt_extra" data-id="${d.id}" title="Borrar deuda">✕</button></span>
-        <strong>${rest <= 0 ? '☠ DERROTADA' : fmt(rest)}</strong></div>
-      <div class="mini-bar"><i style="width:${Math.max(w, 0)}%"></i></div>
-      <small>${ab > 0 ? fmt(ab) + ' de daño · ' : ''}${cuotaTxt}</small></div>`;
-  }).join('');
-  $('#debtList').innerHTML = extraBars + S.debts.map(d => {
-    const tot = d.initial + compradoEn(d.name);
-    const r = tot - d.abonado;
-    const w = tot ? (r / tot) * 100 : 0;
-    const propia = !new Set(S.core_debts).has(d.name);
-    return `<div class="debt-item ${r <= 0 ? 'dead' : ''}">
-      <div class="row-between"><span>${d.name}${propia ?
-        ` <button class="del-x" data-type="debt" data-id="${d.id}" title="Borrar deuda">✕</button>` : ''}</span>
-        <strong>${r <= 0 ? '☠ DERROTADA' : fmt(r)}</strong></div>
-      <div class="mini-bar"><i style="width:${Math.max(w, 0)}%"></i></div>
-      <small>${fmt(d.abonado)} de daño causado</small></div>`;
-  }).join('');
+  const extraBars = (S.extra_debts || [])
+    .filter(d => (d.total - (d.abonado || 0)) > 0)   // las derrotadas desaparecen
+    .map(d => {
+      const ab = d.abonado || 0;
+      const rest = Math.max(d.total - ab, 0);
+      const w = d.total ? (rest / d.total) * 100 : 0;
+      const cuotaTxt = d.cuotas >= 1
+        ? `${d.cuotas} cuotas de ${fmt(d.cuota)} desde ${S.plan.months[d.start] || '—'}`
+        : 'no installments (pay it down when you can)';
+      const dueTxt = (!(d.cuotas >= 1) && d.due_date)
+        ? ` · 📅 promised ${fmtFecha(d.due_date)}` : '';
+      return `<div class="debt-item">
+        <div class="row-between"><span>☠ ${d.name}
+          <button class="ed-extra" data-id="${d.id}" title="Edit / set payment date">✎</button>
+          <button class="del-x" data-type="debt_extra" data-id="${d.id}" title="Borrar deuda">✕</button></span>
+          <strong>${fmt(rest)}</strong></div>
+        <div class="mini-bar"><i style="width:${Math.max(w, 0)}%"></i></div>
+        <small>${ab > 0 ? fmt(ab) + ' de daño · ' : ''}${cuotaTxt}${dueTxt}</small></div>`;
+    }).join('');
+  const coreBars = S.debts
+    .filter(d => (d.initial + compradoEn(d.name) - d.abonado) > 0)   // las derrotadas desaparecen
+    .map(d => {
+      const tot = d.initial + compradoEn(d.name);
+      const r = tot - d.abonado;
+      const w = tot ? (r / tot) * 100 : 0;
+      const propia = !new Set(S.core_debts).has(d.name);
+      return `<div class="debt-item">
+        <div class="row-between"><span>${d.name}${propia ?
+          ` <button class="del-x" data-type="debt" data-id="${d.id}" title="Borrar deuda">✕</button>` : ''}</span>
+          <strong>${fmt(r)}</strong></div>
+        <div class="mini-bar"><i style="width:${Math.max(w, 0)}%"></i></div>
+        <small>${fmt(d.abonado)} de daño causado</small></div>`;
+    }).join('');
+  // contar derrotadas (para mostrar el logro sin saturar la lista)
+  const muertasCore = S.debts.filter(d => (d.initial + compradoEn(d.name) - d.abonado) <= 0).length;
+  const muertasExtra = (S.extra_debts || []).filter(d => (d.total - (d.abonado || 0)) <= 0).length;
+  const totalMuertas = muertasCore + muertasExtra;
+  const trofeo = totalMuertas > 0
+    ? `<div class="debt-trophy">🏆 ${totalMuertas} ${totalMuertas === 1 ? 'debt defeated' : 'debts defeated'} — keep going, Kevin!</div>`
+    : '';
+  const cuerpo = extraBars + coreBars;
+  $('#debtList').innerHTML = trofeo + (cuerpo ||
+    '<div class="debt-victory">👑 Every debt defeated. You won the war. Freedom achieved.</div>');
 
   $('#cpCred').innerHTML = Object.keys(S.plan.creditors)
     .map(c => `<option>${c}</option>`).join('');
@@ -967,6 +1030,27 @@ function renderBoss(animate) {
      <span>${fmt(a.valor)} <button class="del" data-id="${a.id}" title="Deshacer">✕</button></span></li>`
   ).join('') || '<li>No attacks yet. The first payment is the most important one.</li>';
 }
+
+// Editar una deuda registrada (nombre, total, fecha de pago prometida)
+document.addEventListener('click', async (e) => {
+  const ed = e.target.closest('.ed-extra');
+  if (!ed) return;
+  const d = (S.extra_debts || []).find(x => x.id === +ed.dataset.id);
+  if (!d) return;
+  const r = await modal({ icon: '✎', title: 'Edit debt',
+    text: 'Change the name, total, or set a <b>promised payment date</b>. If you set a date and this debt has no installments, it will show up in Home that month so you don\'t forget to pay it.',
+    fields: [
+      { type: 'text', placeholder: 'Name', value: d.name },
+      { type: 'number', placeholder: 'Total amount', value: d.total },
+      { type: 'date', value: d.due_date || '' }
+    ], okText: 'Save' });
+  if (!r) return;
+  if (r[0] && r[0] !== d.name) await api('/api/debt_extra/edit', { body: { id: d.id, field: 'name', value: r[0] } });
+  if (+r[1] && +r[1] !== d.total) await api('/api/debt_extra/edit', { body: { id: d.id, field: 'total', value: +r[1] } });
+  await api('/api/debt_extra/edit', { body: { id: d.id, field: 'due_date', value: r[2] || '' } });
+  toast(r[2] ? '📅 Payment date set — it will appear in Home' : '✓ Debt updated');
+  load();
+});
 
 $('#abonoForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -994,7 +1078,7 @@ $('#abonoForm').addEventListener('submit', async (e) => {
   // ¿este abono mató al enemigo?
   const vivasAhora = snapshotDeudasVivas();
   if (debtName && vivasAntes.has(debtName) && !vivasAhora.has(debtName)) {
-    celebrate({ icon: '☠', title: 'ENEMY DEFEATED', text: `<b>${debtName}</b> is down. One less chain. 🔥` });
+    flashDerrota(debtName); setTimeout(() => celebrate({ icon: '☠', title: 'ENEMY DEFEATED', text: `<b>${debtName}</b> is down. One less chain. 🔥` }), 700);
   } else if (vivasAhora.size === 0 && vivasAntes.size > 0) {
     celebrate({ icon: '👑', title: 'YOU ARE FREE', text: 'Every debt defeated. You won the war, Kevin.' });
   }
@@ -1073,15 +1157,17 @@ function renderDesglose() {
   let total = 0;
   let html = `<p class="hint">Calculated for <b>${S.plan.months[i]}</b> — change it with the month selector in Home and watch installments advance on their own.</p>`;
   html += Object.entries(filas).map(([grupo, items]) => {
-    const saldo = items.reduce((s, it) => s + it.saldo, 0);
+    // ocultar las filas ya terminadas (cuotas pagadas / deudas derrotadas)
+    const vivos = items.filter(it => !it.done);
+    const saldo = vivos.reduce((s, it) => s + it.saldo, 0);
+    if (vivos.length === 0) return '';            // grupo completamente derrotado -> fuera
     if (!grupo.startsWith('Nómina')) total += saldo;
     return `<details><summary><span>${grupo}</span>
       <span class="sum-val">${saldo ? fmt(saldo) : 'cargos fijos'}</span></summary>
       <table class="table">
       <tr><th>Item</th><th>This month</th><th>Balance after paying</th></tr>` +
-      items.map(it => it.done
-        ? `<tr class="done-row"><td>✓ ${it.label} — TERMINADA</td><td class="num">—</td><td class="num">$0</td></tr>`
-        : `<tr><td>${it.label}${it.redefer
+      vivos.map(it =>
+        `<tr><td>${it.label}${it.redefer
             ? ` <button class="redefer-btn mini" data-type="${it.redefer.type}" data-id="${it.redefer.id}" data-cuotas="${it.redefer.cuotas}" title="Reschedule this purchase">🔄</button>`
             : ''}</td>
            <td class="num">${it.cuota ? fmt(it.cuota) : '—'}</td>
@@ -2214,7 +2300,8 @@ $('#debtNew').addEventListener('submit', async (e) => {
   if (!await confirmModal('Registrar deuda', 'Remember your promise: nothing new on installments. Only log it if it already exists in real life, so the boss shows its true HP.')) return;
   const r = await api('/api/debt/new', { body: {
     name: $('#ndName').value, valor: +$('#ndValor').value,
-    cuotas: +$('#ndCuotas').value || 0, start: +$('#ndStart').value || 0 } });
+    cuotas: +$('#ndCuotas').value || 0, start: +$('#ndStart').value || 0,
+    due_date: $('#ndDue').value || '' } });
   if (r.error) { toast('⚠ ' + r.error, 'err'); return; }
   toast('☠ New enemy registered in the Debt Boss.');
   e.target.reset();
