@@ -13,7 +13,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 33  # debe coincidir con FRONT_V en static/app.js
+VERSION = 34  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -298,6 +298,29 @@ def init_db():
         except Exception:
             pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('abono_nota_v1','1')")
+        con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='consolidar_estiven_v1'").fetchone():
+        try:
+            # buscar el Estiven del plan (tabla debts)
+            estiven_plan = con.execute(
+                "SELECT id FROM debts WHERE LOWER(name) LIKE 'estiven%' OR LOWER(name) LIKE 'stiven%' ORDER BY id LIMIT 1").fetchone()
+            if estiven_plan:
+                pid = dict(estiven_plan)['id']
+                # sumar las extra_debts llamadas estiven/stiven
+                extras = con.execute(
+                    "SELECT id, total FROM extra_debts WHERE LOWER(name) LIKE 'estiven%' OR LOWER(name) LIKE 'stiven%'").fetchall()
+                suma = sum(dict(x)['total'] for x in extras)
+                if suma > 0:
+                    con.execute("UPDATE debts SET initial = initial + ? WHERE id=?", (suma, pid))
+                    for x in extras:
+                        xid = dict(x)['id']
+                        con.execute("DELETE FROM abonos WHERE nota=? OR nota LIKE ?",
+                                    (f'extra:{xid}', f'extracheck:{xid}:%'))
+                        con.execute("DELETE FROM extra_debts WHERE id=?", (xid,))
+                    print(f'  + Estiven consolidado: +{suma} sumado al del plan')
+        except Exception as e:
+            print('  (aviso) no se pudo consolidar Estiven:', e)
+        con.execute("INSERT OR IGNORE INTO config VALUES ('consolidar_estiven_v1','1')")
         con.commit()
     if not con.execute("SELECT 1 FROM config WHERE key='extra_due_v1'").fetchone():
         try:
@@ -700,6 +723,29 @@ def check():
                           f'extracheck:{extra_id}:{item}:{month}'))
     db().commit()
     return jsonify(ok=True)
+
+
+@app.post('/api/debt/consolidate')
+def debt_consolidate():
+    """Suma el total de unas deudas registradas (extra_ids) al 'initial' de una
+    deuda del plan (debt_id), y luego borra esas deudas registradas."""
+    j = request.json
+    debt_id = int(j['debt_id'])
+    extra_ids = j.get('extra_ids', [])
+    suma = 0
+    for eid in extra_ids:
+        row = db().execute('SELECT total FROM extra_debts WHERE id=?', (int(eid),)).fetchone()
+        if row:
+            suma += dict(row)['total']
+    if suma > 0:
+        db().execute('UPDATE debts SET initial = initial + ? WHERE id=?', (suma, debt_id))
+        for eid in extra_ids:
+            # mover también cualquier abono hecho a esa extra_debt al historial general
+            db().execute('DELETE FROM abonos WHERE nota=? OR nota LIKE ?',
+                         (f'extra:{int(eid)}', f'extracheck:{int(eid)}:%'))
+            db().execute('DELETE FROM extra_debts WHERE id=?', (int(eid),))
+    db().commit()
+    return jsonify(ok=True, sumado=suma)
 
 
 @app.post('/api/debt/new')
