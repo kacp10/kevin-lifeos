@@ -13,7 +13,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 29  # debe coincidir con FRONT_V en static/app.js
+VERSION = 32  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -136,7 +136,8 @@ def init_db():
         fijo INTEGER DEFAULT 0, orden INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS extra_debts (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, total INTEGER,
-        cuota INTEGER DEFAULT 0, cuotas INTEGER DEFAULT 0, start INTEGER DEFAULT 0);
+        cuota INTEGER DEFAULT 0, cuotas INTEGER DEFAULT 0, start INTEGER DEFAULT 0,
+        due_date TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS goals (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, why TEXT DEFAULT '',
         target TEXT DEFAULT '', status TEXT DEFAULT 'Pendiente',
@@ -297,6 +298,13 @@ def init_db():
         except Exception:
             pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('abono_nota_v1','1')")
+        con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='extra_due_v1'").fetchone():
+        try:
+            con.execute("ALTER TABLE extra_debts ADD COLUMN due_date TEXT DEFAULT ''")
+        except Exception:
+            pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('extra_due_v1','1')")
         con.commit()
     if not con.execute("SELECT 1 FROM config WHERE key='piggy_goal_v1'").fetchone():
         try:
@@ -560,8 +568,9 @@ def state():
     extra_debts = [dict(r) for r in d.execute('SELECT * FROM extra_debts')]
     # daño causado a cada deuda registrada (abonos con nota 'extra:ID')
     for ed in extra_debts:
-        row = d.execute("SELECT COALESCE(SUM(valor),0) AS ab FROM abonos WHERE nota=?",
-                        (f"extra:{ed['id']}",)).fetchone()
+        row = d.execute(
+            "SELECT COALESCE(SUM(valor),0) AS ab FROM abonos WHERE nota=? OR nota LIKE ?",
+            (f"extra:{ed['id']}", f"extracheck:{ed['id']}:%")).fetchone()
         ed['abonado'] = dict(row)['ab'] if row else 0
     core = [x[0] for x in _SEED['debts']]
     return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
@@ -645,22 +654,30 @@ def ping():
 def check():
     j = request.json
     item, month = j['item'], j['month']
-    debt_id = j.get('debt_id')          # si viene, es un pago de deuda -> abono real
+    debt_id = j.get('debt_id')          # si viene, es un pago de deuda principal -> abono real
+    extra_id = j.get('extra_id')        # si viene, es un pago a deuda registrada prometida
     valor = int(j.get('valor') or 0)
     cur = db().execute('SELECT 1 FROM payment_checks WHERE item=? AND month=?',
                        (item, month)).fetchone()
     if cur:
-        # desmarcar: quitar el check y, si era deuda, borrar el abono que creó este check
+        # desmarcar: quitar el check y borrar el abono que creó este check
         db().execute('DELETE FROM payment_checks WHERE item=? AND month=?', (item, month))
         if debt_id:
             db().execute('DELETE FROM abonos WHERE debt_id=? AND nota=?',
                          (int(debt_id), f'check:{item}:{month}'))
+        if extra_id:
+            db().execute('DELETE FROM abonos WHERE nota=?',
+                         (f'extracheck:{extra_id}:{item}:{month}',))
     else:
-        # marcar: registrar el check y, si era deuda, crear un abono real (baja el Debt Boss)
+        # marcar: registrar el check y crear un abono real (baja el Debt Boss)
         db().execute('INSERT INTO payment_checks VALUES (?,?)', (item, month))
         if debt_id and valor > 0:
             db().execute('INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
                          (int(debt_id), date.today().isoformat(), valor, f'check:{item}:{month}'))
+        if extra_id and valor > 0:
+            db().execute('INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
+                         (None, date.today().isoformat(), valor,
+                          f'extracheck:{extra_id}:{item}:{month}'))
     db().commit()
     return jsonify(ok=True)
 
@@ -674,9 +691,21 @@ def debt_new():
     cuotas = int(j.get('cuotas') or 0)
     start = int(j.get('start') or 0)
     cuota = round(valor / cuotas) if cuotas >= 1 else 0
-    db().execute('''INSERT INTO extra_debts (name, total, cuota, cuotas, start)
-                    VALUES (?,?,?,?,?)''',
-                 (j['name'].strip(), valor, cuota, cuotas, start))
+    db().execute('''INSERT INTO extra_debts (name, total, cuota, cuotas, start, due_date)
+                    VALUES (?,?,?,?,?,?)''',
+                 (j['name'].strip(), valor, cuota, cuotas, start, j.get('due_date', '')))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/debt_extra/edit')
+def debt_extra_edit():
+    j = request.json
+    field = j['field']
+    if field not in ('name', 'total', 'due_date'):
+        return jsonify(error='campo no permitido'), 400
+    val = int(j['value'] or 0) if field == 'total' else j['value']
+    db().execute(f'UPDATE extra_debts SET {field}=? WHERE id=?', (val, int(j['id'])))
     db().commit()
     return jsonify(ok=True)
 
