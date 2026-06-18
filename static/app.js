@@ -35,7 +35,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 28;
+const FRONT_V = 29;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -177,6 +177,9 @@ function snapshotDeudasVivas() {
   for (const d of (S.debts || [])) {
     const tot = d.initial + compradoEn(d.name);
     if (tot - d.abonado > 0) set.add(d.name);
+  }
+  for (const d of (S.extra_debts || [])) {
+    if ((d.total - (d.abonado || 0)) > 0) set.add(d.name);
   }
   return set;
 }
@@ -901,7 +904,8 @@ document.addEventListener('visibilitychange', () => {     // y al volver a la pe
 function renderBoss(animate) {
   const init = S.debts.reduce((s, d) => s + d.initial + compradoEn(d.name), 0)
     + (S.extra_debts || []).reduce((s, d) => s + d.total, 0);
-  const dmg = S.debts.reduce((s, d) => s + d.abonado, 0);
+  const dmg = S.debts.reduce((s, d) => s + d.abonado, 0)
+    + (S.extra_debts || []).reduce((s, d) => s + (d.abonado || 0), 0);
   const rest = init - dmg;
   $('#bossInit').textContent = fmt(init);
   $('#bossDmg').textContent = fmt(dmg);
@@ -910,20 +914,27 @@ function renderBoss(animate) {
     $('#bossHp').style.width = Math.max(0, (rest / init) * 100) + '%');
 
   const sel = $('#abonoDebt');
-  sel.innerHTML = S.debts
+  const optsCore = S.debts
     .filter(d => d.initial + compradoEn(d.name) - d.abonado > 0)
     .map(d => `<option value="${d.id}">${d.name} (${fmt(d.initial + compradoEn(d.name) - d.abonado)})</option>`).join('');
+  const optsExtra = (S.extra_debts || [])
+    .filter(d => (d.total - (d.abonado || 0)) > 0)
+    .map(d => `<option value="x:${d.id}">${d.name} (${fmt(d.total - (d.abonado || 0))})</option>`).join('');
+  sel.innerHTML = optsCore + optsExtra;
 
   const extraBars = (S.extra_debts || []).map(d => {
+    const ab = d.abonado || 0;
+    const rest = Math.max(d.total - ab, 0);
+    const w = d.total ? (rest / d.total) * 100 : 0;
     const cuotaTxt = d.cuotas >= 1
       ? `${d.cuotas} cuotas de ${fmt(d.cuota)} desde ${S.plan.months[d.start] || '—'}`
       : 'no installments (pay it down when you can)';
-    return `<div class="debt-item">
+    return `<div class="debt-item ${rest <= 0 ? 'dead' : ''}">
       <div class="row-between"><span>☠ ${d.name}
         <button class="del-x" data-type="debt_extra" data-id="${d.id}" title="Borrar deuda">✕</button></span>
-        <strong>${fmt(d.total)}</strong></div>
-      <div class="mini-bar"><i style="width:100%"></i></div>
-      <small>${cuotaTxt}</small></div>`;
+        <strong>${rest <= 0 ? '☠ DERROTADA' : fmt(rest)}</strong></div>
+      <div class="mini-bar"><i style="width:${Math.max(w, 0)}%"></i></div>
+      <small>${ab > 0 ? fmt(ab) + ' de daño · ' : ''}${cuotaTxt}</small></div>`;
   }).join('');
   $('#debtList').innerHTML = extraBars + S.debts.map(d => {
     const tot = d.initial + compradoEn(d.name);
@@ -961,9 +972,18 @@ $('#abonoForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const valor = +$('#abonoValor').value;
   const vivasAntes = snapshotDeudasVivas();
-  const debtId = +$('#abonoDebt').value;
-  const debtName = (S.debts.find(d => d.id === debtId) || {}).name || '';
-  const r = await api('/api/abono', { body: { debt_id: debtId, valor } });
+  const rawVal = $('#abonoDebt').value;
+  let body, debtName;
+  if (rawVal.startsWith('x:')) {
+    const exId = +rawVal.slice(2);
+    body = { extra_id: exId, valor };
+    debtName = ((S.extra_debts || []).find(d => d.id === exId) || {}).name || '';
+  } else {
+    const debtId = +rawVal;
+    body = { debt_id: debtId, valor };
+    debtName = (S.debts.find(d => d.id === debtId) || {}).name || '';
+  }
+  const r = await api('/api/abono', { body });
   if (r.error) { toast('⚠ ' + r.error, 'err'); return; }
   toast('⚔ Hit of <b>' + fmt(valor) + '</b> to the boss!');
   const f = $('#dmgFloat');
