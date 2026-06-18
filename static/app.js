@@ -35,7 +35,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 33;
+const FRONT_V = 34;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1038,17 +1038,28 @@ document.addEventListener('click', async (e) => {
   const d = (S.extra_debts || []).find(x => x.id === +ed.dataset.id);
   if (!d) return;
   const r = await modal({ icon: '✎', title: 'Edit debt',
-    text: 'Change the name, total, or set a <b>promised payment date</b>. If you set a date and this debt has no installments, it will show up in Home that month so you don\'t forget to pay it.',
+    text: `Current total: <b>${fmt(d.total)}</b>.<br><br>• Change the <b>total</b> directly, or<br>• Use <b>adjust</b> to add/subtract (e.g. <b>+50000</b> if they lent you more, <b>-20000</b> if you paid some).<br>• Set a <b>promised date</b> to make it show up in Home that month.`,
     fields: [
       { type: 'text', placeholder: 'Name', value: d.name },
       { type: 'number', placeholder: 'Total amount', value: d.total },
+      { type: 'text', placeholder: 'Adjust: +50000 or -20000 (optional)' },
       { type: 'date', value: d.due_date || '' }
     ], okText: 'Save' });
   if (!r) return;
+  // nombre
   if (r[0] && r[0] !== d.name) await api('/api/debt_extra/edit', { body: { id: d.id, field: 'name', value: r[0] } });
-  if (+r[1] && +r[1] !== d.total) await api('/api/debt_extra/edit', { body: { id: d.id, field: 'total', value: +r[1] } });
-  await api('/api/debt_extra/edit', { body: { id: d.id, field: 'due_date', value: r[2] || '' } });
-  toast(r[2] ? '📅 Payment date set — it will appear in Home' : '✓ Debt updated');
+  // total: si hay ajuste (+/-), tiene prioridad; si no, usa el total directo
+  let nuevoTotal = +r[1] || d.total;
+  const ajuste = (r[2] || '').trim();
+  if (ajuste) {
+    const delta = parseInt(ajuste.replace(/[^0-9+-]/g, ''), 10);
+    if (!isNaN(delta)) nuevoTotal = Math.max(d.total + delta, 0);
+  }
+  if (nuevoTotal !== d.total) await api('/api/debt_extra/edit', { body: { id: d.id, field: 'total', value: nuevoTotal } });
+  // fecha
+  await api('/api/debt_extra/edit', { body: { id: d.id, field: 'due_date', value: r[3] || '' } });
+  const msg = ajuste ? `✓ Adjusted to ${fmt(nuevoTotal)}` : (r[3] ? '📅 Payment date set — it will appear in Home' : '✓ Debt updated');
+  toast(msg);
   load();
 });
 
