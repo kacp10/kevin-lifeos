@@ -7,6 +7,8 @@ const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;'
 const pct = (n) => (n * 100).toFixed(1) + '%';
 /* --- compras a cuotas --- */
 const planIndex = (d) => (d.getFullYear() - 2026) * 12 + d.getMonth() - 6;  // julio 2026 = 0
+// Deudas que son tarjetas/créditos: se editan en el apartado de abajo, NO en las barras
+const TARJETAS_CREDITO = ['Tarjeta DV — Jefe Final', 'ADDI', 'Crédito Nicole', 'Codensa', 'Banco de Bogotá', 'Tarjeta Nicole'];
 const CRED_TO_DEBT = { 'Tarjeta DV': 'Tarjeta DV — Jefe Final', 'Joseph (cuota)': 'Joseph' };
 const CRED_TO_GRUPO = { 'Joseph (cuota)': 'Joseph' };
 const cuotaDe = (c) => Math.round(c.valor / c.cuotas);
@@ -35,7 +37,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 34;
+const FRONT_V = 35;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -993,13 +995,16 @@ function renderBoss(animate) {
       const tot = d.initial + compradoEn(d.name);
       const r = tot - d.abonado;
       const w = tot ? (r / tot) * 100 : 0;
-      const propia = !new Set(S.core_debts).has(d.name);
+      const esTarjeta = TARJETAS_CREDITO.includes(d.name);
+      // las tarjetas/créditos se editan abajo (rediferir); los préstamos sí se editan/borran aquí
+      const botones = esTarjeta ? '' :
+        ` <button class="ed-core" data-id="${d.id}" title="Edit / adjust amount">✎</button>` +
+        ` <button class="del-x" data-type="debt" data-id="${d.id}" title="Borrar deuda">✕</button>`;
       return `<div class="debt-item">
-        <div class="row-between"><span>${d.name}${propia ?
-          ` <button class="del-x" data-type="debt" data-id="${d.id}" title="Borrar deuda">✕</button>` : ''}</span>
+        <div class="row-between"><span>${d.name}${botones}</span>
           <strong>${fmt(r)}</strong></div>
         <div class="mini-bar"><i style="width:${Math.max(w, 0)}%"></i></div>
-        <small>${fmt(d.abonado)} de daño causado</small></div>`;
+        <small>${fmt(d.abonado)} de daño causado${esTarjeta ? ' · edit below ↓' : ''}</small></div>`;
     }).join('');
   // contar derrotadas (para mostrar el logro sin saturar la lista)
   const muertasCore = S.debts.filter(d => (d.initial + compradoEn(d.name) - d.abonado) <= 0).length;
@@ -1033,6 +1038,31 @@ function renderBoss(animate) {
 
 // Editar una deuda registrada (nombre, total, fecha de pago prometida)
 document.addEventListener('click', async (e) => {
+  // editar deuda del PLAN (préstamos de personas)
+  const edc = e.target.closest('.ed-core');
+  if (edc) {
+    const d = (S.debts || []).find(x => x.id === +edc.dataset.id);
+    if (!d) return;
+    const r = await modal({ icon: '✎', title: 'Edit debt',
+      text: `Current amount: <b>${fmt(d.initial)}</b>.<br><br>• Change the <b>amount</b> directly, or<br>• Use <b>adjust</b> to add/subtract (e.g. <b>+50000</b> if they lent you more, <b>-20000</b> if you paid some).`,
+      fields: [
+        { type: 'text', placeholder: 'Name', value: d.name },
+        { type: 'number', placeholder: 'Amount', value: d.initial },
+        { type: 'text', placeholder: 'Adjust: +50000 or -20000 (optional)' }
+      ], okText: 'Save' });
+    if (!r) return;
+    if (r[0] && r[0] !== d.name) await api('/api/debt/edit', { body: { id: d.id, field: 'name', value: r[0] } });
+    let nuevoTotal = +r[1] || d.initial;
+    const ajuste = (r[2] || '').trim();
+    if (ajuste) {
+      const delta = parseInt(ajuste.replace(/[^0-9+-]/g, ''), 10);
+      if (!isNaN(delta)) nuevoTotal = Math.max(d.initial + delta, 0);
+    }
+    if (nuevoTotal !== d.initial) await api('/api/debt/edit', { body: { id: d.id, field: 'initial', value: nuevoTotal } });
+    toast(ajuste ? `✓ Adjusted to ${fmt(nuevoTotal)}` : '✓ Debt updated');
+    load();
+    return;
+  }
   const ed = e.target.closest('.ed-extra');
   if (!ed) return;
   const d = (S.extra_debts || []).find(x => x.id === +ed.dataset.id);
