@@ -13,7 +13,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 32  # debe coincidir con FRONT_V en static/app.js
+VERSION = 33  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -529,10 +529,30 @@ def state():
                   COALESCE(SUM(a.valor),0) AS abonado
            FROM debts de LEFT JOIN abonos a ON a.debt_id = de.id
            GROUP BY de.id ORDER BY de.initial DESC''')]
-    abonos = [dict(r) for r in d.execute(
+    # abonos a deudas principales (con debt_id) + abonos a deudas registradas (nota extra/extracheck)
+    abonos_core = [dict(r) for r in d.execute(
         '''SELECT a.id, a.fecha, a.valor, de.name FROM abonos a
            JOIN debts de ON de.id = a.debt_id
            ORDER BY a.id DESC LIMIT 30''')]
+    abonos_extra = []
+    for r in d.execute(
+        '''SELECT a.id, a.fecha, a.valor, a.nota FROM abonos a
+           WHERE a.debt_id IS NULL AND a.nota != '' ORDER BY a.id DESC LIMIT 30''').fetchall():
+        r = dict(r)
+        # extraer el id de la deuda registrada de la nota
+        nota = r['nota'] or ''
+        ed_id = None
+        if nota.startswith('extra:'):
+            ed_id = nota.split(':')[1]
+        elif nota.startswith('extracheck:'):
+            ed_id = nota.split(':')[1]
+        nombre = '?'
+        if ed_id:
+            row = d.execute('SELECT name FROM extra_debts WHERE id=?', (int(ed_id),)).fetchone()
+            if row:
+                nombre = dict(row)['name']
+        abonos_extra.append({'id': r['id'], 'fecha': r['fecha'], 'valor': r['valor'], 'name': nombre})
+    abonos = sorted(abonos_core + abonos_extra, key=lambda a: a['id'], reverse=True)[:30]
     habits = [dict(r) for r in d.execute('SELECT * FROM habits')]
     marks = [f"{r['habit_id']}|{r['day']}" for r in d.execute(
         "SELECT habit_id, day FROM habit_marks WHERE day LIKE ?", (month + '%',))]
