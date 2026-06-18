@@ -13,7 +13,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 28  # debe coincidir con FRONT_V en static/app.js
+VERSION = 29  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -558,6 +558,11 @@ def state():
     piggy_moves = [dict(r) for r in d.execute('SELECT * FROM piggy_moves ORDER BY id DESC')]
     shopping = [dict(r) for r in d.execute('SELECT * FROM shopping ORDER BY done, id')]
     extra_debts = [dict(r) for r in d.execute('SELECT * FROM extra_debts')]
+    # daño causado a cada deuda registrada (abonos con nota 'extra:ID')
+    for ed in extra_debts:
+        row = d.execute("SELECT COALESCE(SUM(valor),0) AS ab FROM abonos WHERE nota=?",
+                        (f"extra:{ed['id']}",)).fetchone()
+        ed['abonado'] = dict(row)['ab'] if row else 0
     core = [x[0] for x in _SEED['debts']]
     return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
                         marks=marks, history=history, dreams=dreams,
@@ -574,9 +579,14 @@ def abono():
     valor = int(j['valor'])
     if valor <= 0:
         return jsonify(error='El abono debe ser mayor a cero'), 400
-    db().execute('INSERT INTO abonos (fecha, debt_id, valor) VALUES (?,?,?)',
-                 (j.get('fecha', date.today().isoformat()),
-                  int(j['debt_id']), valor))
+    extra_id = j.get('extra_id')        # si viene, el abono es a una deuda registrada
+    if extra_id:
+        db().execute('INSERT INTO abonos (fecha, debt_id, valor, nota) VALUES (?,?,?,?)',
+                     (j.get('fecha', date.today().isoformat()), None, valor, f'extra:{int(extra_id)}'))
+    else:
+        db().execute('INSERT INTO abonos (fecha, debt_id, valor) VALUES (?,?,?)',
+                     (j.get('fecha', date.today().isoformat()),
+                      int(j['debt_id']), valor))
     db().commit()
     return jsonify(ok=True)
 
