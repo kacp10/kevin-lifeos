@@ -160,9 +160,10 @@
         <input id="ndValor" type="number" min="1" placeholder="Total amount" required>
         <input id="ndCuotas" type="number" min="0" max="60" placeholder="# installments (0 = none)">
         <select id="ndStart"></select>
+        <input id="ndDue" type="date" title="Promised payment date (optional)">
         <button class="btn-gold" type="submit">+ Registrar deuda</button>
       </form>
-      <p class="hint">A brand-new debt (another person or bank). If you set installments, the monthly amount shows up in Home from the month you pick and goes down in the breakdown. With 0 installments it stays as a balance to pay freely. If you used a card that ALREADY exists, use "installment purchase" below.</p>
+      <p class="hint">A brand-new debt (another person or bank). If you set installments, the monthly amount shows up in Home from the month you pick. With 0 installments it stays free to pay whenever — BUT if you promised a payment date, set it in the date box and it'll show up in Home that month so you don't forget. If you used a card that ALREADY exists, use "installment purchase" below.</p>
       <h2 style="margin-top:18px">💳 Used a card? Installment purchase</h2>
       <form id="compraNew" class="abono-form">
         <select id="cpCred"></select>
@@ -320,7 +321,7 @@
 </section>
 
 </main>
-<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v29</b></footer>
-<script src="/static/app.js?v=29"></script>
+<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v32</b></footer>
+<script src="/static/app.js?v=32"></script>
 </body>
 </html>
