@@ -13,7 +13,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 34  # debe coincidir con FRONT_V en static/app.js
+VERSION = 35  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -1292,6 +1292,18 @@ def book_del(i):
 @app.delete('/api/anime/<int:i>')
 def anime_del(i):
     db().execute('DELETE FROM animes WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/debt/edit')
+def debt_edit():
+    j = request.json
+    field = j['field']
+    if field not in ('name', 'initial'):
+        return jsonify(error='campo no permitido'), 400
+    val = int(j['value'] or 0) if field == 'initial' else j['value']
+    db().execute(f'UPDATE debts SET {field}=? WHERE id=?', (val, int(j['id'])))
     db().commit()
     return jsonify(ok=True)
 
