@@ -35,7 +35,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 32;
+const FRONT_V = 33;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1138,7 +1138,8 @@ function renderDesglose() {
         redefer: num <= d.cuotas ? { type: 'extra_debt', id: d.id, cuotas: d.cuotas } : null
       }];
     } else {
-      filas[g] = [{ label: 'Saldo (sin cuotas)', cuota: 0, saldo: d.total, done: false }];
+      const restante = Math.max(d.total - (d.abonado || 0), 0);
+      filas[g] = [{ label: 'Saldo (sin cuotas)', cuota: 0, saldo: restante, done: restante <= 0 }];
     }
   }
   for (const c of S.compras) {
