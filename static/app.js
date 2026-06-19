@@ -3,6 +3,17 @@ let S = null;          // estado global del servidor
 let pieChart = null;
 const $ = (q) => document.querySelector(q);
 const fmt = (n) => '$' + Math.round(n).toLocaleString('es-CO');
+// lee un input quitando los puntos de miles (para money-live)
+const numVal = (sel) => { const el = $(sel); return el ? +(el.value || '').replace(/\./g, '').replace(/[^0-9-]/g, '') || 0 : 0; };
+// engancha formateo de miles en vivo a un input
+function engancharMiles(el) {
+  if (!el || el._milesOn) return;
+  el._milesOn = true;
+  el.addEventListener('input', () => {
+    const limpio = el.value.replace(/\./g, '').replace(/[^0-9]/g, '');
+    el.value = limpio ? Number(limpio).toLocaleString('es-CO') : '';
+  });
+}
 const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 const pct = (n) => (n * 100).toFixed(1) + '%';
 /* --- compras a cuotas --- */
@@ -37,7 +48,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 35;
+const FRONT_V = 36;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -201,10 +212,15 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
   return new Promise((resolve) => {
     const back = document.createElement('div');
     back.className = 'modal-back';
-    const fieldsHtml = fields.map((f, i) => f.type === 'select'
-      ? `<select data-i="${i}">${f.options.map(o => { const v = o.v ?? o; const t = o.t ?? o; const sel = (f.value != null && String(f.value) === String(v)) ? ' selected' : ''; return `<option value="${v}"${sel}>${t}</option>`; }).join('')}</select>`
-      : `<input data-i="${i}" type="${f.type || 'text'}" placeholder="${f.placeholder || ''}" value="${f.value ?? ''}" ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''}>`
-    ).join('');
+    const fieldsHtml = fields.map((f, i) => {
+      if (f.type === 'select')
+        return `<select data-i="${i}">${f.options.map(o => { const v = o.v ?? o; const t = o.t ?? o; const sel = (f.value != null && String(f.value) === String(v)) ? ' selected' : ''; return `<option value="${v}"${sel}>${t}</option>`; }).join('')}</select>`;
+      if (f.type === 'money') {
+        const initVal = f.value != null && f.value !== '' ? Number(f.value).toLocaleString('es-CO') : '';
+        return `<input data-i="${i}" data-money="1" type="text" inputmode="numeric" placeholder="${f.placeholder || ''}" value="${initVal}">`;
+      }
+      return `<input data-i="${i}" type="${f.type || 'text'}" placeholder="${f.placeholder || ''}" value="${f.value ?? ''}" ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''}>`;
+    }).join('');
     back.innerHTML = `<div class="modal-card">
       <div class="modal-icon">${icon}</div>
       <h3>${title}</h3>${text ? `<p>${text}</p>` : ''}
@@ -219,7 +235,8 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
     const close = (val) => { back.classList.remove('show'); setTimeout(() => back.remove(), 280); resolve(val); };
     back.querySelector('.m-ok').onclick = () => {
       if (fields.length) {
-        const vals = [...back.querySelectorAll('[data-i]')].map(el => el.value);
+        const vals = [...back.querySelectorAll('[data-i]')].map(el =>
+          el.dataset.money ? el.value.replace(/\./g, '').replace(/[^0-9-]/g, '') : el.value);
         close(vals);
       } else close(true);
     };
@@ -228,6 +245,13 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
     const cancel = back.querySelector('.m-cancel');
     if (cancel) cancel.onclick = () => close(null);
     back.onclick = (e) => { if (e.target === back) close(null); };
+    // formateo de miles en vivo para campos money
+    back.querySelectorAll('[data-money]').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const limpio = inp.value.replace(/\./g, '').replace(/[^0-9]/g, '');
+        inp.value = limpio ? Number(limpio).toLocaleString('es-CO') : '';
+      });
+    });
     const first = back.querySelector('input, select');
     if (first) setTimeout(() => first.focus(), 100);
   });
@@ -251,6 +275,7 @@ async function load(animate) {
   renderFreedom();
   renderInicio();
   renderShopping();
+  document.querySelectorAll('.money-live').forEach(engancharMiles);
   renderBoss(animate);
   renderHabitos();
   renderSuenos();
@@ -265,11 +290,66 @@ async function load(animate) {
 }
 
 let _avisosMostrados = false;
+// Extrae el día del mes de un texto de payday ("22 de cada mes" -> 22)
+function diaDePayday(txt) {
+  if (!txt) return null;
+  const m = String(txt).match(/(\d{1,2})/);
+  return m ? parseInt(m[1], 10) : null;
+}
+// Días que faltan desde hoy hasta el próximo día N del mes
+function diasHastaDia(diaObjetivo) {
+  const hoy = new Date();
+  const d = hoy.getDate();
+  const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+  const objetivo = Math.min(diaObjetivo, finMes);
+  if (objetivo >= d) return objetivo - d;
+  // ya pasó este mes -> cuenta para el mes siguiente
+  return (finMes - d) + objetivo;
+}
+// Aviso de pagos próximos al abrir la app
+function avisarPagosProximos() {
+  const VENTANA = 5;   // avisar de pagos en los próximos 5 días
+  const proximos = [];
+  // servicios con día de pago
+  for (const s of (S.servicios || [])) {
+    const dia = diaDePayday(s.payday);
+    if (dia == null) continue;
+    const faltan = diasHastaDia(dia);
+    if (faltan <= VENTANA) proximos.push({ name: s.name, faltan, monto: s.amount });
+  }
+  // deudas registradas con fecha prometida (due_date) cercana
+  for (const d of (S.extra_debts || [])) {
+    if (d.cuotas >= 1 || !d.due_date) continue;
+    const due = new Date(d.due_date + 'T00:00:00');
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    const faltan = Math.round((due - hoy) / 86400000);
+    if (faltan >= 0 && faltan <= VENTANA) {
+      const rest = d.total - (d.abonado || 0);
+      if (rest > 0) proximos.push({ name: d.name + ' (promised)', faltan, monto: rest });
+    }
+  }
+  if (!proximos.length) return;
+  proximos.sort((a, b) => a.faltan - b.faltan);
+  const cuando = (f) => f === 0 ? 'today' : f === 1 ? 'tomorrow' : `in ${f} days`;
+  const lista = proximos.slice(0, 5).map(p =>
+    `<div class="pay-soon-row"><span>${esc(p.name)}</span><span>${fmt(p.monto)} · <b>${cuando(p.faltan)}</b></span></div>`).join('');
+  const extra = proximos.length > 5 ? `<p class="hint" style="margin-top:6px">+${proximos.length - 5} more</p>` : '';
+  setTimeout(() => {
+    modal({ icon: '🔔', title: `${proximos.length} payment${proximos.length > 1 ? 's' : ''} coming up`,
+      text: `Heads up, Kevin — these are due soon:<div class="pay-soon">${lista}${extra}</div>`,
+      okText: 'Got it 👑' });
+  }, 500);
+}
+
 function avisosInteligentes() {
   if (_avisosMostrados) return;      // solo una vez por carga de página
   _avisosMostrados = true;
   const hoy = new Date();
   const diasEnMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+
+  // 0. AVISO DE PAGOS PRÓXIMOS (servicios + deudas prometidas en los próximos 5 días)
+  avisarPagosProximos();
+
   // 1. Fin de mes: recordar cerrar el mes
   if (hoy.getDate() >= diasEnMes - 1) {
     const ymActual = hoyLocal().slice(0, 7);
@@ -454,19 +534,44 @@ function renderInicio() {
     dPct > 0.3 ? '🛡 HOLDING: debt still weighs more than ideal. You\'re on the right track.' :
     '👑 50/30/20 ZONE: debt now fits the rule. Time to spend on wants and dreams.';
 
+  const vals = [p.vida, p.ahorro, totalDeudas, Math.max(saldo, 0)];
+  const sumaTotal = vals.reduce((a, b) => a + b, 0) || 1;
+  const pctDe = (v) => Math.round((v / sumaTotal) * 100);
   const data = {
-    labels: ['Needs', 'Savings', 'Debt', 'Free cushion'],
+    labels: [
+      `Needs ${pctDe(p.vida)}%`,
+      `Savings ${pctDe(p.ahorro)}%`,
+      `Debt ${pctDe(totalDeudas)}%`,
+      `Free cushion ${pctDe(Math.max(saldo, 0))}%`
+    ],
     datasets: [{
-      data: [p.vida, p.ahorro, totalDeudas, Math.max(saldo, 0)],
+      data: vals,
       backgroundColor: ['#7c6ce0', '#f5b942', '#e0445c', '#36c9a7'],
       borderColor: '#1d1932', borderWidth: 3
     }]
   };
-  if (pieChart) { pieChart.data = data; pieChart.update(); }
-  else pieChart = new Chart($('#pieChart'), {
-    type: 'doughnut', data,
-    options: { plugins: { legend: { labels: { color: '#ece9f7' } } }, cutout: '58%' }
-  });
+  const opts = {
+    plugins: {
+      legend: { labels: { color: '#ece9f7', font: { size: 12 } } },
+      tooltip: { callbacks: { label: (ctx) => {
+        const v = ctx.parsed; const pct = Math.round((v / sumaTotal) * 100);
+        return `${ctx.label.replace(/ \d+%$/, '')}: ${fmt(v)} (${pct}%)`;
+      } } }
+    }, cutout: '58%'
+  };
+  if (pieChart) { pieChart.data = data; pieChart.options = opts; pieChart.update(); }
+  else pieChart = new Chart($('#pieChart'), { type: 'doughnut', data, options: opts });
+
+  // resumen 50/30/20 debajo de la torta
+  const r502030 = document.getElementById('regla502030');
+  if (r502030) {
+    const needsPct = pctDe(p.vida), savePct = pctDe(p.ahorro), debtPct = pctDe(totalDeudas);
+    r502030.innerHTML = `
+      <div class="rule-row"><span>🏠 Needs (target 50%)</span><b class="${p.vida/sumaTotal<=0.55?'ok':'over'}">${needsPct}%</b></div>
+      <div class="rule-row"><span>🎯 Wants/cushion (target 30%)</span><b>${pctDe(Math.max(saldo,0))}%</b></div>
+      <div class="rule-row"><span>💰 Savings (target 20%)</span><b class="${p.ahorro/sumaTotal>=0.15?'ok':'over'}">${savePct}%</b></div>
+      <div class="rule-row debt"><span>⚔ Debt (extra, until free)</span><b class="over">${debtPct}%</b></div>`;
+  }
 
   renderChecklist(i, deudas);
   renderExpenses(i);
@@ -528,8 +633,8 @@ document.addEventListener('click', async (e) => {
     text: 'Add a savings line to your company fund.',
     fields: [
       { type: 'text', placeholder: 'Concept (e.g. Permanent savings)' },
-      { type: 'number', placeholder: 'Monthly quota' },
-      { type: 'number', placeholder: 'Already saved' }
+      { type: 'money', placeholder: 'Monthly quota' },
+      { type: 'money', placeholder: 'Already saved' }
     ], okText: 'Add' });
   if (!r || !r[0].trim()) return;
   await api('/api/fund/new', { body: { name: r[0], quota: +r[1] || 0, saved: +r[2] || 0, frequency: 'Monthly', last_deposit: hoyLocal() } });
@@ -599,7 +704,7 @@ document.addEventListener('click', async (e) => {
     const r = await modal({ icon: '🎯', title: 'New savings goal',
       text: 'First: how much do you want to save? (leave the goal at 0 for a free jar with no target). Then name it.',
       fields: [
-        { type: 'number', placeholder: 'Goal amount (0 = free jar)' },
+        { type: 'money', placeholder: 'Goal amount (0 = free jar)' },
         { type: 'text', placeholder: 'Name (e.g. Trip to the coast, New phone)' },
         { type: 'text', placeholder: 'Emoji (optional)', value: '🐷' }
       ], okText: 'Create' });
@@ -615,7 +720,7 @@ document.addEventListener('click', async (e) => {
     const r = await modal({ icon: '💰', title: 'Add to ' + addBtn.dataset.name,
       text: 'How much are you putting in? (use a negative number if you took money out)',
       fields: [
-        { type: 'number', placeholder: 'Amount' },
+        { type: 'money', placeholder: 'Amount' },
         { type: 'text', placeholder: 'Note (optional)' }
       ], okText: 'Add' });
     if (!r || !r[0]) return;
@@ -681,7 +786,7 @@ function renderExpenses(i) {
 $('#expenseNew').addEventListener('submit', async (e) => {
   e.preventDefault();
   const name = $('#exName').value.trim();
-  const amount = +$('#exAmount').value || 0;
+  const amount = numVal('#exAmount');
   const method = $('#exMethod').value;
   const kind = $('#exKind').value;
   if (!name || amount <= 0) return;
@@ -768,7 +873,7 @@ $('#setIncomeBtn').addEventListener('click', async () => {
   const actual = ingresoDelMes(MES);
   const r = await modal({ icon: '💰', title: `Income for ${mesKey}`,
     text: 'How much did you actually receive this month? (your payday is the 5th)',
-    fields: [{ type: 'number', placeholder: 'Net income', min: 0, value: actual }],
+    fields: [{ type: 'money', placeholder: 'Net income', value: actual }],
     okText: 'Save income' });
   if (!r) return;
   await api('/api/income', { body: { month: mesKey, income: +r[0] || 0 } });
@@ -802,10 +907,11 @@ function renderChecklist(i, deudas) {
     const m = payMethod(s.method);
     return `<div class="check-item ${paid ? 'paid' : ''}" data-item="${s.name}" data-mk="${mk}">
       <div class="box">${paid ? '✓' : ''}</div>
-      <span class="cname">${esc(s.name)}</span>
-      <small>${m.logo} ${esc(s.method || '—')} · ${esc(s.payday || '')}</small>
-      <span class="cval">${fmt(s.amount)}</span>
-      <button class="svc-edit" data-id="${s.id}" title="Edit">✎</button></div>`;
+      <div class="cmid">
+        <span class="cname">${esc(s.name)} <button class="svc-edit" data-id="${s.id}" title="Edit">✎</button></span>
+        <small>${m.logo} ${esc(s.method || '—')} · ${esc(s.payday || '')}</small>
+      </div>
+      <span class="cval">${fmt(s.amount)}</span></div>`;
   };
   // fila de deuda: lleva debt_id y valor para abonar de verdad
   const debtRow = (d) => {
@@ -819,8 +925,10 @@ function renderChecklist(i, deudas) {
     return `<div class="check-item debt ${paid ? 'paid' : ''}" data-item="${item}" data-mk="${mk}"
             data-debt="${debt ? debt.id : ''}"${extraAttr} data-val="${val}">
       <div class="box">${paid ? '✓' : ''}</div>
-      <span class="cname">${esc(item)}</span>
-      <small>⚔ ${extraTag ? 'promised payment' : "this month's installment"}${hits}</small>
+      <div class="cmid">
+        <span class="cname">${esc(item)}</span>
+        <small>⚔ ${extraTag ? 'promised payment' : "this month's installment"}${hits}</small>
+      </div>
       <span class="cval">${fmt(val)}</span></div>`;
   };
   $('#checkServicios').innerHTML = (S.servicios || []).map(svcRow).join('')
@@ -872,7 +980,7 @@ document.addEventListener('click', async (e) => {
       text: `Edit <b>${esc(s.name)}</b>. Change amount, payment method or payday.`,
       fields: [
         { type: 'text', placeholder: 'Name', value: s.name },
-        { type: 'number', placeholder: 'Amount', value: s.amount },
+        { type: 'money', placeholder: 'Amount', value: s.amount },
         { type: 'select', value: s.method, options: PAY_METHODS.map(m => ({ v: m.id, t: `${m.logo} ${m.label}` })) },
         { type: 'text', placeholder: 'Payday (e.g. 5th of each month)', value: s.payday }
       ], okText: 'Save', danger: false, extraBtn: 'Delete' });
@@ -1095,7 +1203,7 @@ document.addEventListener('click', async (e) => {
 
 $('#abonoForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const valor = +$('#abonoValor').value;
+  const valor = numVal('#abonoValor');
   const vivasAntes = snapshotDeudasVivas();
   const rawVal = $('#abonoDebt').value;
   let body, debtName;
@@ -2329,7 +2437,7 @@ $('#compraNew').addEventListener('submit', async (e) => {
   if (!await confirmModal('Compra a cuotas', 'This breaks your promise of zero new installments. Log it only if it ALREADY happened in real life, so the system tells the truth.')) return;
   const r = await api('/api/compra', { body: {
     creditor: $('#cpCred').value, concepto: $('#cpConcepto').value,
-    valor: +$('#cpValor').value, cuotas: +$('#cpCuotas').value,
+    valor: numVal('#cpValor'), cuotas: +$('#cpCuotas').value,
     start: +$('#cpStart').value } });
   if (r.error) { toast('⚠ ' + r.error, 'err'); return; }
   toast('💳 Purchase logged. The system now accounts for it.');
@@ -2341,7 +2449,7 @@ $('#debtNew').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!await confirmModal('Registrar deuda', 'Remember your promise: nothing new on installments. Only log it if it already exists in real life, so the boss shows its true HP.')) return;
   const r = await api('/api/debt/new', { body: {
-    name: $('#ndName').value, valor: +$('#ndValor').value,
+    name: $('#ndName').value, valor: numVal('#ndValor'),
     cuotas: +$('#ndCuotas').value || 0, start: +$('#ndStart').value || 0,
     due_date: $('#ndDue').value || '' } });
   if (r.error) { toast('⚠ ' + r.error, 'err'); return; }

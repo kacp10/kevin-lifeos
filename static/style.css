@@ -179,10 +179,12 @@ footer code { color: var(--gold); }
 .mini-title { font-size: .72rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--gold); margin: 6px 0 8px; }
 .gold-txt { color: var(--gold); font-family: 'Russo One', sans-serif; }
 .check-item {
-  display: grid; grid-template-columns: 26px 1fr auto auto; gap: 8px;
-  align-items: center; padding: 6px 2px; border-bottom: 1px solid var(--line);
+  display: grid; grid-template-columns: 26px 1fr auto; gap: 10px;
+  align-items: center; padding: 8px 2px; border-bottom: 1px solid var(--line);
   font-size: .86rem; cursor: pointer;
 }
+.check-item .cmid { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.check-item .cname { display: flex; align-items: center; gap: 6px; }
 .check-item:hover { background: #221c3d; }
 .check-item .box {
   width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 6px;
@@ -539,7 +541,7 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .btn-ghost { background: transparent; border: 1px solid var(--line); color: var(--txt);
   border-radius: 9px; padding: 8px 12px; cursor: pointer; font-size: .82rem; }
 .btn-ghost:hover { border-color: var(--gold); }
-.svc-edit { background: none; border: none; color: var(--mut); cursor: pointer; font-size: .9rem; opacity: .6; margin-left: 4px; }
+.svc-edit { background: none; border: none; color: var(--mut); cursor: pointer; font-size: .82rem; opacity: .55; padding: 0 2px; flex-shrink: 0; }
 .svc-edit:hover { opacity: 1; color: var(--gold); }
 .btn-add-svc { background: transparent; border: 1px dashed var(--line); color: var(--mut);
   border-radius: 9px; padding: 8px; cursor: pointer; width: 100%; margin-top: 8px; font-size: .82rem; }
@@ -671,3 +673,20 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 /* botón editar deuda registrada */
 .ed-extra { background: none; border: none; cursor: pointer; opacity: .6; font-size: .9rem; padding: 0 4px; }
 .ed-extra:hover { opacity: 1; }
+
+/* ====== REGLA 50/30/20 v36 ====== */
+.rule-box { margin-top: 14px; display: grid; gap: 6px; }
+.rule-row { display: flex; justify-content: space-between; align-items: center;
+  font-size: .84rem; padding: 7px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.rule-row span { color: var(--mut); }
+.rule-row b { font-variant-numeric: tabular-nums; }
+.rule-row b.ok { color: var(--ok); }
+.rule-row b.over { color: var(--gold); }
+.rule-row.debt { border-color: rgba(224,68,92,.4); }
+.rule-row.debt b { color: #e0445c; }
+
+/* ====== AVISO DE PAGOS PRÓXIMOS v36 ====== */
+.pay-soon { margin-top: 10px; display: grid; gap: 6px; text-align: left; }
+.pay-soon-row { display: flex; justify-content: space-between; gap: 10px; font-size: .84rem;
+  padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.pay-soon-row b { color: var(--gold); }
