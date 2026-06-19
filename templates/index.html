@@ -64,7 +64,7 @@
     <p class="hint">Log where your money goes. If you pay with a credit card, it adds to that card's installments automatically.</p>
     <form id="expenseNew" class="expense-form">
       <input id="exName" placeholder="What was it? (e.g. Groceries, Netflix)" required>
-      <input id="exAmount" type="number" min="1" placeholder="Amount" required>
+      <input id="exAmount" type="text" inputmode="numeric" class="money-live" placeholder="Amount" required>
       <select id="exMethod"></select>
       <select id="exKind">
         <option value="once">One-time</option>
@@ -114,6 +114,7 @@
     <div class="panel">
       <h2>Where the money goes</h2>
       <canvas id="pieChart" height="240"></canvas>
+      <div id="regla502030" class="rule-box"></div>
     </div>
     <div class="panel">
       <h2>This month's payments</h2>
@@ -144,7 +145,7 @@
       <h2>Attack (log a payment)</h2>
       <form id="abonoForm" class="abono-form">
         <select id="abonoDebt"></select>
-        <input type="number" id="abonoValor" placeholder="Payment amount" min="1" required>
+        <input type="text" inputmode="numeric" class="money-live" id="abonoValor" placeholder="Payment amount" required>
         <button type="submit" class="btn-attack">⚔ Deal damage</button>
       </form>
       <p class="hint">Every installment or payment you make in real life, log it here and watch the bar go down.</p>
@@ -157,7 +158,7 @@
       <h2 style="margin-top:18px">☠ A new enemy appeared</h2>
       <form id="debtNew" class="abono-form">
         <input id="ndName" placeholder="Which debt? (e.g. Falabella)" required>
-        <input id="ndValor" type="number" min="1" placeholder="Total amount" required>
+        <input id="ndValor" type="text" inputmode="numeric" class="money-live" placeholder="Total amount" required>
         <input id="ndCuotas" type="number" min="0" max="60" placeholder="# installments (0 = none)">
         <select id="ndStart"></select>
         <input id="ndDue" type="date" title="Promised payment date (optional)">
@@ -168,7 +169,7 @@
       <form id="compraNew" class="abono-form">
         <select id="cpCred"></select>
         <input id="cpConcepto" placeholder="What did you buy?" required>
-        <input id="cpValor" type="number" min="1" placeholder="Total amount" required>
+        <input id="cpValor" type="text" inputmode="numeric" class="money-live" placeholder="Total amount" required>
         <input id="cpCuotas" type="number" min="1" max="60" placeholder="# installments" required>
         <select id="cpStart"></select>
         <button class="btn-gold" type="submit">Log purchase</button>
@@ -321,7 +322,7 @@
 </section>
 
 </main>
-<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v35</b></footer>
-<script src="/static/app.js?v=35"></script>
+<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v36</b></footer>
+<script src="/static/app.js?v=36"></script>
 </body>
 </html>
