@@ -14,7 +14,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 43  # debe coincidir con FRONT_V en static/app.js
+VERSION = 44  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -1308,6 +1308,28 @@ def extra_debt_redefer():
 @app.delete('/api/compra/<int:i>')
 def compra_del(i):
     db().execute('DELETE FROM compras WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/compra/abonar')
+def compra_abonar():
+    """Abona (paga por adelantado) N cuotas de una compra: baja el número de cuotas
+    y el valor en N cuotas. Si quedan 0, borra la compra. Reduce la deuda del boss."""
+    j = request.json
+    cid = int(j['id'])
+    n = max(1, int(j.get('cuotas_pagadas', 1)))
+    c = db().execute('SELECT * FROM compras WHERE id=?', (cid,)).fetchone()
+    if not c:
+        return jsonify(error='no encontrado'), 404
+    c = dict(c)
+    cuota = round(c['valor'] / c['cuotas']) if c['cuotas'] else 0
+    nuevas = c['cuotas'] - n
+    if nuevas <= 0:
+        db().execute('DELETE FROM compras WHERE id=?', (cid,))   # pagada por completo
+    else:
+        nuevo_valor = max(c['valor'] - cuota * n, 0)
+        db().execute('UPDATE compras SET cuotas=?, valor=? WHERE id=?', (nuevas, nuevo_valor, cid))
     db().commit()
     return jsonify(ok=True)
 
