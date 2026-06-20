@@ -147,7 +147,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 42;
+const FRONT_V = 43;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -161,19 +161,11 @@ const ACT_TO_HABIT = {
   dormir: 'Sleep well',
   skincare: 'Take care my face and body'
 };
-// Sub-tareas del bloque de inglés (para preguntar una por una al marcar)
-// Extrae los pasos numerados (1) 2) 3)) de la rutina de inglés de un día concreto
+// Sub-tareas del bloque de inglés (para preguntar una por una al marcar la casilla).
+// Devuelve el título del día y sus pasos: cada paso tiene .s (corto) y .how (cómo hacerlo bien).
 function pasosInglesDelDia(wd) {
   const plan = INGLES_PLAN[wd] || INGLES_PLAN[0];
-  const titulo = plan[0];      // ej: "English — Shadowing day"
-  const desc = plan[1];        // ej: "1) ... 2) ... 3) ..."
-  // partir por los marcadores "N)"
-  const partes = desc.replace(/^\d\)\s*/, '').split(/\d\)\s*/).map(s => s.trim()).filter(Boolean);
-  if (partes.length <= 1) {
-    // día sin pasos numerados (ej. Light immersion): un solo paso con toda la descripción
-    return { titulo, pasos: [{ t: titulo, d: desc }] };
-  }
-  return { titulo, pasos: partes.map((p, i) => ({ t: `Step ${i + 1}`, d: p })) };
+  return { titulo: plan.title, pasos: plan.steps };
 }
 
 const ENGLISH_TASKS = [
@@ -1680,20 +1672,46 @@ const DIAS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 // SISTEMA REAL DE INGLÉS — output diario (lo que más cuesta = el centro).
 // Cada día: hablar primero, luego un recurso distinto, y SIEMPRE cerrar hablando con la IA.
 const INGLES_PLAN = [
-  // Lunes — 🗣 SPEAKING (output oral)
-  ['English — 🗣 Speaking day', '1) Warm-up: talk OUT LOUD about your day for 5 minutes and record yourself. Do not stop to fix mistakes — fluency first. (ES: habla en voz alta de tu día 5 min, grábate, sin parar a corregir.) 2) Listen back to one minute of your recording and note 3 things to improve. (ES: escucha 1 min de tu grabación y anota 3 cosas a mejorar.) 3) Tell the AI in English what your day was like and let it correct you. (ES: cuéntale a la IA en inglés cómo fue tu día.)'],
+  // Lunes — 🗣 SPEAKING
+  { title: '🗣 Speaking day', steps: [
+    { s: 'Talk for 5 minutes about your day', how: "Speak out loud and record yourself on your phone. Do not stop to fix mistakes — the goal is to keep the words flowing even if they come out messy. Fluency is built by talking, not by being perfect." },
+    { s: 'Listen back and find 3 things to improve', how: "Play back one minute of your recording. Write down 3 specific things: a word you said wrong, a sentence that got stuck, or something you wanted to say but couldn't. This turns plain talking into real progress." },
+    { s: 'Tell the AI in English about your day', how: "Open a chat and describe your day in English. Ask it to correct only your 2 biggest mistakes — fixing everything at once is overwhelming and you forget it all." }
+  ]},
   // Martes — 🎧 LISTENING (shadowing)
-  ['English — 🎧 Listening day', '1) Warm-up talking for 3 minutes about anything. (ES: calienta hablando 3 min.) 2) Pick a Disney+/Netflix scene you already know, English subtitles on. Repeat each line out loud right after the actor, copying rhythm and accent — this is shadowing. Do 15 minutes. (ES: repite cada línea en voz alta imitando al actor, 15 min.) 3) Summarize the scene to the AI in English, out loud. (ES: resume la escena a la IA en inglés, en voz alta.)'],
+  { title: '🎧 Listening day', steps: [
+    { s: 'Warm up talking for 3 minutes', how: "Say anything out loud in English to wake up your mouth — your plans, a memory, an opinion. No recording, no pressure." },
+    { s: 'Shadow a scene you know (15 min)', how: "Pick a Disney+/Netflix scene you have seen before, subtitles ON. Pause after each line and repeat it out loud copying the actor's rhythm and accent exactly. Copying real speech is how your accent improves." },
+    { s: 'Summarize the scene to the AI out loud', how: "Tell the AI what happened, speaking instead of typing if you can. This forces you to USE the words you just heard, which is what locks them into memory." }
+  ]},
   // Miércoles — 📖 READING
-  ['English — 📖 Reading day', '1) Read a short text or one unit of American School Way OUT LOUD for 15 minutes — reading aloud trains pronunciation too. (ES: lee un texto corto en voz alta 15 min.) 2) Write down 8 new words and say one sentence out loud with each. (ES: apunta 8 palabras nuevas y di una frase con cada una.) 3) Retell what you read to the AI in your own words, in English. (ES: cuéntale a la IA lo que leíste con tus palabras.)'],
-  // Jueves — ✍️ WRITING (output escrito)
-  ['English — ✍️ Writing day', '1) Write a short paragraph in English: your day, an opinion, or a plan. Aim for 6-10 sentences. (ES: escribe un párrafo de 6-10 frases en inglés.) 2) Read it OUT LOUD to catch what sounds wrong. (ES: léelo en voz alta para detectar errores.) 3) Send it to the AI and ask it to correct it and explain 2 mistakes. (ES: mándalo a la IA y pide que corrija y explique 2 errores.)'],
-  // Viernes — 💬 CONVERSATION (la más dura)
-  ['English — 💬 Conversation day', '1) No warm-up — go straight into talking with the AI for 20-25 minutes about anything: work, anime, your dreams. (ES: directo a conversar con la IA 20-25 min.) 2) Push yourself to speak 2 minutes non-stop on one topic. (ES: fuérzate a hablar 2 min seguidos de un tema.) 3) Ask the AI for the 3 mistakes you repeated most and write them down. (ES: pide a la IA tus 3 errores más repetidos y anótalos.) This is the day that breaks plateaus.'],
-  // Sábado — 🎬 LISTENING + PRODUCE
-  ['English — 🎬 Watch & produce day', '1) Talk for 5 minutes to warm up. (ES: calienta hablando 5 min.) 2) Re-watch a scene from earlier this week WITHOUT subtitles and see how much you catch. (ES: revé una escena de la semana SIN subtítulos.) 3) Record yourself retelling it, then send it to the AI to correct. (ES: grábate contándola y mándala a la IA para que corrija.)'],
+  { title: '📖 Reading day', steps: [
+    { s: 'Read a short text out loud (15 min)', how: "Use one unit of American School Way or a short article. Reading ALOUD trains pronunciation and reading at the same time. If a word looks hard, say it anyway and check it afterwards." },
+    { s: 'Collect 8 new words and use them', how: "Write down 8 words you didn't know. Say one full sentence out loud with each. A word you only recognize is passive; a word you can USE is truly yours." },
+    { s: 'Retell what you read to the AI', how: "Explain the text in your own words in English — don't copy sentences, rebuild the idea yourself. If you can re-explain it, you really understood it." }
+  ]},
+  // Jueves — ✍️ WRITING
+  { title: '✍️ Writing day', steps: [
+    { s: 'Write a short paragraph (6–10 sentences)', how: "Pick anything: your day, an opinion, weekend plans. Try to think directly in English instead of translating word by word from Spanish, even if what you write comes out simpler." },
+    { s: 'Read your paragraph out loud', how: "Reading your own writing aloud is the fastest way to catch what sounds wrong — your ear notices mistakes your eyes skip over." },
+    { s: 'Send it to the AI for correction', how: "Ask the AI to correct it AND explain 2 of the mistakes, so you learn the rule and not just the fix. Save that rule somewhere you'll see it again." }
+  ]},
+  // Viernes — 💬 CONVERSATION
+  { title: '💬 Conversation day', steps: [
+    { s: 'Talk with the AI for 20–25 minutes', how: "No warm-up, jump straight in. Talk about work, anime, your dreams — anything real. Keep going even when it's hard; pushing through the awkward part is exactly where the growth happens." },
+    { s: 'Speak 2 minutes non-stop on one topic', how: "Pick one topic and talk for 2 full minutes without stopping. If you get stuck, describe the word you're missing in English instead of switching to Spanish. This one drill breaks plateaus." },
+    { s: 'Get your top 3 repeated mistakes', how: "Ask the AI which 3 mistakes you repeated most, write them down, and watch for them next time. Fixing your most-repeated errors raises your level faster than anything else." }
+  ]},
+  // Sábado — 🎬 WATCH & PRODUCE
+  { title: '🎬 Watch & produce day', steps: [
+    { s: 'Warm up talking for 5 minutes', how: "Loosen up your mouth with 5 minutes of free talking before you start. Producing always feels easier after a warm-up." },
+    { s: 'Re-watch a scene WITHOUT subtitles', how: "Take a scene from earlier this week and watch it again with no subtitles. Notice how much MORE you catch than the first time — that gap is your listening improving." },
+    { s: 'Record yourself retelling it', how: "Retell the scene out loud, record it, and send it to the AI to correct. Producing right after listening is what turns 'I understood it' into 'I can say it'." }
+  ]},
   // Domingo — 🌿 LIGHT IMMERSION / REVIEW
-  ['English — 🌿 Light immersion', 'Lighter day, on purpose. Watch something you LOVE in English (subtitles on if you need them) and note 5 phrases that sounded natural. Say each one out loud 3 times, then review your mistakes notes from the week. (ES: ve algo que ames en inglés, anota 5 frases naturales y repásalas; revisa tus errores de la semana.) Rest is part of learning.']
+  { title: '🌿 Light immersion', steps: [
+    { s: 'Enjoy English you love, then review the week', how: "Watch or listen to something you genuinely love in English (subtitles on if you need them). Note 5 phrases that sounded natural and say each one out loud 3 times. Then re-read your mistake notes from the week. Light rest days still count — they keep you consistent without burning out." }
+  ]}
 ];
 // Etapas A1 → C1 cubriendo las 4 habilidades. 'level' = nivel que ALCANZAS al completar la etapa
 // (se usa para el veredicto cuando metes el resultado de un test real).
@@ -1995,7 +2013,9 @@ function actividadesDelDia(wd, shiftKey) {
   const sh = SHIFTS[shiftKey] || SHIFTS.libre;
   const active = (S.careers || []).find(c => c.active) || (S.careers || [])[0];
   const focoLabel = active ? `${active.icon || ''} ${active.name}` : 'Study';
-  const [ing, ingDesc] = INGLES_PLAN[wd] || INGLES_PLAN[0];
+  const _ingPlan = INGLES_PLAN[wd] || INGLES_PLAN[0];
+  const ing = _ingPlan.title;                                   // ej: "🗣 Speaking day"
+  const ingDesc = _ingPlan.steps.map((st, i) => `${i + 1}) ${st.s}`).join('  ');  // pasos cortos numerados
   const studyDesc = active
     ? `${active.course || active.name} (at ${active.pct || 0}%). Advance one module + take notes.`
     : 'Advance your active course + take notes.';
@@ -2270,8 +2290,8 @@ document.addEventListener('click', async (e) => {
       for (let k = 0; k < pasos.length; k++) {
         if (hechos.has(`${day}|ingles#${k}`)) continue;     // paso ya confirmado antes: saltar
         const ultimo = k === pasos.length - 1;
-        const r = await modal({ icon: '🗣', title: `${titulo} · paso ${k + 1} de ${pasos.length}`,
-          text: `Did you do this part?<br><br><b>${pasos[k].d}</b>`,
+        const r = await modal({ icon: '🗣', title: `${titulo} · step ${k + 1} of ${pasos.length}`,
+          text: `<b>${k + 1}) ${pasos[k].s}</b><br><br><span style="color:var(--mut);font-size:.82rem">HOW TO DO IT WELL</span><br>${pasos[k].how}`,
           okText: ultimo ? 'Yes ✓ — finish English' : 'Yes ✓ — next step', extraBtn: 'Not yet' });
         if (r !== true) {                                   // "Not yet"/Cancel: guarda hasta aquí y sale
           toast('Progress saved 💪 — next time you continue from this step.');
