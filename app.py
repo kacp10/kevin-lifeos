@@ -14,7 +14,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 46  # debe coincidir con FRONT_V en static/app.js
+VERSION = 47  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -1210,9 +1210,10 @@ def detalle_redefer():
     if not row:
         return jsonify(error='no encontrado'), 404
     it = dict(row)
-    # saldo restante = cuota * (total - pagadas)
+    # saldo restante = cuota * (total - pagadas); o el monto correcto si lo mandan
+    monto = int(j.get('monto') or 0)
     restantes = max((it['total'] or 0) - (it['pagadas'] or 0), 0)
-    saldo = (it['cuota'] or 0) * restantes
+    saldo = monto if monto > 0 else (it['cuota'] or 0) * restantes
     nueva_cuota = round(saldo / nuevas)
     # reiniciar: nuevas cuotas, 0 pagadas
     db().execute('UPDATE detalle_items SET cuota=?, pagadas=0, total=? WHERE id=?',
@@ -1285,8 +1286,9 @@ def creditor_redefer():
     if nombre not in cred:
         return jsonify(error='deuda no encontrada'), 404
     arr = cred[nombre]
-    # saldo restante = suma de las cuotas desde 'desde' en adelante
-    saldo = sum(arr[desde:])
+    # saldo restante = suma de las cuotas desde 'desde'; o el monto correcto si lo mandan
+    monto = int(j.get('monto') or 0)
+    saldo = monto if monto > 0 else sum(arr[desde:])
     cuota = round(saldo / nuevas)
     # reescribir el array: 0 antes de 'desde', luego 'nuevas' cuotas, luego 0
     nuevo_arr = []
@@ -1320,8 +1322,9 @@ def compra_redefer():
         return jsonify(error='datos inválidos'), 400
     c = dict(c)
     cuota_vieja = round(c['valor'] / c['cuotas']) if c['cuotas'] else 0
+    monto = int(j.get('monto') or 0)
     pagadas = max(0, min(pagadas, c['cuotas']))
-    saldo = max(c['valor'] - cuota_vieja * pagadas, 0)   # lo que falta por pagar
+    saldo = monto if monto > 0 else max(c['valor'] - cuota_vieja * pagadas, 0)   # monto correcto o lo que falta
     # el nuevo "valor" de la compra pasa a ser el saldo, repartido en las nuevas cuotas
     db().execute('UPDATE compras SET valor=?, cuotas=?, start=? WHERE id=?',
                  (saldo, nuevas, start, cid))
@@ -1342,8 +1345,9 @@ def extra_debt_redefer():
     if not d or nuevas < 1:
         return jsonify(error='datos inválidos'), 400
     d = dict(d)
+    monto = int(j.get('monto') or 0)
     pagadas = max(0, min(pagadas, d['cuotas'] or 0))
-    saldo = max(d['total'] - (d['cuota'] or 0) * pagadas, 0)
+    saldo = monto if monto > 0 else max(d['total'] - (d['cuota'] or 0) * pagadas, 0)
     nueva_cuota = round(saldo / nuevas)
     db().execute('UPDATE extra_debts SET total=?, cuotas=?, cuota=?, start=? WHERE id=?',
                  (saldo, nuevas, nueva_cuota, start, did))
