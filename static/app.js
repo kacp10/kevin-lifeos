@@ -48,7 +48,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 37;
+const FRONT_V = 38;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -498,18 +498,26 @@ function renderInicio() {
       }
     });
   const totalDeudas = deudas.reduce((s, d) => s + d[1], 0);
+  // NEEDS = suma de "Life & services" (todo lo que agregues va aquí),
+  //         EXCEPTO el aporte al fondo de empresa (método 'Fondo'), que cuenta como Savings.
+  const needs = (S.servicios || [])
+    .filter(s => s.method !== 'Fondo')
+    .reduce((acc, x) => acc + (x.amount || 0), 0);
+  // SAVINGS = aporte mensual del fondo de empresa (la suma de las "Quota" del fondo).
+  //           Es editable: si algún mes lo subes a 220.000, la torta lo refleja solo.
+  const ahorroFondo = (S.fund || []).reduce((acc, f) => acc + (f.quota || 0), 0);
   // gastos del mes actual que NO son a crédito (los de crédito ya cuentan como cuota)
   const mesKey = p.months[i];
   const gastosMes = (S.expenses || []).filter(x =>
     (x.kind === 'monthly' || x.month === mesKey) && !payMethod(x.method).card && x.method !== 'Ahorro')
     .reduce((s, x) => s + x.amount, 0);
-  const egresos = p.vida + p.ahorro + totalDeudas + gastosMes;
+  const egresos = needs + ahorroFondo + totalDeudas + gastosMes;
   const saldo = ingreso - egresos;
 
   $('#kpis').innerHTML = `
     <div class="card"><label>Monthly income</label><strong>${fmt(ingreso)}</strong></div>
     <div class="card red"><label>Debt this month</label><strong>${fmt(totalDeudas)}</strong></div>
-    <div class="card"><label>Life + savings</label><strong>${fmt(p.vida + p.ahorro)}</strong></div>
+    <div class="card"><label>Life + savings</label><strong>${fmt(needs + ahorroFondo)}</strong></div>
     <div class="card ${saldo >= 0 ? 'green' : 'red'}"><label>Expected balance</label><strong>${fmt(saldo)}</strong></div>` +
     (() => {
       const crecioCompras = deudas.reduce((s, d) => s + d[2], 0);
@@ -534,13 +542,13 @@ function renderInicio() {
     dPct > 0.3 ? '🛡 HOLDING: debt still weighs more than ideal. You\'re on the right track.' :
     '👑 50/30/20 ZONE: debt now fits the rule. Time to spend on wants and dreams.';
 
-  const vals = [p.vida, p.ahorro, totalDeudas, Math.max(saldo, 0)];
+  const vals = [needs, ahorroFondo, totalDeudas, Math.max(saldo, 0)];
   const sumaTotal = vals.reduce((a, b) => a + b, 0) || 1;
   const pctDe = (v) => Math.round((v / sumaTotal) * 100);
   const data = {
     labels: [
-      `Needs ${pctDe(p.vida)}%`,
-      `Savings ${pctDe(p.ahorro)}%`,
+      `Needs ${pctDe(needs)}%`,
+      `Savings ${pctDe(ahorroFondo)}%`,
       `Debt ${pctDe(totalDeudas)}%`,
       `Free cushion ${pctDe(Math.max(saldo, 0))}%`
     ],
@@ -565,10 +573,10 @@ function renderInicio() {
   // resumen 50/30/20 debajo de la torta
   const r502030 = document.getElementById('regla502030');
   if (r502030) {
-    const needsPct = pctDe(p.vida), savePct = pctDe(p.ahorro), debtPct = pctDe(totalDeudas);
+    const needsPct = pctDe(needs), savePct = pctDe(ahorroFondo), debtPct = pctDe(totalDeudas);
     r502030.innerHTML = `
-      <div class="rule-row"><span>🏠 Needs (target 50%)</span><b class="${p.vida/sumaTotal<=0.55?'ok':'over'}">${needsPct}%</b></div>
-      <div class="rule-row"><span>💰 Savings (target 20%)</span><b class="${p.ahorro/sumaTotal>=0.15?'ok':'over'}">${savePct}%</b></div>
+      <div class="rule-row"><span>🏠 Needs (target 50%)</span><b class="${needs/sumaTotal<=0.55?'ok':'over'}">${needsPct}%</b></div>
+      <div class="rule-row"><span>💰 Savings (target 20%)</span><b class="${ahorroFondo/sumaTotal>=0.15?'ok':'over'}">${savePct}%</b></div>
       <div class="rule-row debt"><span>⚔ Debt (extra, until free)</span><b class="over">${debtPct}%</b></div>`;
   }
 
@@ -930,10 +938,13 @@ function renderChecklist(i, deudas) {
       </div>
       <span class="cval">${fmt(val)}</span></div>`;
   };
-  $('#checkServicios').innerHTML = (S.servicios || []).map(svcRow).join('')
+  // El aporte al fondo de empresa (método 'Fondo') NO se muestra aquí:
+  // tiene su propia sección "Company fund". Se excluye de la lista y del conteo.
+  const serviciosVisibles = (S.servicios || []).filter(s => s.method !== 'Fondo');
+  $('#checkServicios').innerHTML = serviciosVisibles.map(svcRow).join('')
     + `<button class="btn-add-svc" id="addServiceBtn">+ Add service</button>`;
   $('#checkDeudas').innerHTML = deudas.map(debtRow).join('');
-  const total = (S.servicios || []).length + deudas.length;
+  const total = serviciosVisibles.length + deudas.length;
   const done = [...checks].filter(c => c.endsWith('|' + mk)).length;
   $('#checkCount').textContent = `${done} / ${total} paid`;
 
@@ -948,7 +959,7 @@ function renderIncomeBar(i, mk, deudas) {
   const checks = new Set(S.checks);
   // lo "pagado" del mes = servicios marcados + deudas marcadas (lo que dio check)
   let pagado = 0;
-  for (const s of (S.servicios || [])) if (checks.has(`${s.name}|${mk}`)) pagado += s.amount;
+  for (const s of (S.servicios || [])) if (s.method !== 'Fondo' && checks.has(`${s.name}|${mk}`)) pagado += s.amount;
   for (const d of deudas) if (checks.has(`${d[0]}|${mk}`)) pagado += d[1];
   // + gastos sueltos del mes que no son a crédito
   const mesKey = S.plan.months[i];
