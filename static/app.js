@@ -1,6 +1,32 @@
 /* KEVIN LIFE OS — frontend */
 let S = null;          // estado global del servidor
 let pieChart = null;
+// Plugin: dibuja el % dentro de cada pedazo de la torta (con borde oscuro para que se lea sobre cualquier color)
+const sliceLabels = {
+  id: 'sliceLabels',
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart;
+    const meta = chart.getDatasetMeta(0);
+    const data = (chart.data.datasets[0] || {}).data || [];
+    const total = data.reduce((a, b) => a + (b || 0), 0) || 1;
+    meta.data.forEach((arc, i) => {
+      const val = data[i] || 0;
+      const pct = Math.round((val / total) * 100);
+      if (pct < 6) return;                 // no dibujar en rebanadas muy chicas
+      const pos = arc.tooltipPosition();   // punto medio del arco
+      ctx.save();
+      ctx.font = '700 14px Inter, system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = 'rgba(19,16,34,.9)';
+      ctx.strokeText(pct + '%', pos.x, pos.y);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(pct + '%', pos.x, pos.y);
+      ctx.restore();
+    });
+  }
+};
 const $ = (q) => document.querySelector(q);
 const fmt = (n) => '$' + Math.round(n).toLocaleString('es-CO');
 // lee un input quitando los puntos de miles (para money-live)
@@ -121,7 +147,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 39;
+const FRONT_V = 40;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -348,7 +374,6 @@ async function load(animate) {
   renderFreedom();
   renderInicio();
   renderShopping();
-  document.querySelectorAll('.money-live').forEach(engancharMiles);
   renderBoss(animate);
   renderHabitos();
   renderSuenos();
@@ -358,6 +383,8 @@ async function load(animate) {
   renderLife();
   renderHaki();
   renderAchievements();
+  // engancha el formato de miles en vivo a TODOS los campos .money-live ya dibujados
+  document.querySelectorAll('.money-live').forEach(engancharMiles);
   setTimeout(avisosInteligentes, 1200);
   setTimeout(preguntaPagoDelDia, 2000);
 }
@@ -615,19 +642,14 @@ function renderInicio() {
     dPct > 0.3 ? '🛡 HOLDING: debt still weighs more than ideal. You\'re on the right track.' :
     '👑 50/30/20 ZONE: debt now fits the rule. Time to spend on wants and dreams.';
 
-  const vals = [needs, ahorroFondo, totalDeudas, Math.max(saldo, 0)];
+  const vals = [needs, ahorroFondo, totalDeudas];
   const sumaTotal = vals.reduce((a, b) => a + b, 0) || 1;
   const pctDe = (v) => Math.round((v / sumaTotal) * 100);
   const data = {
-    labels: [
-      `Needs ${pctDe(needs)}%`,
-      `Savings ${pctDe(ahorroFondo)}%`,
-      `Debt ${pctDe(totalDeudas)}%`,
-      `Free cushion ${pctDe(Math.max(saldo, 0))}%`
-    ],
+    labels: ['Needs', 'Savings', 'Debt'],
     datasets: [{
       data: vals,
-      backgroundColor: ['#7c6ce0', '#f5b942', '#e0445c', '#36c9a7'],
+      backgroundColor: ['#7c6ce0', '#f5b942', '#e0445c'],
       borderColor: '#1d1932', borderWidth: 3
     }]
   };
@@ -636,12 +658,12 @@ function renderInicio() {
       legend: { labels: { color: '#ece9f7', font: { size: 12 } } },
       tooltip: { callbacks: { label: (ctx) => {
         const v = ctx.parsed; const pct = Math.round((v / sumaTotal) * 100);
-        return `${ctx.label.replace(/ \d+%$/, '')}: ${fmt(v)} (${pct}%)`;
+        return `${ctx.label}: ${fmt(v)} (${pct}%)`;
       } } }
     }, cutout: '58%'
   };
   if (pieChart) { pieChart.data = data; pieChart.options = opts; pieChart.update(); }
-  else pieChart = new Chart($('#pieChart'), { type: 'doughnut', data, options: opts });
+  else pieChart = new Chart($('#pieChart'), { type: 'doughnut', data, options: opts, plugins: [sliceLabels] });
 
   // panel asesor 50/30/20 (Needs/Savings/Debt sobre el ingreso) debajo de la torta
   renderAdvisor(ingreso, needs, ahorroFondo, totalDeudas);
@@ -1952,6 +1974,7 @@ function bloqueEstudio(pf) {
 }
 
 let CUR_WD = 0;
+let _routineBusy = false;   // seguro: evita procesar dos veces el mismo toque en la rutina
 // Convierte una etiqueta de hora a un número ordenable (minutos desde medianoche).
 // "6:00"->360, "14:00"->840, "8:30"->510. Textos sin hora van al final en orden lógico.
 function horaOrden(t) {
@@ -2156,26 +2179,43 @@ document.addEventListener('click', async (e) => {
 
   const c = e.target.closest('.rb-check');
   if (!c) return;
+  if (_routineBusy) return;                 // evita doble disparo del mismo toque (móvil)
+  _routineBusy = true;
+  try {
   const day = c.dataset.day, act = c.dataset.act;
   const marcando = !c.classList.contains('on');
 
   if (marcando) {
-    // CASO ESPECIAL: inglés pregunta tarea por tarea
+    // CASO ESPECIAL inglés: confirma TODOS los pasos del día, uno tras otro, en UN SOLO clic.
     if (act === 'ingles') {
       const { titulo, pasos } = pasosInglesDelDia(CUR_WD);
       for (let k = 0; k < pasos.length; k++) {
-        const task = pasos[k];
-        const r = await modal({ icon: '🗣', title: `${titulo} · ${k + 1}/${pasos.length}`,
-          text: `Did you do this part?<br><br><b>${task.d}</b>`,
-          okText: 'Yes, done ✓', extraBtn: 'Not yet' });
-        if (r === 'EXTRA' || r === null) {
+        const ultimo = k === pasos.length - 1;
+        const r = await modal({ icon: '🗣', title: `${titulo} · paso ${k + 1} de ${pasos.length}`,
+          text: `Did you do this part?<br><br><b>${pasos[k].d}</b>`,
+          okText: ultimo ? 'Yes ✓ — finish' : 'Yes ✓ — next step', extraBtn: 'Not yet' });
+        if (r !== true) {                     // 'Not yet', Cancel o cerrar: no marca todavía
           toast('No worries — finish the rest and check it again. 💪');
-          return;   // no marca si falta alguna
+          return;
         }
       }
     }
+    // CASO ESPECIAL estudio/curso: al chulear, pregunta el % del curso y lo lleva solo a la carrera activa.
+    if (act === 'estudio') {
+      const active = (S.careers || []).find(x => x.active) || (S.careers || [])[0];
+      if (active) {
+        const r = await modal({ icon: active.icon || '📊', title: `${active.icon || ''} ${active.name}`.trim(),
+          text: `Nice session. What % is <b>${esc(active.course || active.name)}</b> at now?`,
+          fields: [{ type: 'number', placeholder: '0–100', value: active.pct || 0, min: 0, max: 100 }],
+          okText: 'Save & check ✓' });
+        if (r === null) return;               // canceló: no marca
+        const nv = Math.max(0, Math.min(100, parseInt(String(r[0]).replace(/[^0-9]/g, ''), 10) || 0));
+        await api('/api/career', { body: { id: active.id, field: 'pct', value: nv } });
+        toast(`📈 ${active.name} updated to ${nv}%. It flows to your goal automatically.`);
+      }
+    }
     await api('/api/routine', { body: { day, activity: act } });
-    toast('✓ Done! One more step toward your goals.');
+    if (act !== 'estudio') toast('✓ Done! One more step toward your goals.');
     // marcar el hábito sinónimo en Habits
     await sincronizarHabito(act, day, true);
   } else {
@@ -2188,6 +2228,9 @@ document.addEventListener('click', async (e) => {
     await sincronizarHabito(act, day, false);
   }
   load();
+  } finally {
+    _routineBusy = false;
+  }
 });
 
 // Marca/desmarca el hábito en Habits según una actividad de Life.
@@ -2285,8 +2328,8 @@ function renderSuenos() {
         const p = d.value ? Math.min(d.saved / d.value, 1) : 0;
         return `<div class="dream-item ${d.bought ? 'bought-item' : ''}">
           <span class="dname">${esc(d.name)} <button class="del-x" data-type="dream" data-id="${d.id}">✕</button></span>
-          <input class="d-edit" type="number" min="0" data-f="value" data-id="${d.id}" value="${d.value}" title="Valor (editable)">
-          <input class="d-edit" type="number" min="0" data-f="saved" data-id="${d.id}" value="${d.saved}" title="Lo que llevas ahorrado">
+          <input class="d-edit money-live" inputmode="numeric" data-f="value" data-id="${d.id}" value="${Number(d.value || 0).toLocaleString('es-CO')}" title="Valor (editable)">
+          <input class="d-edit money-live" inputmode="numeric" data-f="saved" data-id="${d.id}" value="${Number(d.saved || 0).toLocaleString('es-CO')}" title="Lo que llevas ahorrado">
           <div class="mini-bar green"><i style="width:${d.bought ? 100 : p * 100}%"></i></div>
           <button class="buy-btn ${d.bought ? 'on' : ''}" data-id="${d.id}">${d.bought ? '✅ Comprado' : 'Bought?'}</button>
         </div>`;
@@ -2295,8 +2338,9 @@ function renderSuenos() {
 }
 $('#dreamList').addEventListener('change', async (e) => {
   if (!e.target.classList.contains('d-edit')) return;
+  const v = +(e.target.value || '').replace(/\./g, '').replace(/[^0-9-]/g, '') || 0;
   await api('/api/dream', { body: { id: +e.target.dataset.id,
-    field: e.target.dataset.f, value: +e.target.value || 0 } });
+    field: e.target.dataset.f, value: v } });
   load();
 });
 $('#dreamList').addEventListener('click', async (e) => {
@@ -2548,7 +2592,7 @@ $('#dreamNew').addEventListener('submit', async (e) => {
   e.preventDefault();
   await api('/api/dream/new', { body: {
     category: $('#dnCat').value, name: $('#dnName').value,
-    value: +$('#dnValor').value || 0 } });
+    value: numVal('#dnValor') } });
   e.target.reset();
   load();
 });
