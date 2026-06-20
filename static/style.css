@@ -661,6 +661,9 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .redefer-btn.mini { background: none; border: none; cursor: pointer; font-size: .85rem;
   padding: 0 4px; opacity: .6; vertical-align: middle; }
 .redefer-btn.mini:hover { opacity: 1; }
+.cuota-btn { background: none; border: none; cursor: pointer; font-size: .85rem;
+  padding: 0 4px; opacity: .6; vertical-align: middle; }
+.cuota-btn:hover { opacity: 1; }
 
 /* ====== TROFEO DE DEUDAS DERROTADAS v30 ====== */
 .debt-trophy { background: rgba(245,185,66,.1); border: 1px solid var(--gold); border-radius: 10px;

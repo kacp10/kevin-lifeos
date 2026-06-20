@@ -147,7 +147,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 43;
+const FRONT_V = 44;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1409,6 +1409,9 @@ function renderDesglose() {
       vivos.map(it =>
         `<tr><td>${it.label}${it.redefer
             ? ` <button class="redefer-btn mini" data-type="${it.redefer.type}" data-id="${it.redefer.id}" data-cuotas="${it.redefer.cuotas}" title="Reschedule this purchase">🔄</button>`
+            : ''}${it.redefer && it.redefer.type === 'compra'
+            ? ` <button class="cuota-btn" data-act="abonar" data-id="${it.redefer.id}" title="Pay installments in advance">💵</button>`
+              + ` <button class="del-x" data-type="compra" data-id="${it.redefer.id}" title="Remove this purchase (added by mistake)">✕</button>`
             : ''}</td>
            <td class="num">${it.cuota ? fmt(it.cuota) : '—'}</td>
            <td class="num">${it.saldo ? fmt(it.saldo) : '—'}</td></tr>`).join('') +
@@ -2381,6 +2384,22 @@ async function sincronizarHabito(act, day, marcado) {
 
 // Rediferir cuotas (reschedule)
 document.addEventListener('click', async (e) => {
+  const ab = e.target.closest('.cuota-btn[data-act="abonar"]');
+  if (ab) {
+    const c = (S.compras || []).find(x => x.id === +ab.dataset.id);
+    if (!c) return;
+    const cuota = Math.round(c.valor / c.cuotas);
+    const r = await modal({ icon: '💵', title: 'Pay installments in advance',
+      text: `<b>${esc(c.concepto)}</b> · ${c.cuotas} installments of ${fmt(cuota)}.<br><br>How many do you want to pay off right now? Each one you pay removes a future installment and lowers the debt — just like a bank prepayment.`,
+      fields: [{ type: 'number', placeholder: 'How many installments', value: 1, min: 1, max: c.cuotas }],
+      okText: 'Pay it down' });
+    if (!r || !r[0]) return;
+    const n = Math.max(1, Math.min(c.cuotas, +r[0]));
+    await api('/api/compra/abonar', { body: { id: c.id, cuotas_pagadas: n } });
+    toast(n >= c.cuotas ? '✅ Purchase fully paid — gone from the boss.' : `💵 Paid ${n} installment(s) — debt reduced.`);
+    load();
+    return;
+  }
   const btn = e.target.closest('.redefer-btn');
   if (!btn) return;
   const tipo = btn.dataset.type;
@@ -2602,8 +2621,8 @@ function renderLibros() {
         <td><select class="book-status" data-id="${b.id}">
           ${BOOK_STATES.map(([v, t]) => `<option value="${v}" ${v === b.status ? 'selected' : ''}>${t}</option>`).join('')}
         </select></td>
-        <td><input class="pg-input" type="number" min="0" value="${b.pages}" data-id="${b.id}" data-f="pages"></td>
-        <td><input class="pg-input" type="number" min="0" value="${b.current}" data-id="${b.id}" data-f="current"></td>
+        <td><input class="pg-input" type="number" min="0" placeholder="total" value="${b.pages || ''}" data-id="${b.id}" data-f="pages"></td>
+        <td><input class="pg-input" type="number" min="0" placeholder="page" value="${b.current || ''}" data-id="${b.id}" data-f="current"></td>
         <td><div class="mini-bar green" style="width:90px"><i style="width:${p * 100}%"></i></div></td>
         <td><button class="del-x" data-type="book" data-id="${b.id}">✕</button></td></tr>`;
     }).join('');
@@ -2618,10 +2637,20 @@ document.addEventListener('click', (e) => {
 });
 $('#bookTable').addEventListener('change', async (e) => {
   const id = +e.target.dataset.id;
-  if (e.target.classList.contains('book-status'))
+  if (e.target.classList.contains('book-status')) {
     await api('/api/book', { body: { id, field: 'status', value: e.target.value } });
-  else if (e.target.classList.contains('pg-input'))
-    await api('/api/book', { body: { id, field: e.target.dataset.f, value: +e.target.value || 0 } });
+  } else if (e.target.classList.contains('pg-input')) {
+    const f = e.target.dataset.f, val = +e.target.value || 0;
+    await api('/api/book', { body: { id, field: f, value: val } });
+    // ESTADO AUTOMÁTICO por páginas: si llegas al total -> Terminado; si avanzas -> Leyendo
+    const b = (S.books || []).find(x => x.id === id) || {};
+    const pages = f === 'pages' ? val : (b.pages || 0);
+    const current = f === 'current' ? val : (b.current || 0);
+    if (pages > 0 && current >= pages)
+      await api('/api/book', { body: { id, field: 'status', value: 'Terminado' } });
+    else if (current > 0 && b.status !== 'Terminado' && b.status !== 'Leyendo')
+      await api('/api/book', { body: { id, field: 'status', value: 'Leyendo' } });
+  }
   load();
 });
 
