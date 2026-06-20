@@ -147,7 +147,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 41;
+const FRONT_V = 42;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1680,20 +1680,44 @@ const DIAS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 // SISTEMA REAL DE INGLÉS — output diario (lo que más cuesta = el centro).
 // Cada día: hablar primero, luego un recurso distinto, y SIEMPRE cerrar hablando con la IA.
 const INGLES_PLAN = [
-  ['English — Speak + Book day', '1) Warm-up: talk about your day OUT LOUD 5 min, record it. 2) American School Way 15 min, read ALOUD. 3) Close: tell the AI in English what you read (15 min). Speaking is the goal.'],
-  ['English — Shadowing day', '1) Warm-up talking 5 min. 2) Disney+/Netflix scene you KNOW, English subs. Repeat each line out loud copying the actor (shadowing) 15 min. 3) Summarize the scene to the AI in English.'],
-  ['English — Vocabulary in action', '1) Talk 5 min. 2) Pick 10 words you keep forgetting, build a sentence OUT LOUD with each. 3) Tell the AI a short story using all 10 words.'],
-  ['English — Book deep day', '1) Talk 5 min. 2) American School Way: redo a past unit, read aloud, do the exercises speaking the answers. 3) Explain the grammar point to the AI in your own words, in English.'],
-  ['English — Pure conversation', '1) No warm-up — go straight to talking with the AI for 20-25 min about anything: work, anime, dreams. Push to talk 2 min non-stop. This is the day that breaks A2.'],
-  ['English — Re-watch & produce', '1) Talk 5 min. 2) Re-watch a scene from earlier this week WITHOUT subtitles, see how much you catch. 3) Record yourself retelling it, then send it to the AI to correct.'],
-  ['English — Light immersion', 'Lighter day: watch something you LOVE in English (subs on if needed). Note 5 phrases that sounded natural. Say them out loud 3 times each. Rest is part of learning.']
+  // Lunes — 🗣 SPEAKING (output oral)
+  ['English — 🗣 Speaking day', '1) Warm-up: talk OUT LOUD about your day for 5 minutes and record yourself. Do not stop to fix mistakes — fluency first. (ES: habla en voz alta de tu día 5 min, grábate, sin parar a corregir.) 2) Listen back to one minute of your recording and note 3 things to improve. (ES: escucha 1 min de tu grabación y anota 3 cosas a mejorar.) 3) Tell the AI in English what your day was like and let it correct you. (ES: cuéntale a la IA en inglés cómo fue tu día.)'],
+  // Martes — 🎧 LISTENING (shadowing)
+  ['English — 🎧 Listening day', '1) Warm-up talking for 3 minutes about anything. (ES: calienta hablando 3 min.) 2) Pick a Disney+/Netflix scene you already know, English subtitles on. Repeat each line out loud right after the actor, copying rhythm and accent — this is shadowing. Do 15 minutes. (ES: repite cada línea en voz alta imitando al actor, 15 min.) 3) Summarize the scene to the AI in English, out loud. (ES: resume la escena a la IA en inglés, en voz alta.)'],
+  // Miércoles — 📖 READING
+  ['English — 📖 Reading day', '1) Read a short text or one unit of American School Way OUT LOUD for 15 minutes — reading aloud trains pronunciation too. (ES: lee un texto corto en voz alta 15 min.) 2) Write down 8 new words and say one sentence out loud with each. (ES: apunta 8 palabras nuevas y di una frase con cada una.) 3) Retell what you read to the AI in your own words, in English. (ES: cuéntale a la IA lo que leíste con tus palabras.)'],
+  // Jueves — ✍️ WRITING (output escrito)
+  ['English — ✍️ Writing day', '1) Write a short paragraph in English: your day, an opinion, or a plan. Aim for 6-10 sentences. (ES: escribe un párrafo de 6-10 frases en inglés.) 2) Read it OUT LOUD to catch what sounds wrong. (ES: léelo en voz alta para detectar errores.) 3) Send it to the AI and ask it to correct it and explain 2 mistakes. (ES: mándalo a la IA y pide que corrija y explique 2 errores.)'],
+  // Viernes — 💬 CONVERSATION (la más dura)
+  ['English — 💬 Conversation day', '1) No warm-up — go straight into talking with the AI for 20-25 minutes about anything: work, anime, your dreams. (ES: directo a conversar con la IA 20-25 min.) 2) Push yourself to speak 2 minutes non-stop on one topic. (ES: fuérzate a hablar 2 min seguidos de un tema.) 3) Ask the AI for the 3 mistakes you repeated most and write them down. (ES: pide a la IA tus 3 errores más repetidos y anótalos.) This is the day that breaks plateaus.'],
+  // Sábado — 🎬 LISTENING + PRODUCE
+  ['English — 🎬 Watch & produce day', '1) Talk for 5 minutes to warm up. (ES: calienta hablando 5 min.) 2) Re-watch a scene from earlier this week WITHOUT subtitles and see how much you catch. (ES: revé una escena de la semana SIN subtítulos.) 3) Record yourself retelling it, then send it to the AI to correct. (ES: grábate contándola y mándala a la IA para que corrija.)'],
+  // Domingo — 🌿 LIGHT IMMERSION / REVIEW
+  ['English — 🌿 Light immersion', 'Lighter day, on purpose. Watch something you LOVE in English (subtitles on if you need them) and note 5 phrases that sounded natural. Say each one out loud 3 times, then review your mistakes notes from the week. (ES: ve algo que ames en inglés, anota 5 frases naturales y repásalas; revisa tus errores de la semana.) Rest is part of learning.']
 ];
-// Metas trimestrales (el progreso lo decides TÚ por tu habilidad de hablar)
+// Etapas A1 → C1 cubriendo las 4 habilidades. 'level' = nivel que ALCANZAS al completar la etapa
+// (se usa para el veredicto cuando metes el resultado de un test real).
 const ENGLISH_TRIMESTERS = [
-  { q: 'Q1 · A2 → A2+', goal: 'Talk 2 min straight in English without stopping (errors OK).', book: 'American School Way — Intermediate', subs: 'English subtitles always' },
-  { q: 'Q2 · A2+ → B1', goal: 'Hold a 5-min conversation with the AI about daily topics.', book: 'American School Way — Upper-Intermediate', subs: 'Start removing subs on known scenes' },
-  { q: 'Q3 · B1 → B1+', goal: 'Give opinions, tell stories in past & future, argue a point.', book: 'American School Way — Advanced', subs: 'No subtitles' },
-  { q: 'Q4 · B1+ → B2', goal: 'Discuss abstract topics, understand natives at normal speed.', book: 'American School Way — Advanced / B2-C1', subs: 'Native content, no subs' }
+  { q: 'Stage 1 · A1 → A2', level: 'A2',
+    goal: 'READ short simple texts · WRITE 5-6 sentences about yourself · UNDERSTAND slow, clear audio · SPEAK 2 min about your day (errors OK).',
+    book: 'American School Way — Basic/Intermediate', subs: 'English subtitles always' },
+  { q: 'Stage 2 · A2 → B1', level: 'B1',
+    goal: 'READ a short article · WRITE a paragraph or simple email · FOLLOW a slow conversation · HOLD a 5-min chat on familiar topics.',
+    book: 'American School Way — Upper-Intermediate', subs: 'Remove subs on scenes you know' },
+  { q: 'Stage 3 · B1 → B2', level: 'B2',
+    goal: 'READ news & opinion pieces · WRITE a clear 150-word text · UNDERSTAND a series with subtitles · ARGUE and tell stories for 10 min.',
+    book: 'American School Way — Advanced', subs: 'No subtitles on familiar content' },
+  { q: 'Stage 4 · B2 → C1', level: 'C1',
+    goal: 'READ complex/abstract texts · WRITE a structured essay · UNDERSTAND natives at normal speed · DISCUSS abstract topics fluently.',
+    book: 'Advanced / native materials', subs: 'Native content, no subtitles' }
+];
+// Orden de niveles CEFR para comparar resultados de test
+const CEFR_ORDER = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+// Tests reales, gratuitos y verificados (miden sobre todo lectura y escucha)
+const ENGLISH_TESTS = [
+  { name: 'EF SET (free, A1–C2)', url: 'https://www.efset.org/', note: 'Most rigorous free one · ~50 min' },
+  { name: 'Cambridge — Test your English', url: 'https://www.cambridgeenglish.org/test-your-english/', note: 'Quick, instant CEFR estimate' },
+  { name: 'British Council level test', url: 'https://englishonline.britishcouncil.org/free-english-level-test-cefr-2/', note: '5-min placement' }
 ];
 
 function renderLife() {
@@ -1739,7 +1763,7 @@ function renderLife() {
   // 3. Weekly advice based on the ACTIVE career
   const active = (S.careers || []).find(c => c.active) || (S.careers || [])[0];
   const studyDays = (S.rdone || []).filter(x => x.endsWith('|estudio') || x.endsWith('|proyecto')).length;
-  const lvl = pf.ingles_nivel || 'A1-A2';
+  const lvl = pf.eng_real_level || pf.ingles_nivel || 'A1-A2';
   let tip = `Your English is at ${lvl}: daily consistency beats marathons. 30 focused minutes EVERY day take you to C1 — not 3 hours once. `;
   if (active) {
     const pct = active.pct || 0;
@@ -1789,25 +1813,37 @@ function renderEnglish() {
     const dias = Math.floor((now - d0) / 86400000);
     diasEnQ = `${dias} ${dias === 1 ? 'day' : 'days'} into this quarter`;
   }
+  const lastLevel = pf.eng_real_level || '';
+  const lastPct = pf.eng_real_pct || '';
+  const lastDate = pf.eng_real_date || '';
   panel.innerHTML = `
     <div class="eng-hero">
       <div class="eng-q">${t.q}</div>
-      <div class="eng-goal">🎯 Speaking goal: <b>${t.goal}</b></div>
+      <div class="eng-goal">🎯 This stage — all 4 skills: <b>${t.goal}</b></div>
       <div class="eng-meta">📘 ${t.book} · 🎬 ${t.subs}</div>
       ${diasEnQ ? `<div class="eng-days">${diasEnQ}</div>` : ''}
     </div>
-    <div class="eng-rule">⚖️ The golden rule: <b>1 minute speaking for every minute listening/reading.</b> Most people do 90% input → they understand but can't talk. You do 50/50. That's what breaks A2.</div>
+    <div class="eng-rule">⚖️ The balance rule: train <b>INPUT</b> (reading + listening) <b>and OUTPUT</b> (speaking + writing) every week. Most people only do input → they understand but can't produce. You train all four, A1 → C1.</div>
     <div class="eng-blocks">
-      <div class="eng-block"><span class="eng-bn">1</span> Warm-up: talk out loud about your day (record it)</div>
-      <div class="eng-block"><span class="eng-bn">2</span> Input: American School Way, read ALOUD</div>
-      <div class="eng-block"><span class="eng-bn">3</span> Shadowing: copy a known scene line by line</div>
-      <div class="eng-block hot"><span class="eng-bn">4</span> Talk to the AI in English — the sacred block ⚔</div>
+      <div class="eng-block">🗣 <b>Speak</b><span>Mon & Fri</span></div>
+      <div class="eng-block">🎧 <b>Listen</b><span>Tue & Sat</span></div>
+      <div class="eng-block">📖 <b>Read</b><span>Wed</span></div>
+      <div class="eng-block">✍️ <b>Write</b><span>Thu</span></div>
+    </div>
+    <div class="eng-test">
+      <div class="eng-test-head">📊 Check your real level (free tests)</div>
+      <p class="hint">These measure mostly <b>reading & listening</b> — speaking & writing you train here. Take one, then enter your result and I'll give you the verdict: advance or keep practicing.</p>
+      <div class="eng-test-links">
+        ${ENGLISH_TESTS.map(tst => `<a href="${tst.url}" target="_blank" rel="noopener" class="eng-test-link"><b>${tst.name}</b><small>${tst.note}</small></a>`).join('')}
+      </div>
+      ${lastLevel ? `<div class="eng-last">Your last test: <b>${lastLevel}</b>${lastPct ? ` (${lastPct}%)` : ''}${lastDate ? ` · ${fmtFecha(lastDate)}` : ''}</div>` : ''}
+      <button class="btn-gold" id="engLevelBtn">I took a test → enter my result</button>
     </div>
     <div class="eng-actions">
-      ${qIdx < ENGLISH_TRIMESTERS.length - 1
-        ? `<button class="btn-gold" id="engNextBtn">✓ I reached the speaking goal → next quarter</button>`
-        : '<span class="eng-final">🏆 Final quarter — you\'re reaching for B2/C1!</span>'}
       <button class="btn-ghost" id="engTalkBtn">💬 Practice with me now</button>
+      ${qIdx < ENGLISH_TRIMESTERS.length - 1
+        ? `<button class="btn-ghost" id="engNextBtn">Advance a stage manually</button>`
+        : '<span class="eng-final">🏆 Final stage — reaching for C1!</span>'}
     </div>`;
 }
 
@@ -1825,6 +1861,45 @@ document.addEventListener('click', async (e) => {
     load();
     return;
   }
+  if (e.target.id === 'engLevelBtn') {
+    const pf = S.profile || {};
+    const qIdx = Math.min(+(pf.eng_q || 0), ENGLISH_TRIMESTERS.length - 1);
+    const cur = ENGLISH_TRIMESTERS[qIdx];
+    const r = await modal({ icon: '📊', title: 'Your real test result',
+      text: 'Pick the level the test gave you (and the score % if it showed one). I\'ll tell you whether to advance or keep practicing.',
+      fields: [
+        { type: 'select', value: pf.eng_real_level || cur.level, options: CEFR_ORDER.map(l => ({ v: l, t: l })) },
+        { type: 'number', placeholder: 'Score % (optional)', min: 0, max: 100 }
+      ], okText: 'Get my verdict' });
+    if (r === null) return;
+    const measured = r[0];
+    const pct = String(r[1] || '').replace(/[^0-9]/g, '');
+    await api('/api/profile', { body: { key: 'eng_real_level', value: measured } });
+    await api('/api/profile', { body: { key: 'eng_real_pct', value: pct } });
+    await api('/api/profile', { body: { key: 'eng_real_date', value: hoyLocal() } });
+    const mOrder = CEFR_ORDER.indexOf(measured);
+    const targetOrder = CEFR_ORDER.indexOf(cur.level);
+    // etapa que te corresponde: la primera cuyo objetivo está por encima de tu nivel medido
+    let newIdx = ENGLISH_TRIMESTERS.findIndex(s => CEFR_ORDER.indexOf(s.level) > mOrder);
+    if (newIdx === -1) newIdx = ENGLISH_TRIMESTERS.length - 1;     // C1/C2: última etapa
+    const pctTxt = pct ? ` (${pct}%)` : '';
+    if (mOrder >= targetOrder && newIdx > qIdx) {
+      await api('/api/profile', { body: { key: 'eng_q', value: String(newIdx) } });
+      await api('/api/profile', { body: { key: 'eng_q_start_' + newIdx, value: hoyLocal() } });
+      celebrate({ icon: '🚀', title: 'LEVEL UP',
+        text: `Your test says <b>${measured}</b>${pctTxt}. You reached this stage's target — moving you to <b>${ENGLISH_TRIMESTERS[newIdx].q}</b>. Keep going! 🔥` });
+    } else if (mOrder >= targetOrder) {
+      await modal({ icon: '🏆', title: `Verdict: ${measured}${pctTxt}`,
+        text: `You're already at the top stage. Keep consolidating <b>${cur.level}</b> across all 4 skills. Remember: a free test barely measures speaking & writing, so keep training those here every week.`,
+        okText: 'Got it' });
+    } else {
+      await modal({ icon: '🛡', title: `Verdict: stay at ${cur.q}`,
+        text: `Your test says <b>${measured}</b>${pctTxt}, and this stage aims for <b>${cur.level}</b>. Keep practicing here a little longer — you're close. Put extra focus on the skills that felt hardest in the test.`,
+        okText: 'Keep practicing' });
+    }
+    load();
+    return;
+  }
   if (e.target.id === 'engTalkBtn') {
     if (typeof sendPrompt === 'function')
       sendPrompt("Let's practice English. Talk to me only in English, ask me questions about my day, and gently correct my mistakes. Start now.");
@@ -1834,7 +1909,7 @@ document.addEventListener('click', async (e) => {
   }
   if (e.target.id === 'engHelpBtn') {
     await modal({ icon: '🔑', title: 'The real secrets',
-      text: '1) Speaking is a PHYSICAL skill, not knowledge — train your mouth daily.<br>2) Comprehensible input: watch what you understand ~85%, not random new shows.<br>3) Depth > breadth: one episode 5 times beats 5 episodes once.<br>4) Forced output: after every input, retell it out loud.<br>5) Shadowing: copy natives out loud, ritme and accent.<br><br>Duolingo and passive Netflix feel like progress but barely build speaking. The discomfort of talking IS the learning.',
+      text: '1) Train all 4 skills: read, write, listen, speak — a full speaker does the four.<br>2) Output (speaking AND writing) is what cements input — after every input, produce something.<br>3) Comprehensible input: read/watch what you understand ~85%, not random hard content.<br>4) Depth &gt; breadth: one text or scene 5 times beats 5 different ones once.<br>5) Shadowing &amp; reading aloud build pronunciation and rhythm.<br>6) A little EVERY day beats a marathon once a week.<br><br>Duolingo and passive Netflix feel like progress but barely build real production. The discomfort of producing IS the learning.',
       okText: 'Got it' });
     return;
   }

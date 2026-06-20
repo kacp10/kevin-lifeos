@@ -602,14 +602,27 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .eng-days { color: var(--ok); font-size: .78rem; margin-top: 6px; }
 .eng-rule { background: rgba(245,185,66,.08); border-left: 3px solid var(--gold);
   padding: 10px 14px; border-radius: 8px; font-size: .85rem; margin-bottom: 12px; line-height: 1.5; }
-.eng-blocks { display: grid; gap: 8px; margin-bottom: 12px; }
-.eng-block { display: flex; align-items: center; gap: 10px; background: var(--panel);
-  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: .85rem; }
+.eng-blocks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 12px; }
+.eng-block { display: flex; flex-direction: column; gap: 2px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: .9rem; }
+.eng-block span { color: var(--mut); font-size: .72rem; }
 .eng-block.hot { border-color: var(--gold); background: rgba(245,185,66,.06); font-weight: 600; }
 .eng-bn { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
   border-radius: 50%; background: var(--gold); color: #1a1530; font-weight: 800; font-size: .8rem; flex-shrink: 0; }
 .eng-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .eng-final { color: var(--gold); font-weight: 700; }
+
+/* ====== CHECKPOINT DE NIVEL REAL (tests) v42 ====== */
+.eng-test { margin: 12px 0; padding: 14px; border-radius: 14px;
+  background: linear-gradient(135deg, #1f2b3a, #15112e); border: 1px solid #2e6b8a; }
+.eng-test-head { font-family: 'Russo One', sans-serif; font-size: .95rem; color: #7fd1f0; margin-bottom: 4px; }
+.eng-test-links { display: grid; gap: 8px; margin: 10px 0; }
+.eng-test-link { display: flex; flex-direction: column; gap: 1px; text-decoration: none;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; }
+.eng-test-link:hover { border-color: #7fd1f0; }
+.eng-test-link b { color: var(--txt); font-size: .86rem; }
+.eng-test-link small { color: var(--mut); font-size: .72rem; }
+.eng-last { font-size: .8rem; color: var(--ok); margin: 6px 0 10px; }
 
 /* aviso de progreso automático de inglés */
 .eng-auto { background: rgba(245,185,66,.08); border-radius: 8px; padding: 8px 10px;
