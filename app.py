@@ -14,7 +14,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 44  # debe coincidir con FRONT_V en static/app.js
+VERSION = 45  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -1219,6 +1219,52 @@ def detalle_redefer():
                  (nueva_cuota, nuevas, iid))
     db().commit()
     return jsonify(ok=True, cuota=nueva_cuota, saldo=saldo)
+
+
+@app.post('/api/detalle/abonar')
+def detalle_abonar():
+    """Abona (paga por adelantado) N cuotas de una línea fija del desglose:
+    sube 'pagadas' (las cuotas pagadas), de modo que esas cuotas desaparecen."""
+    j = request.json
+    iid = int(j['id'])
+    n = max(1, int(j.get('cuotas_pagadas', 1)))
+    row = db().execute('SELECT * FROM detalle_items WHERE id=?', (iid,)).fetchone()
+    if not row:
+        return jsonify(error='no encontrado'), 404
+    it = dict(row)
+    total = it['total'] or 0
+    nuevas_pagadas = min((it['pagadas'] or 0) + n, total)
+    db().execute('UPDATE detalle_items SET pagadas=? WHERE id=?', (nuevas_pagadas, iid))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete('/api/detalle/<int:i>')
+def detalle_del(i):
+    db().execute('DELETE FROM detalle_items WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/extra_debt/abonar')
+def extra_debt_abonar():
+    """Abona N cuotas de una deuda registrada: baja cuotas y total. Si llega a 0, la borra."""
+    j = request.json
+    did = int(j['id'])
+    n = max(1, int(j.get('cuotas_pagadas', 1)))
+    d = db().execute('SELECT * FROM extra_debts WHERE id=?', (did,)).fetchone()
+    if not d:
+        return jsonify(error='no encontrado'), 404
+    d = dict(d)
+    cuota = d['cuota'] or (round(d['total'] / d['cuotas']) if d['cuotas'] else 0)
+    nuevas = (d['cuotas'] or 0) - n
+    if nuevas <= 0:
+        db().execute('DELETE FROM extra_debts WHERE id=?', (did,))
+    else:
+        nuevo_total = max((d['total'] or 0) - cuota * n, 0)
+        db().execute('UPDATE extra_debts SET cuotas=?, total=? WHERE id=?', (nuevas, nuevo_total, did))
+    db().commit()
+    return jsonify(ok=True)
 
 
 @app.post('/api/creditor/redefer')
