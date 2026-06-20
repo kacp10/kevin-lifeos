@@ -147,7 +147,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 40;
+const FRONT_V = 41;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -2186,19 +2186,26 @@ document.addEventListener('click', async (e) => {
   const marcando = !c.classList.contains('on');
 
   if (marcando) {
-    // CASO ESPECIAL inglés: confirma TODOS los pasos del día, uno tras otro, en UN SOLO clic.
+    // CASO ESPECIAL inglés: confirma los pasos del día EN ORDEN, guardando cada "sí".
+    // Si dices "Not yet", el progreso queda guardado y la próxima vez RETOMA en ese paso.
+    // La casilla solo se chulea completa cuando TODOS los pasos están confirmados.
     if (act === 'ingles') {
       const { titulo, pasos } = pasosInglesDelDia(CUR_WD);
+      const hechos = new Set(S.rdone || []);
       for (let k = 0; k < pasos.length; k++) {
+        if (hechos.has(`${day}|ingles#${k}`)) continue;     // paso ya confirmado antes: saltar
         const ultimo = k === pasos.length - 1;
         const r = await modal({ icon: '🗣', title: `${titulo} · paso ${k + 1} de ${pasos.length}`,
           text: `Did you do this part?<br><br><b>${pasos[k].d}</b>`,
-          okText: ultimo ? 'Yes ✓ — finish' : 'Yes ✓ — next step', extraBtn: 'Not yet' });
-        if (r !== true) {                     // 'Not yet', Cancel o cerrar: no marca todavía
-          toast('No worries — finish the rest and check it again. 💪');
+          okText: ultimo ? 'Yes ✓ — finish English' : 'Yes ✓ — next step', extraBtn: 'Not yet' });
+        if (r !== true) {                                   // "Not yet"/Cancel: guarda hasta aquí y sale
+          toast('Progress saved 💪 — next time you continue from this step.');
+          load();
           return;
         }
+        await api('/api/routine', { body: { day, activity: `ingles#${k}` } });   // persiste el paso
       }
+      // todos los pasos confirmados → abajo se marca el inglés completo
     }
     // CASO ESPECIAL estudio/curso: al chulear, pregunta el % del curso y lo lleva solo a la carrera activa.
     if (act === 'estudio') {
@@ -2224,6 +2231,12 @@ document.addEventListener('click', async (e) => {
       fields: [{ type: 'text', placeholder: 'e.g. doctor appointment, plans... (optional)' }], okText: 'Uncheck' });
     if (why === null) return;
     await api('/api/routine', { body: { day, activity: act, note: why[0] || '' } });
+    // al desmarcar inglés, borra los pasos guardados para que la próxima vez empiece de cero
+    if (act === 'ingles') {
+      for (const x of (S.rdone || []).filter(s => s.startsWith(`${day}|ingles#`))) {
+        await api('/api/routine', { body: { day, activity: x.split('|')[1] } });  // toggle = borrar
+      }
+    }
     // al desmarcar, revisar si el hábito sinónimo debe desmarcarse
     await sincronizarHabito(act, day, false);
   }
