@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<link rel="stylesheet" href="/static/style.css?v=39">
+<link rel="stylesheet" href="/static/style.css?v=40">
 </head>
 <body>
 
@@ -271,7 +271,7 @@
       <option>Room</option><option>Leisure</option><option>Personal</option>
     </datalist>
     <input id="dnName" placeholder="Which wish?" required>
-    <input id="dnValor" type="number" min="0" placeholder="Price">
+    <input id="dnValor" type="text" inputmode="numeric" class="money-live" placeholder="Price">
     <button class="btn-gold" type="submit">+ Add wish</button>
   </form>
   <div id="dreamList"></div>
@@ -322,7 +322,7 @@
 </section>
 
 </main>
-<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v39</b></footer>
-<script src="/static/app.js?v=39"></script>
+<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v40</b></footer>
+<script src="/static/app.js?v=40"></script>
 </body>
 </html>
