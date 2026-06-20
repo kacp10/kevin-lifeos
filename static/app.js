@@ -70,12 +70,25 @@ const monthKey = (i) => {                     // índice del plan -> 'AAAA-MM'
 // cuotas del plan + compras a cuotas + deudas registradas + deudas prometidas de ese mes.
 function deudaDelMes(i) {
   const p = S.plan; let total = 0;
-  for (const [n, arr] of Object.entries(p.creditors || {})) total += (arr[i] || 0) + extraCuota(n, i);
+  for (const [n, arr] of Object.entries(p.creditors || {})) total += cuotaPlanMes(n, i) + extraCuota(n, i);
   for (const d of (S.extra_debts || [])) {
     if (d.cuotas >= 1) { if (i >= d.start && i < d.start + d.cuotas) total += d.cuota; }
     else if (d.due_date && mesDeFecha(d.due_date) === i) total += Math.max(d.total - (d.abonado || 0), 0);
   }
   return total;
+}
+// Cuota de un creditor en el mes i = SUMA REAL de los items de su desglose (detalle),
+// igual que el apartado "Full debt breakdown". Así Inicio y el desglose nunca se
+// desincronizan (antes Inicio usaba un número guardado que quedaba viejo al pagar/quitar cuotas).
+// Si el creditor no tiene desglose, usa el número del plan como respaldo.
+function cuotaPlanMes(creditorName, i) {
+  const grupo = CRED_TO_GRUPO[creditorName] || creditorName;
+  const items = S.detalle && S.detalle[grupo];
+  if (!items || !items.length) return ((S.plan.creditors[creditorName] || [])[i]) || 0;
+  return items.reduce((s, it) => {
+    const ci = calcItem(it, i);
+    return s + (ci.done ? 0 : (ci.cuota || 0));
+  }, 0);
 }
 // Si una cuota nueva deja la deuda del mes por encima del 50% del ingreso, pide
 // confirmación mostrando el exceso EXACTO. Devuelve true si se puede continuar.
@@ -147,7 +160,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 47;
+const FRONT_V = 48;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -574,7 +587,7 @@ function renderInicio() {
   const p = S.plan;
   const ingreso = ingresoDelMes(i);
   const deudas = Object.entries(p.creditors)
-    .map(([n, arr]) => [n, arr[i] + extraCuota(n, i), extraCuota(n, i)])
+    .map(([n, arr]) => [n, cuotaPlanMes(n, i) + extraCuota(n, i), extraCuota(n, i)])
     .filter(d => d[1] > 0);
   (S.extra_debts || []).filter(d => d.cuotas >= 1 && i >= d.start && i < d.start + d.cuotas)
     .forEach(d => deudas.push([d.name + ' (registrada)', d.cuota, 0]));
@@ -1169,7 +1182,7 @@ function renderMyCards() {
     const disponible = cupo ? Math.max(cupo - saldo, 0) : 0;
     const usoPct = cupo ? Math.min((saldo / cupo) * 100, 100) : 0;
     const pagoPct = totalCard ? Math.min((pagado / totalCard) * 100, 100) : 0;
-    const pagoMes = ((S.plan.creditors[t.creditor] || [])[MES]) || 0;
+    const pagoMes = cuotaPlanMes(t.creditor, MES) + extraCuota(t.creditor, MES);
     return `<div class="card-box">
       <div class="row-between">
         <span class="card-name">${t.label}
