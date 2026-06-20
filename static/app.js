@@ -39,6 +39,79 @@ const monthKey = (i) => {                     // índice del plan -> 'AAAA-MM'
   return `${2026 + Math.floor(t / 12)}-${String(t % 12 + 1).padStart(2, '0')}`;
 };
 
+/* ====== ASESOR 50/30/20 (Needs / Savings / Debt sobre el ingreso) ====== */
+// Total de pagos de DEUDA de un mes del plan (mismo cálculo que Home):
+// cuotas del plan + compras a cuotas + deudas registradas + deudas prometidas de ese mes.
+function deudaDelMes(i) {
+  const p = S.plan; let total = 0;
+  for (const [n, arr] of Object.entries(p.creditors || {})) total += (arr[i] || 0) + extraCuota(n, i);
+  for (const d of (S.extra_debts || [])) {
+    if (d.cuotas >= 1) { if (i >= d.start && i < d.start + d.cuotas) total += d.cuota; }
+    else if (d.due_date && mesDeFecha(d.due_date) === i) total += Math.max(d.total - (d.abonado || 0), 0);
+  }
+  return total;
+}
+// Si una cuota nueva deja la deuda del mes por encima del 50% del ingreso, pide
+// confirmación mostrando el exceso EXACTO. Devuelve true si se puede continuar.
+async function confirmarTopeDeuda(monthIdx, cuotaNueva) {
+  const ing = ingresoDelMes(monthIdx);
+  if (ing <= 0 || !(cuotaNueva > 0)) return true;
+  const proyectada = deudaDelMes(monthIdx) + cuotaNueva;
+  const tope = ing * 0.5;
+  if (proyectada <= tope) return true;          // dentro del 50%: sin aviso
+  const exceso = proyectada - tope;
+  const pctv = Math.round((proyectada / ing) * 100);
+  const mes = (S.plan.months || [])[monthIdx] || ('month ' + monthIdx);
+  return await confirmModal('⚠ This crosses your 50% debt ceiling',
+    `With this, <b>${esc(mes)}</b> would carry <b>${fmt(proyectada)}</b> in debt payments = ` +
+    `<b style="color:var(--hp)">${pctv}%</b> of that month's income.<br><br>` +
+    `That goes <b style="color:var(--hp)">${fmt(exceso)}</b> over your 50% ceiling.<br><br>` +
+    `Register it anyway?`, true);
+}
+// Dibuja el panel asesor bajo la torta: barras sobre el ingreso, semáforo y veredicto.
+function renderAdvisor(ingreso, needs, save, debt) {
+  const cont = document.getElementById('regla502030');
+  if (!cont) return;
+  const ing = ingreso || 1;
+  const frac = (v) => v / ing;
+  const rows = [
+    { icon: '🏠', name: 'Needs', sub: 'Life & services', val: needs, target: 0.5, dir: 'max' },
+    { icon: '💰', name: 'Savings', sub: 'Company fund', val: save, target: 0.2, dir: 'min' },
+    { icon: '⚔', name: 'Debt', sub: "This month's payments", val: debt, target: 0.5, dir: 'max' },
+  ];
+  const html = rows.map(r => {
+    const f = frac(r.val), p = Math.round(f * 100), tgt = Math.round(r.target * 100);
+    const over = r.dir === 'max' && f > r.target + 1e-9;
+    const under = r.dir === 'min' && f < r.target - 1e-9;
+    const state = over ? 'over' : under ? 'under' : 'ok';
+    const margen = (r.target - f) * ing;          // + = margen/falta; - = exceso
+    let note;
+    if (r.dir === 'max')
+      note = over ? `Over the ${tgt}% ceiling by <b>${fmt(Math.abs(margen))}</b>`
+                  : `<b>${fmt(margen)}</b> of room left under ${tgt}%`;
+    else
+      note = under ? `<b>${fmt(margen)}</b> short of the ${tgt}% goal`
+                   : `Goal met ✓ — <b>${fmt(Math.abs(margen))}</b> above ${tgt}%`;
+    return `<div class="adv-row">
+      <div class="adv-head">
+        <span class="adv-name">${r.icon} ${r.name}<small>${r.sub}</small></span>
+        <span class="adv-pct ${state}">${p}%</span>
+      </div>
+      <div class="adv-track">
+        <i class="adv-fill-${state}" style="width:${Math.min(f * 100, 100)}%"></i>
+        <span class="adv-tick" style="left:${Math.min(tgt, 100)}%"></span>
+      </div>
+      <div class="adv-note ${state}">${note}</div>
+    </div>`;
+  }).join('');
+  const dF = frac(debt), nF = frac(needs), sF = frac(save);
+  let vclass = '', verdict;
+  if (dF > 0.5) { vclass = 'war'; verdict = `⚔ War mode: debt eats ${Math.round(dF * 100)}% of your income. It drops every month — hold the line.`; }
+  else if (nF <= 0.5 && sF >= 0.2) { vclass = 'ok'; verdict = `👑 Healthy month: you're inside the 50/30/20. Room to enjoy or to save more.`; }
+  else verdict = `🛡 Getting there: debt is under 50%. Nudge Needs and Savings toward their targets.`;
+  cont.innerHTML = `<div class="adv-verdict ${vclass}">${verdict}</div>` + html;
+}
+
 /* ---------- tabs ---------- */
 document.getElementById('tabs').addEventListener('click', (e) => {
   if (e.target.tagName !== 'BUTTON') return;
@@ -48,7 +121,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 38;
+const FRONT_V = 39;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -570,15 +643,8 @@ function renderInicio() {
   if (pieChart) { pieChart.data = data; pieChart.options = opts; pieChart.update(); }
   else pieChart = new Chart($('#pieChart'), { type: 'doughnut', data, options: opts });
 
-  // resumen 50/30/20 debajo de la torta
-  const r502030 = document.getElementById('regla502030');
-  if (r502030) {
-    const needsPct = pctDe(needs), savePct = pctDe(ahorroFondo), debtPct = pctDe(totalDeudas);
-    r502030.innerHTML = `
-      <div class="rule-row"><span>🏠 Needs (target 50%)</span><b class="${needs/sumaTotal<=0.55?'ok':'over'}">${needsPct}%</b></div>
-      <div class="rule-row"><span>💰 Savings (target 20%)</span><b class="${ahorroFondo/sumaTotal>=0.15?'ok':'over'}">${savePct}%</b></div>
-      <div class="rule-row debt"><span>⚔ Debt (extra, until free)</span><b class="over">${debtPct}%</b></div>`;
-  }
+  // panel asesor 50/30/20 (Needs/Savings/Debt sobre el ingreso) debajo de la torta
+  renderAdvisor(ingreso, needs, ahorroFondo, totalDeudas);
 
   renderChecklist(i, deudas);
   renderExpenses(i);
@@ -2445,10 +2511,12 @@ $('#goalNew').addEventListener('submit', async (e) => {
 $('#compraNew').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!await confirmModal('Compra a cuotas', 'This breaks your promise of zero new installments. Log it only if it ALREADY happened in real life, so the system tells the truth.')) return;
+  const _val = numVal('#cpValor'), _cuotas = +$('#cpCuotas').value, _start = +$('#cpStart').value;
+  if (_cuotas >= 1 && !await confirmarTopeDeuda(_start, Math.round(_val / _cuotas))) return;
   const r = await api('/api/compra', { body: {
     creditor: $('#cpCred').value, concepto: $('#cpConcepto').value,
-    valor: numVal('#cpValor'), cuotas: +$('#cpCuotas').value,
-    start: +$('#cpStart').value } });
+    valor: _val, cuotas: _cuotas,
+    start: _start } });
   if (r.error) { toast('⚠ ' + r.error, 'err'); return; }
   toast('💳 Purchase logged. The system now accounts for it.');
   e.target.reset();
@@ -2458,10 +2526,18 @@ $('#compraNew').addEventListener('submit', async (e) => {
 $('#debtNew').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!await confirmModal('Registrar deuda', 'Remember your promise: nothing new on installments. Only log it if it already exists in real life, so the boss shows its true HP.')) return;
+  const _val = numVal('#ndValor');
+  const _cuotas = +$('#ndCuotas').value || 0;
+  const _start = +$('#ndStart').value || 0;
+  const _due = $('#ndDue').value || '';
+  // aviso de tope 50%: cuota mensual si es a cuotas, o el valor completo si es pago prometido
+  let _mes = -1, _cuota = 0;
+  if (_cuotas >= 1) { _mes = _start; _cuota = Math.round(_val / _cuotas); }
+  else if (_due) { _mes = mesDeFecha(_due); _cuota = _val; }
+  if (_mes >= 0 && !await confirmarTopeDeuda(_mes, _cuota)) return;
   const r = await api('/api/debt/new', { body: {
-    name: $('#ndName').value, valor: numVal('#ndValor'),
-    cuotas: +$('#ndCuotas').value || 0, start: +$('#ndStart').value || 0,
-    due_date: $('#ndDue').value || '' } });
+    name: $('#ndName').value, valor: _val,
+    cuotas: _cuotas, start: _start, due_date: _due } });
   if (r.error) { toast('⚠ ' + r.error, 'err'); return; }
   toast('☠ New enemy registered in the Debt Boss.');
   e.target.reset();
