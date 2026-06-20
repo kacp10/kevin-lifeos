@@ -6,6 +6,7 @@ Correr:  python app.py   →  http://localhost:5000
 """
 import json
 import os
+import re
 import sqlite3
 from datetime import date
 from flask import Flask, jsonify, render_template, request, g
@@ -13,8 +14,44 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 36  # debe coincidir con FRONT_V en static/app.js
+VERSION = 37  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
+
+
+def to_int(v):
+    """Convierte a entero de forma TOLERANTE, sin lanzar nunca un error 500.
+    Acepta None, números y textos con separadores colombianos/europeos:
+      '320.198'      -> 320198   (punto = separador de miles)
+      '1.539.668'    -> 1539668
+      '320,50'       -> 320      (coma = decimal, se redondea: la BD guarda enteros)
+      '1.234,56'     -> 1235
+      '$ 36.000'     -> 36000
+    Si no logra interpretar nada, devuelve 0 (jamás rompe la app)."""
+    if v is None or isinstance(v, bool):
+        return int(v or 0)
+    if isinstance(v, (int, float)):
+        return int(round(v))
+    s = re.sub(r'[^\d,.\-]', '', str(v).strip())   # quita $, espacios, letras
+    if s in ('', '-', '.', ','):
+        return 0
+    has_dot, has_comma = '.' in s, ',' in s
+    if has_dot and has_comma:
+        # el separador que aparece de ÚLTIMO es el decimal
+        if s.rfind(',') > s.rfind('.'):            # 1.234.567,89  (formato es-CO)
+            s = s.replace('.', '').replace(',', '.')
+        else:                                       # 1,234,567.89 (formato en-US)
+            s = s.replace(',', '')
+    elif has_comma:                                 # solo coma -> decimal
+        s = s.replace(',', '.')
+    elif has_dot:
+        # solo punto(s): si son separadores de miles (varios puntos, o un grupo
+        # final de exactamente 3 dígitos) los quitamos; si parece decimal, se deja.
+        if s.count('.') > 1 or len(s.rsplit('.', 1)[-1]) == 3:
+            s = s.replace('.', '')
+    try:
+        return int(round(float(s)))
+    except ValueError:
+        return 0
 
 
 def db():
@@ -1003,8 +1040,8 @@ def piggy_del(i):
 def fund_new():
     j = request.json
     db().execute('INSERT INTO fund (name, quota, frequency, last_deposit, saved) VALUES (?,?,?,?,?)',
-                 (j['name'].strip(), int(j.get('quota') or 0), j.get('frequency', 'Monthly'),
-                  j.get('last_deposit', ''), int(j.get('saved') or 0)))
+                 (j['name'].strip(), to_int(j.get('quota')), j.get('frequency', 'Monthly'),
+                  j.get('last_deposit', ''), to_int(j.get('saved'))))
     db().commit()
     return jsonify(ok=True)
 
@@ -1015,7 +1052,7 @@ def fund_update():
     field = j['field']
     if field not in ('name', 'quota', 'frequency', 'last_deposit', 'saved'):
         return jsonify(error='Field not allowed'), 400
-    val = int(j['value'] or 0) if field in ('quota', 'saved') else j['value']
+    val = to_int(j['value']) if field in ('quota', 'saved') else j['value']
     db().execute(f'UPDATE fund SET {field}=? WHERE id=?', (val, int(j['id'])))
     db().commit()
     return jsonify(ok=True)
