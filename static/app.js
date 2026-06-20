@@ -147,7 +147,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 46;
+const FRONT_V = 47;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -2486,31 +2486,33 @@ document.addEventListener('click', async (e) => {
   } else if (tipo === 'detalle') {
     actualesTxt = `${btn.dataset.cuotas} installments`;
   }
-  const r = await modal({ icon: '🔄', title: 'Reschedule installments',
-    text: `Reschedule <b>${actualesTxt}</b>. Type ANY new number of installments — 1 (pay it all next month), 6, 12, 24, whatever you want. I take what you still owe and split it into that many, starting the month you pick. Just like the bank.`,
+  const r = await modal({ icon: '🔄', title: 'Reschedule / fix installments',
+    text: `Reschedule <b>${actualesTxt}</b>. Type the number of installments you want. I split what you still owe into that many, starting the month you pick.<br><br>If the amount is <b>wrong</b>, type the <b>correct total</b> below and I'll use that instead.`,
     fields: [
-      { type: 'number', placeholder: 'New number of installments (e.g. 1, 6, 12...)', min: 1, max: 60 },
-      { type: 'select', value: String(MES), options: S.plan.months.map((m, i) => ({ v: String(i), t: 'Start: ' + m })) }
-    ], okText: 'Reschedule' });
+      { type: 'number', placeholder: 'Number of installments (e.g. 12)', min: 1, max: 60 },
+      { type: 'select', value: String(MES), options: S.plan.months.map((m, i) => ({ v: String(i), t: 'Start: ' + m })) },
+      { type: 'money', placeholder: 'Correct total amount (optional)' }
+    ], okText: 'Apply' });
   if (!r || !r[0]) return;
   const nuevas = Math.max(1, +r[0]);
   const start = +r[1];
+  const monto = +String(r[2] || '').replace(/[^0-9]/g, '') || 0;   // 0 = usar el saldo actual
   let endpoint, body;
   if (tipo === 'compra') {
     endpoint = '/api/compra/redefer';
-    body = { id: +btn.dataset.id, cuotas: nuevas, start, pagadas };
+    body = { id: +btn.dataset.id, cuotas: nuevas, start, pagadas, monto };
   } else if (tipo === 'extra_debt') {
     endpoint = '/api/extra_debt/redefer';
-    body = { id: +btn.dataset.id, cuotas: nuevas, start, pagadas };
+    body = { id: +btn.dataset.id, cuotas: nuevas, start, pagadas, monto };
   } else if (tipo === 'detalle') {
     endpoint = '/api/detalle/redefer';
-    body = { id: +btn.dataset.id, cuotas: nuevas };
+    body = { id: +btn.dataset.id, cuotas: nuevas, monto };
   } else {
     endpoint = '/api/creditor/redefer';
-    body = { name: btn.dataset.name, cuotas: nuevas, start };
+    body = { name: btn.dataset.name, cuotas: nuevas, start, monto };
   }
   await api(endpoint, { body });
-  toast(`🔄 Rescheduled to ${nuevas} installments`);
+  toast(monto ? `🔄 Fixed to ${nuevas} installments` : `🔄 Rescheduled to ${nuevas} installments`);
   load();
 });
 
