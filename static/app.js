@@ -147,7 +147,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 45;
+const FRONT_V = 46;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1147,6 +1147,47 @@ document.addEventListener('visibilitychange', () => {     // y al volver a la pe
 });
 
 /* ---------- ALCANCÍA / BOSS ---------- */
+// Solo TUS tarjetas propias (no préstamos personales, Nicole ni créditos).
+// boss = nombre en la lista del jefe; creditor = nombre en el plan mensual.
+const MIS_TARJETAS = [
+  { key: 'Tarjeta DV', label: '💳 Davivienda', boss: 'Tarjeta DV — Jefe Final', creditor: 'Tarjeta DV' },
+  { key: 'ADDI', label: '💳 ADDI', boss: 'ADDI', creditor: 'ADDI' },
+  { key: 'Codensa', label: '💳 Codensa', boss: 'Codensa', creditor: 'Codensa' },
+  { key: 'Banco de Bogotá', label: '💳 Banco de Bogotá', boss: 'Banco de Bogotá', creditor: 'Banco de Bogotá' }
+];
+function renderMyCards() {
+  const cont = document.getElementById('myCards');
+  if (!cont) return;
+  const pf = S.profile || {};
+  cont.innerHTML = MIS_TARJETAS.map(t => {
+    const bd = (S.debts || []).find(d => d.name === t.boss);
+    const comprado = bd ? compradoEn(bd.name) : 0;
+    const totalCard = bd ? bd.initial + comprado : 0;     // deuda total histórica de la tarjeta
+    const pagado = bd ? bd.abonado : 0;                    // lo que llevas pagado (crece con cada ataque)
+    const saldo = Math.max(totalCard - pagado, 0);         // lo que debes ahora
+    const cupo = +(pf['cupo_' + t.key] || 0);
+    const disponible = cupo ? Math.max(cupo - saldo, 0) : 0;
+    const usoPct = cupo ? Math.min((saldo / cupo) * 100, 100) : 0;
+    const pagoPct = totalCard ? Math.min((pagado / totalCard) * 100, 100) : 0;
+    const pagoMes = ((S.plan.creditors[t.creditor] || [])[MES]) || 0;
+    return `<div class="card-box">
+      <div class="row-between">
+        <span class="card-name">${t.label}
+          <button class="card-cupo-edit" data-key="${esc(t.key)}" data-cupo="${cupo}" title="Set / raise the limit">✎</button></span>
+        <span class="card-cupo">${cupo ? 'Limit ' + fmt(cupo) : 'Set your limit ✎'}</span>
+      </div>
+      <div class="card-grid">
+        <div><label>You owe now</label><b class="owe">${fmt(saldo)}</b></div>
+        <div><label>Available</label><b class="avail">${cupo ? fmt(disponible) : '—'}</b></div>
+        <div><label>Paid so far</label><b class="paid">${fmt(pagado)}</b></div>
+        <div><label>This month</label><b>${pagoMes ? fmt(pagoMes) : '—'}</b></div>
+      </div>
+      ${cupo
+        ? `<div class="card-bar"><i style="width:${usoPct}%"></i></div><small>${Math.round(usoPct)}% of your limit used</small>`
+        : `<div class="card-bar paid"><i style="width:${pagoPct}%"></i></div><small>${Math.round(pagoPct)}% paid off · set your limit to see available room</small>`}
+    </div>`;
+  }).join('');
+}
 function renderBoss(animate) {
   const init = S.debts.reduce((s, d) => s + d.initial + compradoEn(d.name), 0)
     + (S.extra_debts || []).reduce((s, d) => s + d.total, 0);
@@ -1227,6 +1268,7 @@ function renderBoss(animate) {
   ).join('') || '<li>No new installment purchases. Keep it that way. 🙏</li>';
 
   renderDesglose();
+  renderMyCards();
 
   $('#abonoList').innerHTML = S.abonos.map(a =>
     `<li><span>${a.fecha} · ${a.name}</span>
@@ -1327,6 +1369,23 @@ $('#abonoList').addEventListener('click', async (e) => {
   if (!e.target.classList.contains('del')) return;
   if (!await confirmModal('Deshacer abono', 'Undo this attack? The damage goes back to the boss.')) return;
   await api('/api/abono/' + e.target.dataset.id, { method: 'DELETE' });
+  load();
+});
+
+// Editar / subir el cupo de una de TUS tarjetas
+document.addEventListener('click', async (e) => {
+  const ed = e.target.closest('.card-cupo-edit');
+  if (!ed) return;
+  const key = ed.dataset.key;
+  const actual = +ed.dataset.cupo || 0;
+  const r = await modal({ icon: '💳', title: `Limit for ${key}`,
+    text: 'Set the total credit limit (cupo) for this card. You can raise it anytime — for example, after paying it all off.',
+    fields: [{ type: 'money', value: actual || '', placeholder: 'e.g. 1.500.000' }],
+    okText: 'Save limit' });
+  if (r === null) return;
+  const val = +String(r[0] || '').replace(/[^0-9]/g, '') || 0;
+  await api('/api/profile', { body: { key: 'cupo_' + key, value: String(val) } });
+  toast('💳 Limit saved');
   load();
 });
 

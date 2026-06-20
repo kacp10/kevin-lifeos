@@ -665,6 +665,27 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
   padding: 0 4px; opacity: .6; vertical-align: middle; }
 .cuota-btn:hover { opacity: 1; }
 
+/* ====== MIS TARJETAS v46 ====== */
+#myCards { display: grid; gap: 12px; }
+.card-box { background: linear-gradient(135deg, #241d42, var(--panel)); border: 1px solid var(--line);
+  border-radius: 14px; padding: 14px; }
+.card-name { font-weight: 700; font-size: .95rem; }
+.card-cupo-edit { background: none; border: none; cursor: pointer; opacity: .55; font-size: .8rem; padding: 0 4px; }
+.card-cupo-edit:hover { opacity: 1; }
+.card-cupo { color: var(--gold); font-size: .82rem; font-weight: 600; }
+.card-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 14px; margin: 12px 0 10px; }
+.card-grid > div { display: flex; flex-direction: column; gap: 1px; }
+.card-grid label { color: var(--mut); font-size: .7rem; }
+.card-grid b { font-size: .95rem; font-variant-numeric: tabular-nums; }
+.card-grid b.owe { color: var(--hp); }
+.card-grid b.avail { color: var(--ok); }
+.card-grid b.paid { color: var(--gold); }
+.card-bar { height: 10px; background: #0e0b1c; border-radius: 99px; overflow: hidden; }
+.card-bar i { display: block; height: 100%; border-radius: 99px; transition: width .5s ease;
+  background: linear-gradient(90deg, #b8324a, var(--hp)); }
+.card-bar.paid i { background: linear-gradient(90deg, #2aa784, var(--ok)); }
+.card-box small { color: var(--mut); font-size: .72rem; display: block; margin-top: 5px; }
+
 /* ====== TROFEO DE DEUDAS DERROTADAS v30 ====== */
 .debt-trophy { background: rgba(245,185,66,.1); border: 1px solid var(--gold); border-radius: 10px;
   padding: 9px 12px; margin-bottom: 10px; font-size: .82rem; color: var(--gold); font-weight: 600; }
