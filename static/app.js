@@ -147,7 +147,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 44;
+const FRONT_V = 45;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1408,10 +1408,9 @@ function renderDesglose() {
       <tr><th>Item</th><th>This month</th><th>Balance after paying</th></tr>` +
       vivos.map(it =>
         `<tr><td>${it.label}${it.redefer
-            ? ` <button class="redefer-btn mini" data-type="${it.redefer.type}" data-id="${it.redefer.id}" data-cuotas="${it.redefer.cuotas}" title="Reschedule this purchase">🔄</button>`
-            : ''}${it.redefer && it.redefer.type === 'compra'
-            ? ` <button class="cuota-btn" data-act="abonar" data-id="${it.redefer.id}" title="Pay installments in advance">💵</button>`
-              + ` <button class="del-x" data-type="compra" data-id="${it.redefer.id}" title="Remove this purchase (added by mistake)">✕</button>`
+            ? ` <button class="redefer-btn mini" data-type="${it.redefer.type}" data-id="${it.redefer.id}" data-cuotas="${it.redefer.cuotas}" title="Reschedule">🔄</button>`
+              + ` <button class="cuota-btn" data-act="abonar" data-rtype="${it.redefer.type}" data-id="${it.redefer.id}" title="Pay installments in advance">💵</button>`
+              + ` <button class="del-x" data-type="${it.redefer.type === 'extra_debt' ? 'debt_extra' : it.redefer.type}" data-id="${it.redefer.id}" title="Remove this line">✕</button>`
             : ''}</td>
            <td class="num">${it.cuota ? fmt(it.cuota) : '—'}</td>
            <td class="num">${it.saldo ? fmt(it.saldo) : '—'}</td></tr>`).join('') +
@@ -2386,17 +2385,29 @@ async function sincronizarHabito(act, day, marcado) {
 document.addEventListener('click', async (e) => {
   const ab = e.target.closest('.cuota-btn[data-act="abonar"]');
   if (ab) {
-    const c = (S.compras || []).find(x => x.id === +ab.dataset.id);
-    if (!c) return;
-    const cuota = Math.round(c.valor / c.cuotas);
+    const rtype = ab.dataset.rtype, id = +ab.dataset.id;
+    let nombre, maxN, cuota, endpoint;
+    if (rtype === 'compra') {
+      const c = (S.compras || []).find(x => x.id === id); if (!c) return;
+      nombre = c.concepto; maxN = c.cuotas; cuota = Math.round(c.valor / c.cuotas); endpoint = '/api/compra/abonar';
+    } else if (rtype === 'extra_debt') {
+      const d = (S.extra_debts || []).find(x => x.id === id); if (!d) return;
+      nombre = d.name; maxN = d.cuotas; cuota = d.cuota; endpoint = '/api/extra_debt/abonar';
+    } else if (rtype === 'detalle') {
+      let found = null;
+      for (const items of Object.values(S.detalle || {})) { const m = items.find(it => it[5] === id); if (m) { found = m; break; } }
+      if (!found) return;
+      nombre = found[0]; cuota = found[1]; maxN = (found[3] || 0) - (found[2] || 0); endpoint = '/api/detalle/abonar';
+    } else return;
+    if (!(maxN >= 1)) { toast('This line has no installments left to pay down.'); return; }
     const r = await modal({ icon: '💵', title: 'Pay installments in advance',
-      text: `<b>${esc(c.concepto)}</b> · ${c.cuotas} installments of ${fmt(cuota)}.<br><br>How many do you want to pay off right now? Each one you pay removes a future installment and lowers the debt — just like a bank prepayment.`,
-      fields: [{ type: 'number', placeholder: 'How many installments', value: 1, min: 1, max: c.cuotas }],
+      text: `<b>${esc(nombre)}</b> · ${maxN} installment(s) left of ${fmt(cuota)}.<br><br>How many do you want to pay off now? Each one removes a future installment — like a bank prepayment.`,
+      fields: [{ type: 'number', placeholder: 'How many', value: 1, min: 1, max: maxN }],
       okText: 'Pay it down' });
     if (!r || !r[0]) return;
-    const n = Math.max(1, Math.min(c.cuotas, +r[0]));
-    await api('/api/compra/abonar', { body: { id: c.id, cuotas_pagadas: n } });
-    toast(n >= c.cuotas ? '✅ Purchase fully paid — gone from the boss.' : `💵 Paid ${n} installment(s) — debt reduced.`);
+    const n = Math.max(1, Math.min(maxN, +r[0]));
+    await api(endpoint, { body: { id, cuotas_pagadas: n } });
+    toast(n >= maxN ? '✅ Fully paid — those installments are gone.' : `💵 Paid ${n} installment(s) — debt reduced.`);
     load();
     return;
   }
@@ -2660,6 +2671,7 @@ const DEL_MSG = {
   habit: 'Delete this habit AND all its marks? It won\'t affect months already closed in Haki history.',
   goal: 'Delete this goal?',
   compra: 'Delete this installment purchase? Its installment stops adding in Home and the boss bar goes down.',
+  detalle: 'Remove this installment line from the breakdown? Do this only if it shouldn\'t be there.',
   dream: 'Delete this wish? (if you\'re not into it anymore, out)',
   book: 'Delete this book from your library?',
   anime: 'Delete this anime from the list?',
