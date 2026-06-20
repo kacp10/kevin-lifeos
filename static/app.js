@@ -48,7 +48,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 36;
+const FRONT_V = 37;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -568,7 +568,6 @@ function renderInicio() {
     const needsPct = pctDe(p.vida), savePct = pctDe(p.ahorro), debtPct = pctDe(totalDeudas);
     r502030.innerHTML = `
       <div class="rule-row"><span>🏠 Needs (target 50%)</span><b class="${p.vida/sumaTotal<=0.55?'ok':'over'}">${needsPct}%</b></div>
-      <div class="rule-row"><span>🎯 Wants/cushion (target 30%)</span><b>${pctDe(Math.max(saldo,0))}%</b></div>
       <div class="rule-row"><span>💰 Savings (target 20%)</span><b class="${p.ahorro/sumaTotal>=0.15?'ok':'over'}">${savePct}%</b></div>
       <div class="rule-row debt"><span>⚔ Debt (extra, until free)</span><b class="over">${debtPct}%</b></div>`;
   }
@@ -604,10 +603,10 @@ function renderFund() {
   const totalSaved = fund.reduce((s, f) => s + (f.saved || 0), 0);
   const rows = fund.map(f => `<tr>
     <td><input class="fund-edit wide" data-id="${f.id}" data-f="name" value="${esc(f.name)}"></td>
-    <td><input class="fund-edit" type="number" data-id="${f.id}" data-f="quota" value="${f.quota || 0}" style="width:90px"></td>
+    <td><input class="fund-edit money-live" inputmode="numeric" data-id="${f.id}" data-f="quota" value="${Number(f.quota || 0).toLocaleString('es-CO')}" style="width:90px"></td>
     <td><input class="fund-edit" data-id="${f.id}" data-f="frequency" value="${esc(f.frequency || '')}" style="width:90px"></td>
     <td><input class="fund-edit" type="date" data-id="${f.id}" data-f="last_deposit" value="${f.last_deposit || ''}" style="width:140px"></td>
-    <td><input class="fund-edit" type="number" data-id="${f.id}" data-f="saved" value="${f.saved || 0}" style="width:110px"></td>
+    <td><input class="fund-edit money-live" inputmode="numeric" data-id="${f.id}" data-f="saved" value="${Number(f.saved || 0).toLocaleString('es-CO')}" style="width:110px"></td>
     <td><button class="del-x" data-type="fund" data-id="${f.id}">✕</button></td>
   </tr>`).join('');
   cont.innerHTML = `
