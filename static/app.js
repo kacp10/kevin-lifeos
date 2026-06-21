@@ -160,7 +160,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 48;
+const FRONT_V = 50;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -580,6 +580,7 @@ function renderInicio() {
   const sel = $('#monthSel');
   if (!sel.options.length) {
     S.plan.months.forEach((m, i) => sel.add(new Option(m, i)));
+    sel.value = String(Math.min(11, Math.max(0, planIndex(new Date()))));   // arranca en el mes real
     sel.onchange = renderInicio;
   }
   const i = +sel.value || 0;
@@ -675,6 +676,8 @@ function renderInicio() {
 
   renderChecklist(i, deudas);
   renderExpenses(i);
+  renderDesglose();   // el desglose sigue el filtro del mes (las cuotas avanzan al cambiar el mes)
+  renderMyCards();    // las tarjetas también siguen el filtro del mes
 }
 
 /* ====== COMPANY FUND ====== */
@@ -1172,6 +1175,7 @@ function renderMyCards() {
   const cont = document.getElementById('myCards');
   if (!cont) return;
   const pf = S.profile || {};
+  const nombreMes = (S.plan.months || [])[MES] || '';   // sigue el filtro de mes de Inicio
   cont.innerHTML = MIS_TARJETAS.map(t => {
     const bd = (S.debts || []).find(d => d.name === t.boss);
     const comprado = bd ? compradoEn(bd.name) : 0;
@@ -1193,7 +1197,7 @@ function renderMyCards() {
         <div><label>You owe now</label><b class="owe">${fmt(saldo)}</b></div>
         <div><label>Available</label><b class="avail">${cupo ? fmt(disponible) : '—'}</b></div>
         <div><label>Paid so far</label><b class="paid">${fmt(pagado)}</b></div>
-        <div><label>This month</label><b>${pagoMes ? fmt(pagoMes) : '—'}</b></div>
+        <div><label>${nombreMes || 'This month'}</label><b>${pagoMes ? fmt(pagoMes) : '—'}</b></div>
       </div>
       ${cupo
         ? `<div class="card-bar"><i style="width:${usoPct}%"></i></div><small>${Math.round(usoPct)}% of your limit used</small>`
