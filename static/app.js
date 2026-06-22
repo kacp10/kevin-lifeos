@@ -160,7 +160,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 50;
+const FRONT_V = 51;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1171,6 +1171,68 @@ const MIS_TARJETAS = [
   { key: 'Codensa', label: '💳 Codensa', boss: 'Codensa', creditor: 'Codensa' },
   { key: 'Banco de Bogotá', label: '💳 Banco de Bogotá', boss: 'Banco de Bogotá', creditor: 'Banco de Bogotá' }
 ];
+// ===== DAVIVIENDA — TRACKER DE AMORTIZACIÓN REAL =====
+// Se guarda en profile (clave amort_dav) como JSON. No toca la lógica del jefe ni el desglose.
+function getAmortDav() {
+  const raw = (S.profile || {})['amort_dav'];
+  if (raw) { try { return JSON.parse(raw); } catch (e) { } }
+  return {
+    capital: 15961878, ea: 28.77, cuotas: 60, cuota: 473600, seguro: 57364,
+    extras: [{ name: 'Rediferido de intereses', valor: 146535, meses: 2 },
+             { name: 'Costo de manejo AD', valor: 54490, meses: 2 }],
+    saldoCapital: 15961878, cuotasPagadas: 0, interesPagado: 0, abonosExtra: 0
+  };
+}
+async function saveAmortDav(A) { await api('/api/profile', { body: { key: 'amort_dav', value: JSON.stringify(A) } }); }
+function amortCuota(A) {   // cuota fija real del banco; si no está, la calcula amortizada
+  if (A.cuota > 0) return A.cuota;
+  const r = Math.pow(1 + A.ea / 100, 1 / 12) - 1;
+  return Math.round(A.capital * r / (1 - Math.pow(1 + r, -A.cuotas)));
+}
+function renderAmortDav() {
+  const cont = document.getElementById('amortDav');
+  if (!cont) return;
+  const A = getAmortDav();
+  const r = Math.pow(1 + A.ea / 100, 1 / 12) - 1;
+  const cuota = amortCuota(A);
+  const saldo = Math.max(A.saldoCapital, 0);
+  const interesMes = Math.round(saldo * r);
+  const capitalMes = Math.max(Math.min(cuota - interesMes, saldo), 0);
+  const extrasMes = (A.extras || []).filter(e => A.cuotasPagadas < (e.meses || 0));
+  const sumaExtras = extrasMes.reduce((s, e) => s + e.valor, 0);
+  const totalMes = saldo > 0 ? cuota + A.seguro + sumaExtras : 0;
+  // proyección de cuántas cuotas faltan e interés futuro con el saldo actual
+  let b = saldo, meses = 0, intFut = 0, noAmortiza = false;
+  while (b > 0 && meses < 1000) {
+    const it = b * r, cap = Math.min(cuota - it, b);
+    if (cap <= 0) { noAmortiza = true; break; }
+    b -= cap; intFut += it; meses++;
+  }
+  const pct = A.capital ? Math.min((1 - saldo / A.capital) * 100, 100) : 0;
+  const pagado = saldo <= 0;
+  cont.innerHTML = `
+    <div class="amort-cap">
+      <div><label>Real capital you still owe (the boss)</label><strong class="owe">${fmt(saldo)}</strong></div>
+      <div class="card-bar paid"><i style="width:${pct}%"></i></div>
+      <small>${Math.round(pct)}% of the capital killed${A.abonosExtra ? ` · ${fmt(A.abonosExtra)} in extra payments` : ''}</small>
+    </div>
+    ${pagado ? `<p class="amort-done">🎉 Capital fully paid — Davivienda defeated!</p>` : `
+    <div class="amort-grid">
+      <div><label>You pay this month</label><b>${fmt(totalMes)}</b></div>
+      <div><label>↳ goes to your debt (capital)</label><b class="paid">${fmt(capitalMes)}</b></div>
+      <div><label>↳ interest (lost)</label><b class="owe">${fmt(interesMes)}</b></div>
+      <div><label>↳ insurance + handling</label><b>${fmt(A.seguro)}</b></div>
+      ${extrasMes.map(e => `<div><label>↳ ${esc(e.name)} (${e.meses - A.cuotasPagadas} left)</label><b>${fmt(e.valor)}</b></div>`).join('')}
+    </div>
+    <p class="amort-proj">${noAmortiza
+        ? '⚠ With this installment the capital barely moves — check the numbers with ✎.'
+        : `At this rate: <b>${meses}</b> installments left · about <b>${fmt(Math.round(intFut))}</b> more in interest. Installment ${A.cuotasPagadas + 1} of ${A.cuotas}.`}</p>
+    <div class="amort-btns">
+      <button class="btn-mini" id="amortPay">✅ Log this month's payment</button>
+      <button class="btn-mini gold" id="amortExtra">💥 Extra payment to capital</button>
+      <button class="btn-mini ghost" id="amortReset">↺ Reset</button>
+    </div>`}`;
+}
 function renderMyCards() {
   const cont = document.getElementById('myCards');
   if (!cont) return;
@@ -1286,6 +1348,7 @@ function renderBoss(animate) {
 
   renderDesglose();
   renderMyCards();
+  renderAmortDav();
 
   $('#abonoList').innerHTML = S.abonos.map(a =>
     `<li><span>${a.fecha} · ${a.name}</span>
@@ -1392,7 +1455,7 @@ $('#abonoList').addEventListener('click', async (e) => {
 // Editar / subir el cupo de una de TUS tarjetas
 document.addEventListener('click', async (e) => {
   const ed = e.target.closest('.card-cupo-edit');
-  if (!ed) return;
+  if (!ed || ed.id === 'amortEdit') return;
   const key = ed.dataset.key;
   const actual = +ed.dataset.cupo || 0;
   const r = await modal({ icon: '💳', title: `Limit for ${key}`,
@@ -1404,6 +1467,65 @@ document.addEventListener('click', async (e) => {
   await api('/api/profile', { body: { key: 'cupo_' + key, value: String(val) } });
   toast('💳 Limit saved');
   load();
+});
+
+// ===== Botones del tracker de Davivienda =====
+document.addEventListener('click', async (e) => {
+  if (e.target.id === 'amortPay') {
+    const A = getAmortDav();
+    const r = Math.pow(1 + A.ea / 100, 1 / 12) - 1;
+    const cuota = amortCuota(A);
+    const it = Math.round(A.saldoCapital * r);
+    const cap = Math.max(Math.min(cuota - it, A.saldoCapital), 0);
+    if (cap <= 0 && A.saldoCapital > 0) { toast('The installment doesn\'t cover the interest — check the numbers with ✎.'); return; }
+    A.saldoCapital = Math.max(A.saldoCapital - cap, 0);
+    A.cuotasPagadas += 1; A.interesPagado += it;
+    await saveAmortDav(A);
+    toast(`✅ Logged · ${fmt(cap)} to your debt · ${fmt(it)} interest`);
+    load(); return;
+  }
+  if (e.target.id === 'amortExtra') {
+    const A = getAmortDav();
+    const res = await modal({ icon: '💥', title: 'Extra payment to capital',
+      text: 'This goes 100% to your capital and kills Davivienda faster — it saves you future interest.',
+      fields: [{ type: 'money', placeholder: 'Amount' }], okText: 'Apply' });
+    if (!res || !res[0]) return;
+    const val = +String(res[0]).replace(/[^0-9]/g, '') || 0;
+    if (val <= 0) return;
+    A.saldoCapital = Math.max(A.saldoCapital - val, 0); A.abonosExtra += val;
+    await saveAmortDav(A);
+    toast(`💥 ${fmt(val)} straight to capital`);
+    load(); return;
+  }
+  if (e.target.id === 'amortEdit') {
+    const A = getAmortDav();
+    const res = await modal({ icon: '🏦', title: 'Davivienda — loan details',
+      text: 'Match these to your Davivienda statement. Capital = what you refinanced; rate = E.A.; insurance + handling = the fixed monthly cost that does NOT lower your debt.',
+      fields: [
+        { type: 'money', value: A.capital, placeholder: 'Capital financed' },
+        { type: 'text', value: String(A.ea), placeholder: 'Annual rate E.A. % (e.g. 28.77)' },
+        { type: 'number', value: A.cuotas, placeholder: 'Number of installments (e.g. 60)' },
+        { type: 'money', value: A.cuota, placeholder: 'Bank monthly installment (e.g. 473.600)' },
+        { type: 'money', value: A.seguro, placeholder: 'Insurance + handling per month' }
+      ], okText: 'Save' });
+    if (!res) return;
+    const cap = +String(res[0]).replace(/[^0-9]/g, '') || A.capital;
+    A.ea = parseFloat(String(res[1]).replace(',', '.')) || A.ea;
+    A.cuotas = +res[2] || A.cuotas;
+    A.cuota = +String(res[3]).replace(/[^0-9]/g, '') || A.cuota;
+    A.seguro = +String(res[4]).replace(/[^0-9]/g, '') || A.seguro;
+    A.capital = cap;
+    if (!A.cuotasPagadas && !A.abonosExtra) A.saldoCapital = cap;   // si no has pagado, arranca limpio
+    await saveAmortDav(A);
+    toast('🏦 Updated'); load(); return;
+  }
+  if (e.target.id === 'amortReset') {
+    if (!await confirmModal('Reset Davivienda tracker', 'This puts the capital back to the start (keeps your loan details). Use it if the tracking got off.')) return;
+    const A = getAmortDav();
+    A.saldoCapital = A.capital; A.cuotasPagadas = 0; A.interesPagado = 0; A.abonosExtra = 0;
+    await saveAmortDav(A);
+    toast('↺ Tracker reset'); load(); return;
+  }
 });
 
 /* ---------- DESGLOSE ---------- */

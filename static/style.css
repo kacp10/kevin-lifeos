@@ -686,6 +686,27 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .card-bar.paid i { background: linear-gradient(90deg, #2aa784, var(--ok)); }
 .card-box small { color: var(--mut); font-size: .72rem; display: block; margin-top: 5px; }
 
+/* ====== DAVIVIENDA AMORTIZACIÓN v51 ====== */
+.amort-cap { margin-bottom: 12px; }
+.amort-cap label { color: var(--mut); font-size: .72rem; display: block; }
+.amort-cap strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.amort-cap .card-bar, #amortDav .card-bar { height: 12px; background: #0e0b1c; border-radius: 99px; overflow: hidden; margin: 8px 0 4px; }
+.amort-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 14px; margin: 4px 0 10px; }
+.amort-grid > div { display: flex; flex-direction: column; gap: 1px; }
+.amort-grid label { color: var(--mut); font-size: .7rem; }
+.amort-grid b { font-size: .95rem; font-variant-numeric: tabular-nums; }
+.amort-grid b.owe { color: var(--hp); }
+.amort-grid b.paid { color: var(--ok); }
+.amort-proj { font-size: .8rem; color: var(--txt); background: #1b1633; border: 1px solid var(--line);
+  border-radius: 10px; padding: 8px 10px; margin: 4px 0 12px; }
+.amort-done { color: var(--ok); font-weight: 700; text-align: center; padding: 14px; }
+.amort-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn-mini { background: var(--accent); color: #fff; border: none; border-radius: 10px;
+  padding: 9px 12px; font-size: .82rem; font-weight: 600; cursor: pointer; }
+.btn-mini.gold { background: linear-gradient(90deg, #c79a3a, var(--gold)); color: #2a1f06; }
+.btn-mini.ghost { background: none; border: 1px solid var(--line); color: var(--mut); }
+.btn-mini:hover { filter: brightness(1.08); }
+
 /* ====== TROFEO DE DEUDAS DERROTADAS v30 ====== */
 .debt-trophy { background: rgba(245,185,66,.1); border: 1px solid var(--gold); border-radius: 10px;
   padding: 9px 12px; margin-bottom: 10px; font-size: .82rem; color: var(--gold); font-weight: 600; }
