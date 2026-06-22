@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<link rel="stylesheet" href="/static/style.css?v=50">
+<link rel="stylesheet" href="/static/style.css?v=51">
 </head>
 <body>
 
@@ -144,6 +144,15 @@
     <h2>💳 My credit cards</h2>
     <p class="hint">Your own cards only: limit (cupo), what you owe now, available room, how much you've paid, and this month's payment. Raise a card's limit anytime with ✎ (for example after paying it all off).</p>
     <div id="myCards"></div>
+  </div>
+
+  <div class="panel" id="amortPanel">
+    <div class="row-between">
+      <h2>🏦 Davivienda — real payoff tracker</h2>
+      <button class="card-cupo-edit" id="amortEdit" title="Edit loan details">✎</button>
+    </div>
+    <p class="hint">The realistic view of your refinanced card: how much of each payment is interest vs. real debt, your true remaining capital, and how extra payments kill it faster. Interest, insurance &amp; handling do NOT lower the boss — only capital does.</p>
+    <div id="amortDav"></div>
   </div>
 
   <div class="grid-2">
@@ -328,7 +337,7 @@
 </section>
 
 </main>
-<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v50</b></footer>
-<script src="/static/app.js?v=50"></script>
+<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v51</b></footer>
+<script src="/static/app.js?v=51"></script>
 </body>
 </html>
