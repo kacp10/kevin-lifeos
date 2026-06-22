@@ -82,6 +82,7 @@ function deudaDelMes(i) {
 // desincronizan (antes Inicio usaba un número guardado que quedaba viejo al pagar/quitar cuotas).
 // Si el creditor no tiene desglose, usa el número del plan como respaldo.
 function cuotaPlanMes(creditorName, i) {
+  if (creditorName === 'Tarjeta DV') return amortMontoMes(i);   // Davivienda: amortización real
   const grupo = CRED_TO_GRUPO[creditorName] || creditorName;
   const items = S.detalle && S.detalle[grupo];
   if (!items || !items.length) return ((S.plan.creditors[creditorName] || [])[i]) || 0;
@@ -160,7 +161,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 51;
+const FRONT_V = 52;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1189,16 +1190,51 @@ function amortCuota(A) {   // cuota fija real del banco; si no está, la calcula
   const r = Math.pow(1 + A.ea / 100, 1 / 12) - 1;
   return Math.round(A.capital * r / (1 - Math.pow(1 + r, -A.cuotas)));
 }
-function renderAmortDav() {
-  const cont = document.getElementById('amortDav');
-  if (!cont) return;
+// Total a pagar de Davivienda en el mes i (avanza solo: jul/ago con extras, sept+ sin extras)
+function amortMontoMes(i) {
+  const A = getAmortDav();
+  const extras = (A.extras || []).reduce((s, e) => s + (i < (e.meses || 0) ? e.valor : 0), 0);
+  return amortCuota(A) + (A.seguro || 0) + extras;
+}
+// Estado REAL del crédito: las cuotas pagadas se cuentan desde los checks de Inicio
+// (item "Tarjeta DV"), más los abonos extra a capital. Una sola fuente de verdad.
+function amortState() {
   const A = getAmortDav();
   const r = Math.pow(1 + A.ea / 100, 1 / 12) - 1;
   const cuota = amortCuota(A);
-  const saldo = Math.max(A.saldoCapital, 0);
+  const pagadas = (S.checks || []).filter(c => c.startsWith('Tarjeta DV|')).length;
+  let bal = A.capital, intPag = 0;
+  for (let k = 0; k < pagadas && bal > 0; k++) { const it = bal * r; bal -= Math.min(cuota - it, bal); intPag += it; }
+  bal = Math.max(bal - (A.abonosExtra || 0), 0);
+  return { A, r, cuota, pagadas, saldoCapital: Math.round(bal), interesPagado: Math.round(intPag) };
+}
+// Filas del desglose para Davivienda en el mes i (avanzan con el filtro)
+function amortRowsMes(i) {
+  const A = getAmortDav();
+  const r = Math.pow(1 + A.ea / 100, 1 / 12) - 1;
+  const cuota = amortCuota(A);
+  let bal = A.capital;
+  for (let k = 0; k < i && bal > 0; k++) { const it = bal * r; bal -= Math.min(cuota - it, bal); }
+  const rows = [];
+  if (bal > 0) {
+    const interes = Math.round(bal * r), capital = Math.max(Math.min(cuota - interes, bal), 0);
+    rows.push({ label: `Crédito Davivienda · cuota ${i + 1}/${A.cuotas} (capital ${fmt(capital)} · interés ${fmt(interes)})`,
+      cuota, saldo: Math.round(Math.max(bal - capital, 0)), done: false });
+    if (A.seguro) rows.push({ label: 'Seguro + cuota de manejo (no baja deuda)', cuota: A.seguro, saldo: 0, done: false });
+  }
+  (A.extras || []).forEach(e => { if (i < (e.meses || 0)) rows.push({ label: `${e.name} · ${i + 1}/${e.meses}`, cuota: e.valor, saldo: 0, done: false }); });
+  if (!rows.length) rows.push({ label: 'Crédito pagado 🎉', cuota: 0, saldo: 0, done: true });
+  return rows;
+}
+function renderAmortDav() {
+  const cont = document.getElementById('amortDav');
+  if (!cont) return;
+  const st = amortState();
+  const A = st.A, r = st.r, cuota = st.cuota;
+  const saldo = st.saldoCapital;
   const interesMes = Math.round(saldo * r);
   const capitalMes = Math.max(Math.min(cuota - interesMes, saldo), 0);
-  const extrasMes = (A.extras || []).filter(e => A.cuotasPagadas < (e.meses || 0));
+  const extrasMes = (A.extras || []).filter(e => st.pagadas < (e.meses || 0));
   const sumaExtras = extrasMes.reduce((s, e) => s + e.valor, 0);
   const totalMes = saldo > 0 ? cuota + A.seguro + sumaExtras : 0;
   // proyección de cuántas cuotas faltan e interés futuro con el saldo actual
@@ -1222,16 +1258,16 @@ function renderAmortDav() {
       <div><label>↳ goes to your debt (capital)</label><b class="paid">${fmt(capitalMes)}</b></div>
       <div><label>↳ interest (lost)</label><b class="owe">${fmt(interesMes)}</b></div>
       <div><label>↳ insurance + handling</label><b>${fmt(A.seguro)}</b></div>
-      ${extrasMes.map(e => `<div><label>↳ ${esc(e.name)} (${e.meses - A.cuotasPagadas} left)</label><b>${fmt(e.valor)}</b></div>`).join('')}
+      ${extrasMes.map(e => `<div><label>↳ ${esc(e.name)} (${e.meses - st.pagadas} left)</label><b>${fmt(e.valor)}</b></div>`).join('')}
     </div>
     <p class="amort-proj">${noAmortiza
         ? '⚠ With this installment the capital barely moves — check the numbers with ✎.'
-        : `At this rate: <b>${meses}</b> installments left · about <b>${fmt(Math.round(intFut))}</b> more in interest. Installment ${A.cuotasPagadas + 1} of ${A.cuotas}.`}</p>
+        : `At this rate: <b>${meses}</b> installments left · about <b>${fmt(Math.round(intFut))}</b> more in interest. You've paid ${st.pagadas} of ${A.cuotas} (counted from your monthly check in Home).`}</p>
     <div class="amort-btns">
-      <button class="btn-mini" id="amortPay">✅ Log this month's payment</button>
       <button class="btn-mini gold" id="amortExtra">💥 Extra payment to capital</button>
-      <button class="btn-mini ghost" id="amortReset">↺ Reset</button>
-    </div>`}`;
+      <button class="btn-mini ghost" id="amortReset">↺ Reset extra payments</button>
+    </div>
+    <p class="hint" style="margin-top:8px">Each month you tick <b>Tarjeta DV</b> in Home's payment list, this advances by one installment. No separate button needed.</p>`}`;
 }
 function renderMyCards() {
   const cont = document.getElementById('myCards');
@@ -1241,9 +1277,13 @@ function renderMyCards() {
   cont.innerHTML = MIS_TARJETAS.map(t => {
     const bd = (S.debts || []).find(d => d.name === t.boss);
     const comprado = bd ? compradoEn(bd.name) : 0;
-    const totalCard = bd ? bd.initial + comprado : 0;     // deuda total histórica de la tarjeta
-    const pagado = bd ? bd.abonado : 0;                    // lo que llevas pagado (crece con cada ataque)
-    const saldo = Math.max(totalCard - pagado, 0);         // lo que debes ahora
+    let totalCard = bd ? bd.initial + comprado : 0;       // deuda total histórica
+    let pagado = bd ? bd.abonado : 0;
+    let saldo = Math.max(totalCard - pagado, 0);
+    if (t.key === 'Tarjeta DV') {                          // Davivienda: capital real amortizado
+      const st = amortState();
+      totalCard = st.A.capital; saldo = st.saldoCapital; pagado = Math.max(totalCard - saldo, 0);
+    }
     const cupo = +(pf['cupo_' + t.key] || 0);
     const disponible = cupo ? Math.max(cupo - saldo, 0) : 0;
     const usoPct = cupo ? Math.min((saldo / cupo) * 100, 100) : 0;
@@ -1471,19 +1511,6 @@ document.addEventListener('click', async (e) => {
 
 // ===== Botones del tracker de Davivienda =====
 document.addEventListener('click', async (e) => {
-  if (e.target.id === 'amortPay') {
-    const A = getAmortDav();
-    const r = Math.pow(1 + A.ea / 100, 1 / 12) - 1;
-    const cuota = amortCuota(A);
-    const it = Math.round(A.saldoCapital * r);
-    const cap = Math.max(Math.min(cuota - it, A.saldoCapital), 0);
-    if (cap <= 0 && A.saldoCapital > 0) { toast('The installment doesn\'t cover the interest — check the numbers with ✎.'); return; }
-    A.saldoCapital = Math.max(A.saldoCapital - cap, 0);
-    A.cuotasPagadas += 1; A.interesPagado += it;
-    await saveAmortDav(A);
-    toast(`✅ Logged · ${fmt(cap)} to your debt · ${fmt(it)} interest`);
-    load(); return;
-  }
   if (e.target.id === 'amortExtra') {
     const A = getAmortDav();
     const res = await modal({ icon: '💥', title: 'Extra payment to capital',
@@ -1492,7 +1519,7 @@ document.addEventListener('click', async (e) => {
     if (!res || !res[0]) return;
     const val = +String(res[0]).replace(/[^0-9]/g, '') || 0;
     if (val <= 0) return;
-    A.saldoCapital = Math.max(A.saldoCapital - val, 0); A.abonosExtra += val;
+    A.abonosExtra = (A.abonosExtra || 0) + val;
     await saveAmortDav(A);
     toast(`💥 ${fmt(val)} straight to capital`);
     load(); return;
@@ -1515,16 +1542,15 @@ document.addEventListener('click', async (e) => {
     A.cuota = +String(res[3]).replace(/[^0-9]/g, '') || A.cuota;
     A.seguro = +String(res[4]).replace(/[^0-9]/g, '') || A.seguro;
     A.capital = cap;
-    if (!A.cuotasPagadas && !A.abonosExtra) A.saldoCapital = cap;   // si no has pagado, arranca limpio
     await saveAmortDav(A);
     toast('🏦 Updated'); load(); return;
   }
   if (e.target.id === 'amortReset') {
-    if (!await confirmModal('Reset Davivienda tracker', 'This puts the capital back to the start (keeps your loan details). Use it if the tracking got off.')) return;
+    if (!await confirmModal('Reset extra payments', 'This clears only your extra payments to capital. Your monthly progress comes from the checks in Home and stays.')) return;
     const A = getAmortDav();
-    A.saldoCapital = A.capital; A.cuotasPagadas = 0; A.interesPagado = 0; A.abonosExtra = 0;
+    A.abonosExtra = 0;
     await saveAmortDav(A);
-    toast('↺ Tracker reset'); load(); return;
+    toast('↺ Extra payments cleared'); load(); return;
   }
 });
 
@@ -1549,10 +1575,12 @@ function renderDesglose() {
   for (const [g, items] of Object.entries(S.detalle)) {
     filas[g] = items.map(it => calcItem(it, i));
   }
+  if (filas['Tarjeta DV']) filas['Tarjeta DV'] = amortRowsMes(i);   // Davivienda = amortización (avanza sola)
   const grupoRedefer = {};   // grupo -> {type, id/name} para el botón de rediferir
   // deudas principales del plan (creditors): rediferibles por nombre
   const creditorNames = Object.keys((S.plan && S.plan.creditors) || {});
   for (const [g, items] of Object.entries(S.detalle)) {
+    if (g === 'Tarjeta DV') continue;   // Davivienda usa amortización, no rediferir de creditor
     // ¿este grupo corresponde a un creditor con saldo vivo?
     const cred = creditorNames.find(cn => cn === g || g.includes(cn) || cn.includes(g));
     if (cred) {
