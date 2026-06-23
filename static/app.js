@@ -161,19 +161,20 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 52;
+const FRONT_V = 54;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
 // Conexión Life -> Habits: qué hábito marca cada actividad de la rutina.
 // Varias actividades pueden marcar el MISMO hábito (ej: ejercicio o gym -> Exercise).
 const ACT_TO_HABIT = {
-  ejercicio: 'Exercise', gym: 'Exercise',
-  ingles: 'English',
-  estudio: 'Study and hard work', proyecto: 'Study and hard work',
-  leer: 'Read',
-  dormir: 'Sleep well',
-  skincare: 'Take care my face and body'
+  ejercicio: ['Exercise'], gym: ['Exercise'],
+  ingles: ['English'],
+  estudio: ['Study and hard work', 'Mathematic / Data', 'Writing'],
+  proyecto: ['Study and hard work'],
+  leer: ['Read'],
+  dormir: ['Sleep well'],
+  skincare: ['Take care my face and body']
 };
 // Sub-tareas del bloque de inglés (para preguntar una por una al marcar la casilla).
 // Devuelve el título del día y sus pasos: cada paso tiene .s (corto) y .how (cómo hacerlo bien).
@@ -318,13 +319,14 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
     const back = document.createElement('div');
     back.className = 'modal-back';
     const fieldsHtml = fields.map((f, i) => {
+      const lab = f.label ? `<label class="mfield-lab">${f.label}</label>` : '';
       if (f.type === 'select')
-        return `<select data-i="${i}">${f.options.map(o => { const v = o.v ?? o; const t = o.t ?? o; const sel = (f.value != null && String(f.value) === String(v)) ? ' selected' : ''; return `<option value="${v}"${sel}>${t}</option>`; }).join('')}</select>`;
+        return lab + `<select data-i="${i}">${f.options.map(o => { const v = o.v ?? o; const t = o.t ?? o; const sel = (f.value != null && String(f.value) === String(v)) ? ' selected' : ''; return `<option value="${v}"${sel}>${t}</option>`; }).join('')}</select>`;
       if (f.type === 'money') {
         const initVal = f.value != null && f.value !== '' ? Number(f.value).toLocaleString('es-CO') : '';
-        return `<input data-i="${i}" data-money="1" type="text" inputmode="numeric" placeholder="${f.placeholder || ''}" value="${initVal}">`;
+        return lab + `<input data-i="${i}" data-money="1" type="text" inputmode="numeric" placeholder="${f.placeholder || ''}" value="${initVal}">`;
       }
-      return `<input data-i="${i}" type="${f.type || 'text'}" placeholder="${f.placeholder || ''}" value="${f.value ?? ''}" ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''}>`;
+      return lab + `<input data-i="${i}" type="${f.type || 'text'}" placeholder="${f.placeholder || ''}" value="${f.value ?? ''}" ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''}>`;
     }).join('');
     back.innerHTML = `<div class="modal-card">
       <div class="modal-icon">${icon}</div>
@@ -1660,6 +1662,7 @@ function rachaHabito(habitId, marks) {
   const hoyKey = `${habitId}|${localISO(d)}`;
   if (!marks.has(hoyKey)) d.setDate(d.getDate() - 1);
   for (let k = 0; k < 400; k++) {
+    if (d.getDay() === 0) { d.setDate(d.getDate() - 1); continue; }   // domingo = descanso: no rompe ni cuenta la racha
     const key = `${habitId}|${localISO(d)}`;
     if (marks.has(key)) { streak++; d.setDate(d.getDate() - 1); }
     else break;
@@ -2544,8 +2547,31 @@ document.addEventListener('click', async (e) => {
         toast(`📈 ${active.name} updated to ${nv}%. It flows to your goal automatically.`);
       }
     }
+    // CASO ESPECIAL leer/Read: pregunta en qué página vas de los libros en "reading"
+    // (igual que el curso pregunta el %). Actualiza el "On page" solo, sin escribirlo a mano.
+    if (act === 'leer') {
+      const leyendo = (S.books || []).filter(b => b.status === 'Leyendo' || b.status === 'Reading');
+      if (leyendo.length) {
+        const r = await modal({ icon: '📖', title: 'Reading progress',
+          text: 'What page are you on now? Leave a book blank if you didn\'t read it today.',
+          fields: leyendo.map(b => ({ type: 'number', min: 0,
+            label: `${esc(b.title)}${b.pages ? ` (of ${b.pages})` : ''}`,
+            placeholder: 'page', value: b.current || '' })),
+          okText: 'Save & check ✓' });
+        if (r === null) return;                 // canceló: no marca
+        for (let k = 0; k < leyendo.length; k++) {
+          const raw = String(r[k] ?? '').trim();
+          if (raw === '') continue;             // ese libro no se tocó
+          const val = Math.max(0, parseInt(raw.replace(/[^0-9]/g, ''), 10) || 0);
+          await api('/api/book', { body: { id: leyendo[k].id, field: 'current', value: val } });
+          if (leyendo[k].pages && val >= leyendo[k].pages)   // llegó al final -> Terminado
+            await api('/api/book', { body: { id: leyendo[k].id, field: 'status', value: 'Terminado' } });
+        }
+        toast('📖 Reading progress saved');
+      }
+    }
     await api('/api/routine', { body: { day, activity: act } });
-    if (act !== 'estudio') toast('✓ Done! One more step toward your goals.');
+    if (act !== 'estudio' && act !== 'leer') toast('✓ Done! One more step toward your goals.');
     // marcar el hábito sinónimo en Habits
     await sincronizarHabito(act, day, true);
   } else {
@@ -2571,39 +2597,34 @@ document.addEventListener('click', async (e) => {
 
 // Marca/desmarca el hábito en Habits según una actividad de Life.
 // Respeta sinónimos: Exercise se marca si ejercicio O gym; se desmarca solo si NINGUNA queda hecha.
-function habitoDeActividad(act) {
-  // actividad fija (mapa) o actividad extra (su hábito guardado en routine_extra)
-  if (ACT_TO_HABIT[act]) return ACT_TO_HABIT[act];
+function habitosDeActividad(act) {
+  // actividad fija (mapa, array) o actividad extra (su hábito guardado en routine_extra)
+  if (ACT_TO_HABIT[act]) return [].concat(ACT_TO_HABIT[act]);
   if (act && act.startsWith('extra_')) {
     const id = +act.slice(6);
     const ex = (S.routine_extra || []).find(x => x.id === id);
-    return ex && ex.habit ? ex.habit : null;
+    return ex && ex.habit ? [ex.habit] : [];
   }
-  return null;
+  return [];
 }
 async function sincronizarHabito(act, day, marcado) {
-  const habitName = habitoDeActividad(act);
-  if (!habitName) return;   // actividad libre, no afecta hábitos
-  const habit = (S.habits || []).find(h => h.name === habitName);
-  if (!habit) return;
-  // ¿qué otras actividades apuntan al mismo hábito? (sinónimos: fijas + extras)
-  const sinonimos = Object.keys(ACT_TO_HABIT).filter(k => ACT_TO_HABIT[k] === habitName);
-  for (const ex of (S.routine_extra || [])) {
-    if (ex.habit === habitName) sinonimos.push('extra_' + ex.id);
-  }
-  // hechas hoy según rdone (refrescamos desde S, que aún no incluye el cambio recién hecho)
-  const hechasHoy = new Set((S.rdone || [])
-    .filter(x => x.startsWith(day + '|'))
-    .map(x => x.split('|')[1]));
-  // aplicar el cambio que acabamos de hacer (S aún no lo refleja)
+  const habitNames = habitosDeActividad(act);
+  if (!habitNames.length) return;   // actividad libre, no afecta hábitos
+  // hechas hoy según rdone (S aún no incluye el cambio recién hecho), + el cambio actual
+  const hechasHoy = new Set((S.rdone || []).filter(x => x.startsWith(day + '|')).map(x => x.split('|')[1]));
   if (marcado) hechasHoy.add(act); else hechasHoy.delete(act);
-  const algunaHecha = sinonimos.some(s => hechasHoy.has(s));
-  const marcadoActual = (S.marks || []).includes(`${habit.id}|${day}`);
-  // si debe estar marcado y no lo está -> marcar; si no debe y lo está -> desmarcar
-  if (algunaHecha && !marcadoActual) {
-    await api('/api/habit', { body: { habit_id: habit.id, day } });
-  } else if (!algunaHecha && marcadoActual) {
-    await api('/api/habit', { body: { habit_id: habit.id, day } });
+  for (const habitName of habitNames) {
+    const habit = (S.habits || []).find(h => h.name === habitName);
+    if (!habit) continue;
+    // sinónimos: TODAS las actividades cuyo mapeo incluye este hábito (fijas + extras)
+    const sinonimos = Object.keys(ACT_TO_HABIT).filter(k => [].concat(ACT_TO_HABIT[k]).includes(habitName));
+    for (const ex of (S.routine_extra || [])) {
+      if (ex.habit === habitName) sinonimos.push('extra_' + ex.id);
+    }
+    const algunaHecha = sinonimos.some(s => hechasHoy.has(s));
+    const marcadoActual = (S.marks || []).includes(`${habit.id}|${day}`);
+    if (algunaHecha && !marcadoActual) await api('/api/habit', { body: { habit_id: habit.id, day } });
+    else if (!algunaHecha && marcadoActual) await api('/api/habit', { body: { habit_id: habit.id, day } });
   }
 }
 
@@ -2698,6 +2719,7 @@ function renderSuenos() {
           <input class="d-edit money-live" inputmode="numeric" data-f="saved" data-id="${d.id}" value="${Number(d.saved || 0).toLocaleString('es-CO')}" title="Lo que llevas ahorrado">
           <div class="mini-bar green"><i style="width:${d.bought ? 100 : p * 100}%"></i></div>
           <button class="buy-btn ${d.bought ? 'on' : ''}" data-id="${d.id}">${d.bought ? '✅ Comprado' : 'Bought?'}</button>
+          <button class="to-shop" data-id="${d.id}" title="Send to Shopping & to-buy">→ 🛒</button>
         </div>`;
       }).join('');
   }).join('');
@@ -2710,6 +2732,21 @@ $('#dreamList').addEventListener('change', async (e) => {
   load();
 });
 $('#dreamList').addEventListener('click', async (e) => {
+  const shop = e.target.closest('.to-shop');
+  if (shop) {
+    const d = S.dreams.find(x => x.id === +shop.dataset.id);
+    if (!d) return;
+    const esSkincare = /skincare/i.test(d.category || '');   // skincare se recompra: NO sale de la wishlist
+    const msg = esSkincare
+      ? `Send <b>${esc(d.name)}</b> to your 🛒 Shopping & to-buy list?<br><br>Skincare items stay in your wishlist so you can buy them again.`
+      : `Move <b>${esc(d.name)}</b> to your 🛒 Shopping & to-buy list? It leaves your wishlist and you tick it off there once you buy it.`;
+    if (!await confirmModal('Send to Shopping', msg)) return;
+    await api('/api/shopping/new', { body: { name: d.name, slots: 1 } });
+    if (!esSkincare) await api('/api/dream/' + d.id, { method: 'DELETE' });
+    toast(esSkincare ? '🛒 Added to Shopping · kept in wishlist' : '🛒 Moved to Shopping & to-buy');
+    load();
+    return;
+  }
   const b = e.target.closest('.buy-btn');
   if (!b) return;
   const d = S.dreams.find(x => x.id === +b.dataset.id);

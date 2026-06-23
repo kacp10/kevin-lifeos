@@ -250,6 +250,12 @@ footer code { color: var(--gold); }
 }
 .buy-btn:hover { border-color: var(--ok); color: var(--ok); }
 .buy-btn.on { background: var(--ok); border-color: var(--ok); color: #062a22; font-weight: 800; }
+.to-shop {
+  background: none; border: 1px solid var(--line); color: var(--mut);
+  border-radius: 8px; padding: 6px 8px; cursor: pointer; font-size: .8rem;
+}
+.to-shop:hover { border-color: var(--accent); color: var(--txt); }
+.mfield-lab { display: block; text-align: left; font-size: .75rem; color: var(--mut); margin: 6px 0 2px; }
 .bought-item .dname { text-decoration: line-through; color: var(--mut); }
 .dream-cat small { color: var(--mut); font-family: 'Inter', sans-serif; font-weight: 400; }
 /* ---------- ANIME v8 ---------- */
