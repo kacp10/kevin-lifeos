@@ -12,8 +12,14 @@ const sliceLabels = {
     meta.data.forEach((arc, i) => {
       const val = data[i] || 0;
       const pct = Math.round((val / total) * 100);
-      if (pct < 6) return;                 // no dibujar en rebanadas muy chicas
-      const pos = arc.tooltipPosition();   // punto medio del arco
+      if (pct < 1) return;                 // 0% real: nada que mostrar
+      let pos = arc.tooltipPosition();     // punto medio del arco (para rebanadas grandes)
+      if (pct < 12) {                      // rebanada chica (ej. Savings): etiqueta hacia afuera
+        const p = arc.getProps(['startAngle', 'endAngle', 'outerRadius', 'x', 'y'], true);
+        const mid = (p.startAngle + p.endAngle) / 2;
+        const r = p.outerRadius + 14;
+        pos = { x: p.x + Math.cos(mid) * r, y: p.y + Math.sin(mid) * r };
+      }
       ctx.save();
       ctx.font = '700 14px Inter, system-ui, sans-serif';
       ctx.textAlign = 'center';
@@ -173,7 +179,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 56;
+const FRONT_V = 57;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -506,7 +512,27 @@ if (shopForm) shopForm.addEventListener('submit', async (e) => {
 document.addEventListener('click', async (e) => {
   const chk = e.target.closest('.shop-check');
   if (chk) {
-    await api('/api/shopping/tick', { body: { id: +chk.dataset.id } });
+    const id = +chk.dataset.id;
+    const it = (S.shopping || []).find(s => s.id === id);
+    const slots = it ? (it.slots || 1) : 1;
+    const done = it ? (it.done || 0) : 0;
+    const completaAhora = it && (done + 1) === slots;   // este toque lo deja completo
+    await api('/api/shopping/tick', { body: { id } });
+    if (completaAhora) {
+      const r = await modal({ icon: '🛒', title: 'How much did it cost?',
+        text: `You bought <b>${esc(it.name)}</b>. Log it in your expense tracker to keep the record. (Leave blank to skip.)`,
+        fields: [
+          { type: 'money', label: 'Amount', placeholder: 'e.g. 25.000' },
+          { type: 'select', label: 'Paid with', options: PAY_METHODS.map(m => ({ v: m.id, t: `${m.logo} ${m.label}` })) }
+        ], okText: 'Log expense' });
+      if (r && r[0]) {
+        const amount = +String(r[0]).replace(/[^0-9]/g, '') || 0;
+        if (amount > 0) {
+          await api('/api/expense/new', { body: { name: it.name, amount, method: r[1] || 'Efectivo', kind: 'once', month: S.plan.months[MES] } });
+          toast(`🧾 ${fmt(amount)} logged in expenses`);
+        }
+      }
+    }
     load();
     return;
   }
@@ -2351,6 +2377,19 @@ function renderRoutineDay() {
                 x.weekday === wd)));
   for (const x of extras) {
     lista.push({ t: x.time || '—', title: x.title, d: x.descr || '', key: 'extra_' + x.id, extraId: x.id });
+  }
+  // RECORDATORIOS POR FECHA (definidos en código, recurren todos los meses)
+  const [yy, mm, dd] = iso.split('-').map(Number);
+  const lastDay = new Date(yy, mm, 0).getDate();   // último día del mes
+  // 💈 Haircut: día 15 y fin de mes (30, o el último si el mes es más corto). Desde julio 2026.
+  if (iso >= '2026-07-01' && (dd === 15 || dd === 30 || (lastDay < 30 && dd === lastDay))
+      && !hiddenDay.has(`${iso}|haircut`)) {
+    lista.push({ t: '14:00', title: '💈 Get a haircut', d: 'Reminder — every 2 weeks (15th & end of month).', key: 'haircut' });
+  }
+  // 🧺 Laundry: cada 9 días desde el 23 de junio 2026 (hoy)
+  const diffDays = Math.round((Date.UTC(yy, mm - 1, dd) - Date.UTC(2026, 5, 23)) / 86400000);
+  if (diffDays >= 0 && diffDays % 9 === 0 && !hiddenDay.has(`${iso}|laundry`)) {
+    lista.push({ t: '09:00', title: '🧺 Do the laundry', d: 'Reminder — every 9 days.', key: 'laundry' });
   }
   // ORDENAR TODO por hora real (los textos como Sleep/Afternoon/Night van al final en orden lógico)
   lista.sort((a, b) => horaOrden(a.t) - horaOrden(b.t));
