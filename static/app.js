@@ -91,6 +91,18 @@ function cuotaPlanMes(creditorName, i) {
     return s + (ci.done ? 0 : (ci.cuota || 0));
   }, 0);
 }
+// Cargos fijos del mes que SÍ se pagan pero NO bajan la deuda (seguro, cuota de manejo, etc.):
+// en el desglole son los items "fijos" (sin número de cuotas). El jefe no debe contar esto.
+function costoFijoMes(creditorName, i) {
+  if (creditorName === 'Tarjeta DV') {   // Davivienda: seguro/manejo + cargos extra de los primeros meses
+    const A = getAmortDav();
+    const extras = (A.extras || []).reduce((s, e) => s + (i < (e.meses || 0) ? e.valor : 0), 0);
+    return (A.seguro || 0) + extras;
+  }
+  const grupo = CRED_TO_GRUPO[creditorName] || creditorName;
+  const items = (S.detalle && S.detalle[grupo]) || [];
+  return items.reduce((s, it) => s + (it[3] == null ? (it[1] || 0) : 0), 0);  // it[3]=total null -> cargo fijo
+}
 // Si una cuota nueva deja la deuda del mes por encima del 50% del ingreso, pide
 // confirmación mostrando el exceso EXACTO. Devuelve true si se puede continuar.
 async function confirmarTopeDeuda(monthIdx, cuotaNueva) {
@@ -161,7 +173,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 55;
+const FRONT_V = 56;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1029,8 +1041,10 @@ function renderChecklist(i, deudas) {
     // extraTag tipo 'extra:ID' -> deuda registrada prometida (abona a esa deuda)
     const extraAttr = extraTag ? ` data-extra="${extraTag.split(':')[1]}"` : '';
     const hits = (debt || extraTag) ? ' · hits the boss' : '';
+    // abono real al jefe = pago del mes − cargos fijos (seguro/manejo NO bajan la deuda)
+    const abono = Math.max(val - (extraTag ? 0 : costoFijoMes(item, MES)), 0);
     return `<div class="check-item debt ${paid ? 'paid' : ''}" data-item="${item}" data-mk="${mk}"
-            data-debt="${debt ? debt.id : ''}"${extraAttr} data-val="${val}">
+            data-debt="${debt ? debt.id : ''}"${extraAttr} data-val="${val}" data-abono="${abono}">
       <div class="box">${paid ? '✓' : ''}</div>
       <div class="cmid">
         <span class="cname">${esc(item)}</span>
@@ -1130,7 +1144,9 @@ document.addEventListener('click', async (e) => {
   if (!c) return;
   const estabaMarcado = c.classList.contains('paid');
   const body = { item: c.dataset.item, month: c.dataset.mk };
-  if (c.dataset.debt) { body.debt_id = +c.dataset.debt; body.valor = +c.dataset.val || 0; }
+  // el jefe baja por el abono real (data-abono), no por el pago total con seguro/manejo
+  const abonoReal = c.dataset.abono != null ? +c.dataset.abono : +c.dataset.val;
+  if (c.dataset.debt) { body.debt_id = +c.dataset.debt; body.valor = abonoReal || 0; }
   if (c.dataset.extra) { body.extra_id = +c.dataset.extra; body.valor = +c.dataset.val || 0; }
   const vivasAntes = snapshotDeudasVivas();
   await api('/api/check', { body });
