@@ -161,7 +161,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 54;
+const FRONT_V = 55;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -379,6 +379,7 @@ async function load(animate) {
   const ym = hoyLocal().slice(0, 7);
   S = await api('/api/state?month=' + ym);
   checkVersion();
+  await syncCarreraIngles();   // sube la barra de Inglés según los días de práctica reales
   renderFreedom();
   renderInicio();
   renderShopping();
@@ -1903,45 +1904,46 @@ const DIAS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 // SISTEMA REAL DE INGLÉS — output diario (lo que más cuesta = el centro).
 // Cada día: hablar primero, luego un recurso distinto, y SIEMPRE cerrar hablando con la IA.
 const INGLES_PLAN = [
-  // Lunes — 🗣 SPEAKING
+  // Lunes — 🗣 SPEAKING (output / fluidez)
   { title: '🗣 Speaking day', steps: [
-    { s: 'Talk for 5 minutes about your day', how: "Speak out loud and record yourself on your phone. Do not stop to fix mistakes — the goal is to keep the words flowing even if they come out messy. Fluency is built by talking, not by being perfect." },
-    { s: 'Listen back and find 3 things to improve', how: "Play back one minute of your recording. Write down 3 specific things: a word you said wrong, a sentence that got stuck, or something you wanted to say but couldn't. This turns plain talking into real progress." },
-    { s: 'Tell the AI in English about your day', how: "Open a chat and describe your day in English. Ask it to correct only your 2 biggest mistakes — fixing everything at once is overwhelming and you forget it all." }
+    { s: 'Free-talk 5 min and record it', how: "Open your phone recorder and talk out loud about your day, an opinion, anything. Do NOT stop to fix mistakes — keep the words flowing even if messy. Fluency is built by moving your mouth, not by being perfect." },
+    { s: 'Listen back, pick 3 fixes', how: "Play one minute back. Write 3 specific things: a word you mispronounced, a sentence that froze, or something you couldn't say. Naming the problem is half of fixing it." },
+    { s: '2-minute monologue, no stopping', how: "Choose ONE topic and talk for 2 full minutes without switching to Spanish. If a word is missing, describe it in English ('the thing you use to...'). This single drill is what breaks the fear of speaking." }
   ]},
-  // Martes — 🎧 LISTENING (shadowing)
+  // Martes — 🎧 LISTENING (input real: escuchar de verdad)
   { title: '🎧 Listening day', steps: [
-    { s: 'Warm up talking for 3 minutes', how: "Say anything out loud in English to wake up your mouth — your plans, a memory, an opinion. No recording, no pressure." },
-    { s: 'Shadow a scene you know (15 min)', how: "Pick a Disney+/Netflix scene you have seen before, subtitles ON. Pause after each line and repeat it out loud copying the actor's rhythm and accent exactly. Copying real speech is how your accent improves." },
-    { s: 'Summarize the scene to the AI out loud', how: "Tell the AI what happened, speaking instead of typing if you can. This forces you to USE the words you just heard, which is what locks them into memory." }
+    { s: 'Active listen, NO subtitles (8–10 min)', how: "Pick audio/video where you understand about 85% (a podcast, YouTube, a series you know). Watch ONCE with no subtitles and just follow it. Then write 2–3 sentences of what you understood. The goal is to train your EAR, not to talk." },
+    { s: 'Dictation: write exactly what you hear', how: "Take a 30–60 second clip. Play a sentence, pause, and write word-for-word what they said. Replay as needed, then check against the subtitles. Dictation forces you to catch the tiny words ('a', 'to', 'have') that get swallowed in real speech." },
+    { s: 'Shadow one 60-sec segment', how: "Now turn subtitles ON for one short segment and shadow it: play a line, pause, repeat it copying the EXACT rhythm and accent. Shadowing is the bridge that turns listening into a better accent." }
   ]},
-  // Miércoles — 📖 READING
+  // Miércoles — 📖 READING (input)
   { title: '📖 Reading day', steps: [
-    { s: 'Read a short text out loud (15 min)', how: "Use one unit of American School Way or a short article. Reading ALOUD trains pronunciation and reading at the same time. If a word looks hard, say it anyway and check it afterwards." },
-    { s: 'Collect 8 new words and use them', how: "Write down 8 words you didn't know. Say one full sentence out loud with each. A word you only recognize is passive; a word you can USE is truly yours." },
-    { s: 'Retell what you read to the AI', how: "Explain the text in your own words in English — don't copy sentences, rebuild the idea yourself. If you can re-explain it, you really understood it." }
+    { s: 'Extensive reading, just flow (12–15 min)', how: "Read something you enjoy at about 85% understanding (graded reader, article, an ASW unit). Do NOT stop at every unknown word — guess from context and keep going. Volume and enjoyment build reading speed; stopping constantly kills it." },
+    { s: 'Intensive: mine 5 words', how: "Go back to ONE paragraph. Look up the 5 words you couldn't guess, write each in a full sentence of your own, and notice how the sentence is built. A word you can USE is yours; one you only recognize is borrowed." },
+    { s: 'Retell the idea (out loud or written)', how: "Close the text and rebuild the main idea in your own words — don't copy sentences. If you can re-explain it, you truly understood it. Speaking or writing, your choice." }
   ]},
-  // Jueves — ✍️ WRITING
+  // Jueves — ✍️ WRITING (output)
   { title: '✍️ Writing day', steps: [
-    { s: 'Write a short paragraph (6–10 sentences)', how: "Pick anything: your day, an opinion, weekend plans. Try to think directly in English instead of translating word by word from Spanish, even if what you write comes out simpler." },
-    { s: 'Read your paragraph out loud', how: "Reading your own writing aloud is the fastest way to catch what sounds wrong — your ear notices mistakes your eyes skip over." },
-    { s: 'Send it to the AI for correction', how: "Ask the AI to correct it AND explain 2 of the mistakes, so you learn the rule and not just the fix. Save that rule somewhere you'll see it again." }
+    { s: 'Write 6–10 sentences', how: "Pick anything: your day, an opinion, a plan. Try to think DIRECTLY in English instead of translating from Spanish, even if it comes out simpler. Simple-and-correct beats complex-and-wrong." },
+    { s: 'Read it out loud, self-edit', how: "Read your own paragraph aloud. Your ear catches what your eyes skip — fix whatever sounds off before sending it." },
+    { s: 'AI corrects + explains 2 rules', how: "Send it to the AI: ask it to correct everything BUT explain only your 2 biggest mistakes with the rule behind them. Save those 2 rules where you'll re-read them. Learning the rule beats learning the single fix." }
   ]},
-  // Viernes — 💬 CONVERSATION
+  // Viernes — 💬 CONVERSATION (output / fluidez)
   { title: '💬 Conversation day', steps: [
-    { s: 'Talk with the AI for 20–25 minutes', how: "No warm-up, jump straight in. Talk about work, anime, your dreams — anything real. Keep going even when it's hard; pushing through the awkward part is exactly where the growth happens." },
-    { s: 'Speak 2 minutes non-stop on one topic', how: "Pick one topic and talk for 2 full minutes without stopping. If you get stuck, describe the word you're missing in English instead of switching to Spanish. This one drill breaks plateaus." },
-    { s: 'Get your top 3 repeated mistakes', how: "Ask the AI which 3 mistakes you repeated most, write them down, and watch for them next time. Fixing your most-repeated errors raises your level faster than anything else." }
+    { s: 'Real conversation 20–25 min', how: "Talk with the AI (voice if you can) about real things — work, anime, your goals. Jump straight in, no warm-up. Push through the awkward moments; that discomfort is exactly where fluency grows." },
+    { s: 'Recycle 5 words from this week', how: "Before you finish, deliberately use 5 words you collected on reading/listening days. Using a new word in conversation is what moves it from 'I know it' to 'I own it'." },
+    { s: 'Get your top 3 repeated mistakes', how: "Ask the AI which 3 mistakes you repeated most today. Write them down and watch for them next week. Fixing your most-frequent errors raises your level faster than anything else." }
   ]},
-  // Sábado — 🎬 WATCH & PRODUCE
-  { title: '🎬 Watch & produce day', steps: [
-    { s: 'Warm up talking for 5 minutes', how: "Loosen up your mouth with 5 minutes of free talking before you start. Producing always feels easier after a warm-up." },
-    { s: 'Re-watch a scene WITHOUT subtitles', how: "Take a scene from earlier this week and watch it again with no subtitles. Notice how much MORE you catch than the first time — that gap is your listening improving." },
-    { s: 'Record yourself retelling it', how: "Retell the scene out loud, record it, and send it to the AI to correct. Producing right after listening is what turns 'I understood it' into 'I can say it'." }
+  // Sábado — 🎬 IMMERSION + INTEGRATE (listening + speaking)
+  { title: '🎬 Immersion day', steps: [
+    { s: 'Watch a scene: subs ON, then OFF', how: "Pick a 3–5 min scene. Watch it WITH subtitles (input), then immediately again WITHOUT. Notice how much more you catch the second time — that gap is your listening improving in real time." },
+    { s: 'Shadow your 3 favorite lines', how: "Pick the 3 lines that sounded most natural and shadow each one 3 times, copying tone and rhythm. Repeating real, natural speech is how you stop sounding like a textbook." },
+    { s: 'Retell the scene, recorded', how: "Retell what happened out loud and record it. Producing right after input is what turns 'I understood it' into 'I can say it'." }
   ]},
-  // Domingo — 🌿 LIGHT IMMERSION / REVIEW
-  { title: '🌿 Light immersion', steps: [
-    { s: 'Enjoy English you love, then review the week', how: "Watch or listen to something you genuinely love in English (subtitles on if you need them). Note 5 phrases that sounded natural and say each one out loud 3 times. Then re-read your mistake notes from the week. Light rest days still count — they keep you consistent without burning out." }
+  // Domingo — 🌿 LIGHT IMMERSION + WEEKLY REVIEW
+  { title: '🌿 Light immersion & review', steps: [
+    { s: 'Enjoy English you love', how: "Watch, read or listen to something you genuinely love in English (subtitles fine). No drills — just live in the language. Note 5 phrases that sounded natural and say each 3 times out loud." },
+    { s: 'Review the week (spaced repetition)', how: "Re-read this week's word list and your saved mistake-rules. Seeing them again days later is what locks them into long-term memory. Light days still count — consistency beats intensity." }
   ]}
 ];
 // Etapas A1 → C1 cubriendo las 4 habilidades. 'level' = nivel que ALCANZAS al completar la etapa
@@ -2042,10 +2044,10 @@ async function syncCarreraIngles() {
   const DIAS_POR_PELDANO = 30;
   const step = Math.min(Math.floor(dias / DIAS_POR_PELDANO), 4);
   const pctDelPeldano = Math.round(((dias % DIAS_POR_PELDANO) / DIAS_POR_PELDANO) * 100);
-  // solo actualizar si cambió, para no spamear el servidor
-  if (eng.step !== step) await api('/api/career', { body: { id: eng.id, field: 'step', value: step } });
-  if ((eng.pct || 0) !== pctDelPeldano && step < 4)
-    await api('/api/career', { body: { id: eng.id, field: 'pct', value: pctDelPeldano } });
+  // solo actualizar si cambió, para no spamear el servidor (y reflejarlo local para el render)
+  if (eng.step !== step) { await api('/api/career', { body: { id: eng.id, field: 'step', value: step } }); eng.step = step; }
+  if ((eng.pct || 0) !== pctDelPeldano && step < 4) { await api('/api/career', { body: { id: eng.id, field: 'pct', value: pctDelPeldano } }); eng.pct = pctDelPeldano; }
+  if (step >= 4 && (eng.pct || 0) !== 100) { await api('/api/career', { body: { id: eng.id, field: 'pct', value: 100 } }); eng.pct = 100; }
 }
 
 function renderEnglish() {
