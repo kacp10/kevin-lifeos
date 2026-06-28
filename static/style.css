@@ -810,3 +810,54 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .gym-help-list { margin: 8px 0 4px; padding-left: 18px; line-height: 1.7; }
 .gym-help-list li { margin-bottom: 4px; }
 .gym-help-list b { color: var(--txt); }
+
+/* ---------- GYM: workout / trainer ---------- */
+.workout-panel { border: 1px solid var(--accent); }
+.workout-day-sel {
+  background: var(--panel); color: var(--txt); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 10px; font-size: .85rem; max-width: 60%;
+}
+.ex-card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  padding: 12px; margin-bottom: 12px; transition: border-color .2s;
+}
+.ex-card.ex-done { border-color: var(--ok); }
+.ex-top { display: flex; gap: 12px; align-items: center; }
+.ex-img {
+  width: 84px; height: 84px; flex: 0 0 84px; border-radius: 10px; object-fit: cover;
+  background: #fff; }
+.ex-img.noimg { background: var(--card, #20203a); }
+.ex-head { flex: 1; min-width: 0; }
+.ex-name { font-weight: 800; font-size: 1.05rem; }
+.ex-check { color: var(--ok); font-size: .8rem; font-weight: 700; }
+.ex-mus { color: var(--accent); font-size: .8rem; font-weight: 600; margin: 1px 0; }
+.ex-target { color: var(--mut); font-size: .82rem; }
+.ex-coach { margin: 10px 0 6px; font-size: .84rem; line-height: 1.5; }
+.ex-last { color: var(--mut); }
+.ex-suggest { color: var(--gold); font-weight: 600; }
+.ex-prog { font-weight: 700; margin-top: 2px; }
+.ex-prog.ok { color: var(--ok); }
+.ex-prog.bad { color: var(--hp, #ff5c7a); }
+.ex-prog.mut { color: var(--mut); }
+.ex-sets { margin-top: 8px; }
+.set-row {
+  display: flex; align-items: center; gap: 8px; padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+.set-n { width: 54px; color: var(--mut); font-size: .82rem; font-weight: 600; }
+.set-done .set-val { font-weight: 700; }
+.set-done { color: var(--ok); }
+.set-undo, .set-log {
+  margin-left: auto; border: none; border-radius: 8px; cursor: pointer;
+  width: 34px; height: 34px; font-size: 1rem; font-weight: 800;
+}
+.set-undo { background: transparent; color: var(--mut); border: 1px solid var(--line); }
+.set-undo:hover { color: var(--hp, #ff5c7a); border-color: var(--hp, #ff5c7a); }
+.set-log { background: var(--ok); color: #062a22; }
+.set-log:hover { filter: brightness(1.1); }
+.set-w, .set-r {
+  width: 70px; background: var(--bg, #14122a); color: var(--txt);
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px;
+  font-size: .95rem; text-align: center;
+}
+.set-active .set-x { color: var(--mut); }

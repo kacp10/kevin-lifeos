@@ -179,7 +179,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 58;
+const FRONT_V = 59;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -410,9 +410,181 @@ async function saveGym(g) {
 }
 let gymChart = null;
 
+const GYM_IMG = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
+const EXERCISE_DB = {
+  bench:        { n: 'Bench Press',            m: 'Chest',         img: 'Barbell_Bench_Press_-_Medium_Grip' },
+  incline_db:   { n: 'Incline Dumbbell Press', m: 'Upper chest',   img: 'Incline_Dumbbell_Press' },
+  flyes:        { n: 'Dumbbell Flyes',         m: 'Chest',         img: 'Dumbbell_Flyes' },
+  pushups:      { n: 'Push-ups',               m: 'Chest',         img: 'Pushups' },
+  dips_chest:   { n: 'Chest Dips',             m: 'Chest',         img: 'Dips_-_Chest_Version' },
+  tri_pushdown: { n: 'Triceps Pushdown',       m: 'Triceps',       img: 'Triceps_Pushdown' },
+  tri_ext:      { n: 'Overhead Triceps Ext.',  m: 'Triceps',       img: 'Standing_Dumbbell_Triceps_Extension' },
+  dips_tri:     { n: 'Triceps Dips',           m: 'Triceps',       img: 'Dips_-_Triceps_Version' },
+  pullups:      { n: 'Pull-ups',               m: 'Back / Lats',   img: 'Pullups' },
+  lat_pull:     { n: 'Lat Pulldown',           m: 'Back / Lats',   img: 'Wide-Grip_Lat_Pulldown' },
+  bb_row:       { n: 'Barbell Row',            m: 'Back',          img: 'Bent_Over_Barbell_Row' },
+  cable_row:    { n: 'Seated Cable Row',       m: 'Back',          img: 'Seated_Cable_Rows' },
+  bb_curl:      { n: 'Barbell Curl',           m: 'Biceps',        img: 'Barbell_Curl' },
+  db_curl:      { n: 'Dumbbell Curl',          m: 'Biceps',        img: 'Dumbbell_Bicep_Curl' },
+  hammer:       { n: 'Hammer Curls',           m: 'Biceps',        img: 'Hammer_Curls' },
+  squat:        { n: 'Barbell Squat',          m: 'Quads / Legs',  img: 'Barbell_Squat' },
+  leg_press:    { n: 'Leg Press',              m: 'Quads / Legs',  img: 'Leg_Press' },
+  rdl:          { n: 'Romanian Deadlift',      m: 'Hamstrings',    img: 'Romanian_Deadlift' },
+  leg_ext:      { n: 'Leg Extensions',         m: 'Quads',         img: 'Leg_Extensions' },
+  leg_curl:     { n: 'Lying Leg Curl',         m: 'Hamstrings',    img: 'Lying_Leg_Curls' },
+  calf:         { n: 'Calf Raises',            m: 'Calves',        img: 'Standing_Calf_Raises' },
+  lunges:       { n: 'Dumbbell Lunges',        m: 'Legs / Glutes', img: 'Dumbbell_Lunges' },
+  db_press:     { n: 'DB Shoulder Press',      m: 'Shoulders',     img: 'Dumbbell_Shoulder_Press' },
+  lateral:      { n: 'Lateral Raise',          m: 'Side delts',    img: 'Side_Lateral_Raise' },
+  face_pull:    { n: 'Face Pull',              m: 'Rear delts',    img: 'Face_Pull' },
+  crunch:       { n: 'Crunches',               m: 'Abs',           img: 'Crunches' },
+  plank:        { n: 'Plank',                  m: 'Core',          img: 'Plank' },
+  hanging:      { n: 'Hanging Leg Raise',      m: 'Abs',           img: 'Hanging_Leg_Raise' }
+};
+// list item = [exerciseId, sets, repsRange, restSeconds]
+const WORKOUT_PLAN = {
+  1: { title: '💪 Chest + Triceps', list: [['bench',4,'8-12',90],['incline_db',3,'10-12',75],['flyes',3,'12-15',60],['tri_pushdown',3,'10-12',60],['tri_ext',3,'12-15',60]] },
+  2: { title: '🦾 Back + Biceps',   list: [['lat_pull',4,'8-12',90],['bb_row',4,'8-10',90],['cable_row',3,'10-12',75],['bb_curl',3,'8-12',60],['hammer',3,'10-12',60]] },
+  3: { title: '🦵 Legs',            list: [['squat',4,'8-12',120],['leg_press',3,'10-12',90],['rdl',3,'10-12',90],['leg_curl',3,'12-15',60],['calf',4,'15-20',45]] },
+  4: { title: '🎯 Shoulders + Abs', list: [['db_press',4,'8-12',90],['lateral',4,'12-15',60],['face_pull',3,'15-20',60],['hanging',3,'10-15',60],['plank',3,'30-60s',45]] },
+  5: { title: '🔥 Full Body',       list: [['squat',3,'10',90],['bench',3,'10',90],['bb_row',3,'10',90],['db_press',3,'12',75],['plank',3,'45s',45]] },
+  0: { rest: true, title: '🌿 Rest day' },
+  6: { rest: true, title: '🌿 Rest day' }
+};
+const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+let GYM_PLAN_SEL = null;   // null = today's plan
+
+function gymSetsFor(exId, dateStr) {
+  return (S.gym_sets || []).filter(s => s.exercise === exId && s.date === dateStr).sort((a, b) => a.id - b.id);
+}
+function gymLastSession(exId) {
+  const today = hoyLocal();
+  const dates = [...new Set((S.gym_sets || []).filter(s => s.exercise === exId && s.date < today).map(s => s.date))].sort();
+  if (!dates.length) return null;
+  const last = dates[dates.length - 1];
+  return { date: last, sets: gymSetsFor(exId, last) };
+}
+function fmtSets(sets) {
+  return sets.map(s => `${(+s.weight) || 0}${s.weight ? 'kg' : ''}×${s.reps}`).join(', ');
+}
+function gymSuggest(exId, repsRange) {
+  const last = gymLastSession(exId);
+  const parts = String(repsRange).replace(/[^0-9-]/g, '').split('-');
+  const topRep = parseInt(parts[parts.length - 1], 10) || 10;
+  const lowRep = parseInt(parts[0], 10) || topRep;
+  if (!last || !last.sets.length) return { weight: '', reps: '', text: 'First time — pick a weight you can fully control for the whole rep range.' };
+  const lastSet = last.sets[last.sets.length - 1];
+  const allHitTop = last.sets.every(s => s.reps >= topRep);
+  if (allHitTop && lastSet.weight > 0)
+    return { weight: +(lastSet.weight + 2.5).toFixed(1), reps: lowRep, text: `You hit the top reps last time → go up to ${+(lastSet.weight + 2.5)} kg.` };
+  return { weight: lastSet.weight || '', reps: (lastSet.reps + 1) || '', text: `Stay at ${lastSet.weight || '?'} kg and aim for 1 more rep than last time.` };
+}
+function gymProgression(exId) {
+  const today = gymSetsFor(exId, hoyLocal());
+  const last = gymLastSession(exId);
+  if (!today.length || !last) return null;
+  const best = arr => Math.max(...arr.map(s => (+s.weight || 0) * 1000 + (s.reps || 0)));
+  const vol = arr => arr.reduce((a, s) => a + (+s.weight || 0) * (s.reps || 0), 0);
+  const t = best(today), l = best(last.sets);
+  if (t > l || vol(today) > vol(last.sets)) return { cls: 'ok', text: '⬆ Stronger than last session — progress!' };
+  if (t === l && vol(today) === vol(last.sets)) return { cls: 'mut', text: '➡ Matched last session — solid.' };
+  return { cls: 'bad', text: '⬇ A bit below last time — totally fine, rest & food matter too.' };
+}
+
+function renderWorkout() {
+  const box = document.getElementById('workoutBox');
+  if (!box) return;
+  const sel = document.getElementById('workoutDay');
+  const todayWd = new Date().getDay();
+  if (sel && !sel.dataset.ready) {
+    let opts = `<option value="today">Today · ${DAY_NAMES[todayWd]}</option>`;
+    [1, 2, 3, 4, 5].forEach(w => { opts += `<option value="${w}">${WORKOUT_PLAN[w].title}</option>`; });
+    opts += `<option value="rest">🌿 Rest day</option>`;
+    sel.innerHTML = opts;
+    sel.dataset.ready = '1';
+    sel.addEventListener('change', () => { GYM_PLAN_SEL = sel.value; renderWorkout(); });
+  }
+  let wd;
+  if (GYM_PLAN_SEL == null || GYM_PLAN_SEL === 'today') wd = todayWd;
+  else if (GYM_PLAN_SEL === 'rest') wd = 0;
+  else wd = +GYM_PLAN_SEL;
+  const plan = WORKOUT_PLAN[wd] || WORKOUT_PLAN[0];
+  const titleEl = document.getElementById('workoutTitle');
+  if (titleEl) titleEl.textContent = (GYM_PLAN_SEL == null || GYM_PLAN_SEL === 'today') ? `🔥 Today · ${plan.title.replace(/^\S+\s/, '')}` : plan.title;
+
+  if (plan.rest) {
+    box.innerHTML = `<div class="rest-day"><div class="big">🌿</div>
+      <p><b>Rest day.</b> Muscle grows while you recover, not while you train. Protect it like a payment.</p>
+      <p class="hint">Optional light stuff: a 30–45 min walk toward your 10k steps, gentle stretching or mobility, foam rolling. No heavy lifting today.</p></div>`;
+    return;
+  }
+
+  box.innerHTML = plan.list.map(([id, sets, reps, rest]) => {
+    const ex = EXERCISE_DB[id]; if (!ex) return '';
+    const today = gymSetsFor(id, hoyLocal());
+    const last = gymLastSession(id);
+    const sug = gymSuggest(id, reps);
+    const prog = gymProgression(id);
+    const done = today.length >= sets;
+    const doneRows = today.map((s, i) => `<div class="set-row set-done">
+      <span class="set-n">Set ${i + 1}</span>
+      <span class="set-val">${(+s.weight) || 0} kg × ${s.reps}</span>
+      <button class="set-undo" data-undo="${s.id}" title="Undo set">✕</button></div>`).join('');
+    const nextN = today.length + 1;
+    const wVal = today.length ? ((+today[today.length - 1].weight) || '') : (sug.weight || '');
+    const rVal = today.length ? (today[today.length - 1].reps || '') : (sug.reps || '');
+    const activeRow = `<div class="set-row set-active">
+      <span class="set-n">Set ${nextN}</span>
+      <input class="set-w" type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" value="${wVal}">
+      <span class="set-x">×</span>
+      <input class="set-r" type="number" inputmode="numeric" min="0" placeholder="reps" value="${rVal}">
+      <button class="set-log" data-log="${id}" title="Log this set">✓</button></div>`;
+    return `<div class="ex-card ${done ? 'ex-done' : ''}" data-ex="${id}">
+      <div class="ex-top">
+        <img class="ex-img" loading="lazy" src="${GYM_IMG}${ex.img}/0.jpg" alt="" onerror="this.classList.add('noimg')">
+        <div class="ex-head">
+          <div class="ex-name">${ex.n} ${done ? '<span class="ex-check">✓ done</span>' : ''}</div>
+          <div class="ex-mus">${ex.m}</div>
+          <div class="ex-target">${sets} sets × ${reps} · rest ${rest}s</div>
+        </div>
+      </div>
+      <div class="ex-coach">
+        ${last ? `<div class="ex-last">📋 Last (${last.date.slice(5)}): ${fmtSets(last.sets)}</div>` : '<div class="ex-last mut">No history yet — today sets your baseline.</div>'}
+        <div class="ex-suggest">🎯 ${sug.text}</div>
+        ${prog ? `<div class="ex-prog ${prog.cls}">${prog.text}</div>` : ''}
+      </div>
+      <div class="ex-sets">${doneRows}${activeRow}</div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('workoutBox')?.addEventListener('click', async (e) => {
+  const log = e.target.closest('[data-log]');
+  if (log) {
+    const card = log.closest('.ex-card');
+    const w = parseFloat(String(card.querySelector('.set-w').value).replace(',', '.')) || 0;
+    const r = parseInt(card.querySelector('.set-r').value, 10) || 0;
+    if (r <= 0) { toast('Type the reps first'); return; }
+    const res = await api('/api/gym/set', { body: { date: hoyLocal(), exercise: log.dataset.log, weight: w, reps: r } });
+    S.gym_sets = S.gym_sets || [];
+    S.gym_sets.push({ id: res.id, date: hoyLocal(), exercise: log.dataset.log, weight: w, reps: r });
+    renderWorkout(); renderGym();
+    return;
+  }
+  const undo = e.target.closest('[data-undo]');
+  if (undo) {
+    const id = +undo.dataset.undo;
+    await api('/api/gym/set/' + id, { method: 'DELETE' });
+    S.gym_sets = (S.gym_sets || []).filter(s => s.id != id);
+    renderWorkout(); renderGym();
+    return;
+  }
+});
+
 function renderGym() {
   const panel = document.getElementById('gymStats');
   if (!panel) return;
+  renderWorkout();
   const g = getGym();
   const entries = (g.entries || []).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
   const first = entries[0] || null;
