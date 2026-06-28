@@ -9,12 +9,13 @@ import os
 import re
 import sqlite3
 from datetime import date
+from datetime import datetime
 from flask import Flask, jsonify, render_template, request, g
 import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 58  # debe coincidir con FRONT_V en static/app.js
+VERSION = 59  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -98,6 +99,9 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT, fecha TEXT, debt_id INTEGER,
         valor INTEGER, nota TEXT DEFAULT '', FOREIGN KEY(debt_id) REFERENCES debts(id));
     CREATE TABLE IF NOT EXISTS habits (id INTEGER PRIMARY KEY, name TEXT);
+    CREATE TABLE IF NOT EXISTS gym_sets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, exercise TEXT,
+        weight REAL DEFAULT 0, reps INTEGER DEFAULT 0, created TEXT);
     CREATE TABLE IF NOT EXISTS habit_marks (
         habit_id INTEGER, day TEXT, PRIMARY KEY (habit_id, day));
     CREATE TABLE IF NOT EXISTS months_history (
@@ -630,6 +634,7 @@ def state():
         abonos_extra.append({'id': r['id'], 'fecha': r['fecha'], 'valor': r['valor'], 'name': nombre})
     abonos = sorted(abonos_core + abonos_extra, key=lambda a: a['id'], reverse=True)[:30]
     habits = [dict(r) for r in d.execute('SELECT * FROM habits')]
+    gym_sets = [dict(r) for r in d.execute('SELECT * FROM gym_sets ORDER BY date, id')]
     marks = [f"{r['habit_id']}|{r['day']}" for r in d.execute(
         "SELECT habit_id, day FROM habit_marks WHERE day LIKE ?", (month + '%',))]
     history = [dict(r) for r in d.execute(
@@ -671,7 +676,7 @@ def state():
     core = [x[0] for x in _SEED['debts']]
     return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
                         marks=marks, history=history, dreams=dreams,
-                        animes=animes, books=books,
+                        animes=animes, books=books, gym_sets=gym_sets,
                         servicios=services, fund=fund, piggy=piggy, piggy_moves=piggy_moves, shopping=shopping, detalle=_detalle_actual(d),
                         checks=[f"{r['item']}|{r['month']}" for r in d.execute(
                             'SELECT item, month FROM payment_checks')],
@@ -1182,6 +1187,24 @@ def profile_set():
     j = request.json
     db().execute('INSERT OR REPLACE INTO study_profile VALUES (?,?)',
                  (j['key'], j['value']))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/gym/set')
+def gym_set_add():
+    j = request.json
+    cur = db().execute(
+        'INSERT INTO gym_sets (date, exercise, weight, reps, created) VALUES (?,?,?,?,?)',
+        (j['date'], j['exercise'], float(j.get('weight') or 0), int(j.get('reps') or 0),
+         datetime.now().isoformat()))
+    db().commit()
+    return jsonify(ok=True, id=cur.lastrowid)
+
+
+@app.delete('/api/gym/set/<int:i>')
+def gym_set_del(i):
+    db().execute('DELETE FROM gym_sets WHERE id=?', (i,))
     db().commit()
     return jsonify(ok=True)
 
