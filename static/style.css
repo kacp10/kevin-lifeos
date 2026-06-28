@@ -789,3 +789,24 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .pay-soon-row { display: flex; justify-content: space-between; gap: 10px; font-size: .84rem;
   padding: 8px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
 .pay-soon-row b { color: var(--gold); }
+
+/* ---------- GYM & FITNESS ---------- */
+.gym-card { text-align: center; }
+.gym-card small { display: block; color: var(--mut); font-size: .72rem; margin-top: 2px; }
+.gym-goal-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 2px; border-bottom: 1px solid var(--line); gap: 10px;
+}
+.gym-goal-row:last-child { border-bottom: 0; }
+.gym-goal-row span { color: var(--mut); }
+.gym-goal-row b { text-align: right; }
+.gym-measure { text-align: center; }
+.gym-measure label { display: block; color: var(--mut); font-size: .78rem; }
+.gym-measure strong { display: block; font-size: 1.15rem; margin: 2px 0; }
+.gym-measure small { display: block; font-size: .72rem; font-weight: 700; }
+.gym-measure small.ok { color: var(--ok); }
+.gym-measure small.bad { color: var(--hp, #ff5c7a); }
+.gym-measure small.mut { color: var(--mut); }
+.gym-help-list { margin: 8px 0 4px; padding-left: 18px; line-height: 1.7; }
+.gym-help-list li { margin-bottom: 4px; }
+.gym-help-list b { color: var(--txt); }

@@ -179,7 +179,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 57;
+const FRONT_V = 58;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -393,6 +393,187 @@ function checkVersion() {
     '. Reemplaza app.py y reinicia el servidor (Ctrl+C → python app.py), luego Ctrl+F5.</div>');
 }
 
+/* ---------- GYM & FITNESS ---------- */
+const MEASURES = [
+  { key: 'weight', label: 'Weight', unit: 'kg', good: 'down' },
+  { key: 'waist',  label: 'Waist',  unit: 'cm', good: 'down' },
+  { key: 'chest',  label: 'Chest',  unit: 'cm', good: 'flat' },
+  { key: 'arm',    label: 'Arm (flexed)', unit: 'cm', good: 'flat' },
+  { key: 'hip',    label: 'Hips',   unit: 'cm', good: 'down' },
+  { key: 'thigh',  label: 'Thigh',  unit: 'cm', good: 'flat' }
+];
+function getGym() {
+  try { return JSON.parse((S.profile || {}).gym_data || '{}'); } catch { return {}; }
+}
+async function saveGym(g) {
+  await api('/api/profile', { body: { key: 'gym_data', value: JSON.stringify(g) } });
+}
+let gymChart = null;
+
+function renderGym() {
+  const panel = document.getElementById('gymStats');
+  if (!panel) return;
+  const g = getGym();
+  const entries = (g.entries || []).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+  const first = entries[0] || null;
+  const last = entries[entries.length - 1] || null;
+
+  // resumen
+  const startDate = g.start || (first && first.date) || null;
+  const semanas = startDate ? Math.max(0, Math.floor((Date.now() - new Date(startDate + 'T00:00:00')) / (7 * 86400000))) : 0;
+  const curW = last && last.weight != null ? last.weight : null;
+  const goalW = (g.weightGoal != null && g.weightGoal !== '') ? +g.weightGoal : null;
+  const toGo = (curW != null && goalW != null) ? +(curW - goalW).toFixed(1) : null;
+  const exHabit = (S.habits || []).find(h => h.name === 'Exercise');
+  const exStreak = exHabit ? rachaHabito(exHabit.id, new Set(S.marks || [])) : 0;
+  const card = (label, val, sub) => `<div class="card gym-card"><label>${label}</label><strong>${val}</strong>${sub ? `<small>${sub}</small>` : ''}</div>`;
+  panel.innerHTML =
+    card('Current weight', curW != null ? curW + ' kg' : '—', curW == null ? 'log it when you have it' : '') +
+    card('Goal weight', goalW != null ? goalW + ' kg' : '—', '') +
+    card('To go', toGo != null ? (toGo > 0 ? toGo + ' kg' : '🎉 reached!') : '—', '') +
+    card('Weeks in', semanas, startDate ? 'since ' + startDate : 'set a start date') +
+    card('🔥 Training streak', exStreak + (exStreak === 1 ? ' day' : ' days'), 'from your Exercise habit');
+
+  // objetivo
+  const goalBox = document.getElementById('gymGoal');
+  goalBox.innerHTML =
+    `<div class="gym-goal-row"><span>🏁 Start date</span><b>${g.start || '—'}</b></div>
+     <div class="gym-goal-row"><span>⚖️ Goal weight</span><b>${goalW != null ? goalW + ' kg' : '— (optional)'}</b></div>
+     <div class="gym-goal-row"><span>💪 Physical goal</span><b>${g.goal ? esc(g.goal) : 'Lower body fat · abs back · athletic, defined look'}</b></div>`;
+
+  // gráfica
+  renderGymChart(entries);
+
+  // medidas última vs inicio
+  const mBox = document.getElementById('gymMeasures');
+  if (!entries.length) {
+    mBox.innerHTML = '<p class="hint">No measurements yet. Tap “+ Log this week” to start — you don’t even need your weight yet, log what you can.</p>';
+  } else {
+    mBox.innerHTML = MEASURES.map(m => {
+      const lv = last && last[m.key] != null ? last[m.key] : null;
+      const fv = first && first[m.key] != null ? first[m.key] : null;
+      if (lv == null) return '';
+      let delta = '';
+      if (fv != null && entries.length > 1) {
+        const d = +(lv - fv).toFixed(1);
+        const arrow = d < 0 ? '▼' : (d > 0 ? '▲' : '–');
+        const cls = (d === 0 || m.good === 'flat') ? 'mut' : (d < 0 ? 'ok' : 'bad');
+        delta = `<small class="${cls}">${arrow} ${Math.abs(d)} ${m.unit} vs start</small>`;
+      }
+      return `<div class="card-box gym-measure"><label>${m.label}</label><strong>${lv} ${m.unit}</strong>${delta}</div>`;
+    }).join('') || '<p class="hint">Log some measurements to see your changes here.</p>';
+  }
+
+  // historial
+  const hBox = document.getElementById('gymHistory');
+  if (!entries.length) {
+    hBox.innerHTML = '<p class="hint">Your weekly entries will appear here.</p>';
+  } else {
+    hBox.innerHTML = `<table class="table"><thead><tr><th>Date</th>${MEASURES.map(m => `<th>${m.label}</th>`).join('')}<th></th></tr></thead><tbody>${
+      entries.slice().reverse().map(e => `<tr><td>${e.date}</td>${MEASURES.map(m => `<td>${e[m.key] != null ? e[m.key] : '—'}</td>`).join('')}<td><button class="del-x" data-gym-del="${e.date}" title="Delete">✕</button></td></tr>`).join('')
+    }</tbody></table>`;
+  }
+
+  // ayuda para medir
+  document.getElementById('gymHelp').innerHTML =
+    `<p class="hint">A simple <b>sewing tape (metro de costura)</b> is all you need. Measure in the morning before eating, relaxed (don’t suck in), tape snug but not tight, same day each week.</p>
+     <ul class="gym-help-list">
+       <li><b>Waist</b> — the key one. Around the navel, relaxed. Your #1 fat-loss signal.</li>
+       <li><b>Chest</b> — across the nipples, arms down, normal breath.</li>
+       <li><b>Arm</b> — flexed bicep, at its thickest point.</li>
+       <li><b>Hips</b> — widest part of the glutes.</li>
+       <li><b>Thigh</b> — highest point, just under the glute.</li>
+       <li><b>Weight</b> — same scale, morning, after bathroom, before eating.</li>
+     </ul>
+     <p class="hint">Don’t panic over one bad week — food and water move the scale daily. The <b>2-week trend</b> is the truth.</p>`;
+}
+
+function renderGymChart(entries) {
+  const cv = document.getElementById('gymChart');
+  if (!cv || typeof Chart === 'undefined') return;
+  const hint = document.getElementById('gymChartHint');
+  if (entries.length < 2) {
+    if (gymChart) { gymChart.destroy(); gymChart = null; }
+    cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+    if (hint) hint.textContent = entries.length === 1 ? 'Log at least 2 weeks to see your trend line.' : '';
+    return;
+  }
+  const labels = entries.map(e => e.date.slice(5));
+  const css = getComputedStyle(document.documentElement);
+  const accent = css.getPropertyValue('--accent').trim() || '#7c5cff';
+  const gold = css.getPropertyValue('--gold').trim() || '#f5c542';
+  const mut = css.getPropertyValue('--mut').trim() || '#9aa';
+  const ds = [];
+  if (entries.some(e => e.weight != null))
+    ds.push({ label: 'Weight (kg)', data: entries.map(e => e.weight ?? null), borderColor: gold, backgroundColor: 'transparent', tension: .3, spanGaps: true, yAxisID: 'y' });
+  if (entries.some(e => e.waist != null))
+    ds.push({ label: 'Waist (cm)', data: entries.map(e => e.waist ?? null), borderColor: accent, backgroundColor: 'transparent', tension: .3, spanGaps: true, yAxisID: 'y1' });
+  const opts = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { color: mut } } },
+    scales: {
+      x: { ticks: { color: mut }, grid: { display: false } },
+      y: { position: 'left', ticks: { color: gold }, grid: { color: 'rgba(255,255,255,.06)' } },
+      y1: { position: 'right', ticks: { color: accent }, grid: { display: false } }
+    }
+  };
+  if (gymChart) gymChart.destroy();
+  gymChart = new Chart(cv, { type: 'line', data: { labels, datasets: ds }, options: opts });
+  if (hint) hint.textContent = 'Gold = weight · Purple = waist. Both trending down = fat loss is working. 🎯';
+}
+
+document.getElementById('gymLogBtn')?.addEventListener('click', async () => {
+  const g = getGym();
+  const last = (g.entries || []).slice().sort((a, b) => (a.date < b.date ? 1 : -1))[0] || {};
+  const r = await modal({ icon: '🏋️', title: 'Log this week',
+    text: 'Morning, relaxed, same day each week. Leave blank what you didn’t measure.',
+    fields: MEASURES.map(m => ({ type: 'number', min: 0, label: `${m.label} (${m.unit})`, placeholder: last[m.key] != null ? 'last: ' + last[m.key] : m.unit })),
+    okText: 'Save week' });
+  if (!r) return;
+  const entry = { date: hoyLocal() };
+  let any = false;
+  MEASURES.forEach((m, i) => {
+    const raw = String(r[i] ?? '').trim();
+    if (raw !== '') { entry[m.key] = +raw.replace(/[^0-9.]/g, '') || 0; any = true; }
+  });
+  if (!any) { toast('Add at least one measure to save'); return; }
+  g.entries = (g.entries || []).filter(e => e.date !== entry.date);
+  g.entries.push(entry);
+  if (!g.start) g.start = entry.date;
+  await saveGym(g);
+  toast('💪 Week logged!');
+  load();
+});
+
+document.getElementById('gymEditBtn')?.addEventListener('click', async () => {
+  const g = getGym();
+  const r = await modal({ icon: '🎯', title: 'My goal',
+    fields: [
+      { type: 'text', label: 'Start date (YYYY-MM-DD)', value: g.start || hoyLocal(), placeholder: 'YYYY-MM-DD' },
+      { type: 'number', min: 0, label: 'Goal weight in kg (optional)', value: g.weightGoal ?? '', placeholder: 'kg' },
+      { type: 'text', label: 'Physical goal', value: g.goal || '', placeholder: 'e.g. lose fat, get abs back' }
+    ], okText: 'Save' });
+  if (!r) return;
+  g.start = String(r[0] || '').trim() || g.start;
+  const w = String(r[1] ?? '').trim();
+  g.weightGoal = w === '' ? null : (+w.replace(/[^0-9.]/g, '') || null);
+  g.goal = String(r[2] || '').trim();
+  await saveGym(g);
+  toast('🎯 Goal updated');
+  load();
+});
+
+document.getElementById('gymHistory')?.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-gym-del]');
+  if (!b) return;
+  if (!await confirmModal('Delete entry', `Delete the measurements from <b>${b.dataset.gymDel}</b>?`)) return;
+  const g = getGym();
+  g.entries = (g.entries || []).filter(x => x.date !== b.dataset.gymDel);
+  await saveGym(g);
+  toast('Entry deleted');
+  load();
+});
+
 async function load(animate) {
   const ym = hoyLocal().slice(0, 7);
   S = await api('/api/state?month=' + ym);
@@ -408,6 +589,7 @@ async function load(animate) {
   renderLibros();
   renderGoals();
   renderLife();
+  renderGym();
   renderHaki();
   renderAchievements();
   // engancha el formato de miles en vivo a TODOS los campos .money-live ya dibujados
@@ -2306,7 +2488,7 @@ function actividadesDelDia(wd, shiftKey) {
 
   const acts = [];
   acts.push({ t: '6:00', title: 'Abs + jump rope', d: '4 min abs + ~10 min jump rope (increase over time). Wake up the body. ⚡', key: 'ejercicio' });
-  acts.push({ t: '6:20', title: 'Skincare AM', d: 'Cleanse + sunscreen. 5 minutes that show. 🧴', key: 'skincare' });
+  acts.push({ t: '6:20', title: '💧 Water + gratitude', d: 'A big glass of water on waking, and name one thing you\'re grateful for. Tiny ritual, big day. 🙏', key: 'morning' });
 
   if (sh.work) {
     const [ini, fin] = sh.work;
@@ -2319,20 +2501,23 @@ function actividadesDelDia(wd, shiftKey) {
     if (ini < 9) { acts.push({ t: `${h}:00`, title: `English — ${ing}`, d: ingDesc, key: 'ingles' }); h += 1; }
     acts.push({ t: `${h}:00`, title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' }); h += 1;
     acts.push({ t: `${h}:00`, title: 'Gym 🏋️', d: 'Your iron hour. Don\'t negotiate it.', key: 'gym' }); h += 1;
-    acts.push({ t: `${h}:30`, title: 'Read (20 min) + Skincare PM', d: '20 min reading and night routine. Close the day. 📖', key: 'leer' });
+    acts.push({ t: `${h}:30`, title: '📖 Read', d: 'Your pages for today. Advance the book you\'re reading. 📖', key: 'leer' });
+    acts.push({ t: `${h}:45`, title: '🧴 Skincare PM', d: 'Night routine: cleanse, niacinamide serum, moisturizer. Close the day clean. 🧴', key: 'skincare' });
     acts.push({ t: 'Sleep', title: 'Off to bed', d: 'Sleeping well is a habit on your list. Protect it like a payment.', key: 'dormir' });
   } else if (shiftKey === 'sabado' || shiftKey === 'sabado11') {
     acts.push({ t: '8:00', title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
     const [si, sfin] = sh.work || [10, 18];
     acts.push({ t: `${si}:00`, title: '💼 WORK Saturday (locked)', d: 'Saturday shift. Take the rest of the day easy.', work: true, key: 'work' });
     acts.push({ t: `${sfin + 1}:00`, title: 'Light gym or a walk', d: 'Something easy, you already worked today.', key: 'gym' });
-    acts.push({ t: 'Night', title: 'Read (20 min) + Skincare', d: 'Calm close, 20 min reading.', key: 'leer' });
+    acts.push({ t: 'Night', title: '📖 Read', d: 'Calm close — advance your book.', key: 'leer' });
+    acts.push({ t: 'Night', title: '🧴 Skincare PM', d: 'Night routine: cleanse + serum + moisturizer.', key: 'skincare' });
   } else {
     acts.push({ t: '6:40', title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
     acts.push({ t: '8:00', title: `DEEP study: ${focoLabel}`, d: studyDesc + ' Take advantage: day off = long project session.', key: 'estudio' });
     acts.push({ t: '11:00', title: 'Gym 🏋️', d: 'Train calmly, you have time.', key: 'gym' });
     acts.push({ t: 'Afternoon', title: 'Project / portfolio', d: 'Advance your project or a practice room.', key: 'proyecto' });
-    acts.push({ t: 'Night', title: 'Read (20 min) + Skincare PM', d: '20 min reading. Close the day.', key: 'leer' });
+    acts.push({ t: 'Night', title: '📖 Read', d: 'Advance your book. Close the day.', key: 'leer' });
+    acts.push({ t: 'Night', title: '🧴 Skincare PM', d: 'Night routine: cleanse + serum + moisturizer.', key: 'skincare' });
   }
   return { rest: false, acts };
 }
