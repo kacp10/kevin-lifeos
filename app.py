@@ -14,7 +14,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 57  # debe coincidir con FRONT_V en static/app.js
+VERSION = 58  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -380,6 +380,14 @@ def init_db():
         except Exception:
             pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('tech_typo_v1','1')")
+        con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='eat_clean_v1'").fetchone():
+        try:
+            con.execute("UPDATE habits SET name='Eat clean (no junk food)' WHERE name='Healthy eating'")
+            print('  + hábito "Healthy eating" -> "Eat clean (no junk food)"')
+        except Exception:
+            pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('eat_clean_v1','1')")
         con.commit()
     if not con.execute("SELECT 1 FROM config WHERE key='detalle_v1'").fetchone():
         with open(os.path.join(BASE, 'seed_data.json'), encoding='utf-8') as f:
