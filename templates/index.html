@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<link rel="stylesheet" href="/static/style.css?v=57">
+<link rel="stylesheet" href="/static/style.css?v=58">
 </head>
 <body>
 
@@ -22,6 +22,7 @@
   <button data-tab="habitos">🔥 Habits</button>
   <button data-tab="metas">🎯 Goals</button>
   <button data-tab="life">📅 Life</button>
+  <button data-tab="gym">🏋️ Gym</button>
   <button data-tab="suenos">✨ Wishlist</button>
   <button data-tab="anime">📺 Anime</button>
   <button data-tab="libros">📚 Books</button>
@@ -275,6 +276,37 @@
   </div>
 </section>
 
+<!-- ============ GYM & FITNESS ============ -->
+<section id="tab-gym" class="tab">
+  <div class="row-between">
+    <h1>🏋️ Gym &amp; Fitness</h1>
+    <button class="btn-gold" id="gymLogBtn">+ Log this week</button>
+  </div>
+  <p class="hint">Your body, tracked. Measure weekly, same day, in the morning. The tape tells the truth the scale hides.</p>
+  <div class="cards" id="gymStats"></div>
+  <div class="panel">
+    <div class="row-between"><h2>🎯 My goal</h2><button class="btn-mini" id="gymEditBtn">✎ Edit</button></div>
+    <div id="gymGoal"></div>
+  </div>
+  <div class="panel">
+    <h2>📉 Progress over time</h2>
+    <canvas id="gymChart" height="220"></canvas>
+    <p class="hint" id="gymChartHint" style="margin-top:8px"></p>
+  </div>
+  <div class="panel">
+    <h2>📐 Measurements — latest vs start</h2>
+    <div class="card-grid" id="gymMeasures"></div>
+  </div>
+  <div class="panel">
+    <h2>🗓️ Weekly history</h2>
+    <div id="gymHistory" class="scroll-x"></div>
+  </div>
+  <div class="panel gym-help">
+    <h2>📏 How to take your measurements</h2>
+    <div id="gymHelp"></div>
+  </div>
+</section>
+
 <!-- ============ SUEÑOS ============ -->
 <section id="tab-suenos" class="tab">
   <h1>✨ Wishlist — waiting for you on the other side</h1>
@@ -337,7 +369,7 @@
 </section>
 
 </main>
-<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v57</b></footer>
-<script src="/static/app.js?v=57"></script>
+<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v58</b></footer>
+<script src="/static/app.js?v=58"></script>
 </body>
 </html>
