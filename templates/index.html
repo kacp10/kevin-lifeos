@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<link rel="stylesheet" href="/static/style.css?v=58">
+<link rel="stylesheet" href="/static/style.css?v=59">
 </head>
 <body>
 
@@ -283,6 +283,14 @@
     <button class="btn-gold" id="gymLogBtn">+ Log this week</button>
   </div>
   <p class="hint">Your body, tracked. Measure weekly, same day, in the morning. The tape tells the truth the scale hides.</p>
+
+  <div class="panel workout-panel">
+    <div class="row-between">
+      <h2 id="workoutTitle">🔥 Today's workout</h2>
+      <select id="workoutDay" class="workout-day-sel"></select>
+    </div>
+    <div id="workoutBox"></div>
+  </div>
   <div class="cards" id="gymStats"></div>
   <div class="panel">
     <div class="row-between"><h2>🎯 My goal</h2><button class="btn-mini" id="gymEditBtn">✎ Edit</button></div>
@@ -369,7 +377,7 @@
 </section>
 
 </main>
-<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v58</b></footer>
-<script src="/static/app.js?v=58"></script>
+<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v59</b></footer>
+<script src="/static/app.js?v=59"></script>
 </body>
 </html>
