@@ -179,7 +179,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 60;
+const FRONT_V = 61;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -242,11 +242,11 @@ async function api(path, opts) {
       body: opts.body ? JSON.stringify(opts.body) : undefined
     } : undefined);
   } catch (err) {
-    toast('⚠ Could not reach the server.', 'err');
+    if (!opts || !opts.quiet) toast('⚠ Could not reach the server.', 'err');
     throw err;
   }
   if (!r.ok) {
-    toast('⚠ Error ' + r.status + '. Reinicia el servidor (Ctrl+C → python app.py)', 'err');
+    if (!opts || !opts.quiet) toast('⚠ Error ' + r.status + '. Reinicia el servidor (Ctrl+C → python app.py)', 'err');
     throw new Error(r.status + ' en ' + path);
   }
   return r.json();
@@ -519,7 +519,11 @@ function renderWorkout() {
     return;
   }
 
-  box.innerHTML = plan.list.map(([id, sets, reps, rest]) => {
+  const offDay = (wd !== todayWd);
+  const banner = offDay
+    ? `<div class="workout-banner">📅 You're viewing <b>${plan.title.replace(/^\S+\s/, '')}</b>, but today is <b>${DAY_NAMES[todayWd]}</b>. Sets you log are saved to <b>today</b>. Switch the menu to <b>Today</b> for your scheduled workout.</div>`
+    : '';
+  box.innerHTML = banner + plan.list.map(([id, sets, reps, rest]) => {
     const ex = EXERCISE_DB[id]; if (!ex) return '';
     const today = gymSetsFor(id, hoyLocal());
     const last = gymLastSession(id);
@@ -586,12 +590,12 @@ document.getElementById('workoutBox')?.addEventListener('click', async (e) => {
     const r = parseInt(card.querySelector('.set-r').value, 10) || 0;
     if (r <= 0) { toast('Type the reps first 💪'); return; }
     try {
-      const res = await api('/api/gym/set', { body: { date: hoyLocal(), exercise: log.dataset.log, weight: w, reps: r } });
+      const res = await api('/api/gym/set', { quiet: true, body: { date: hoyLocal(), exercise: log.dataset.log, weight: w, reps: r } });
       S.gym_sets = S.gym_sets || [];
       S.gym_sets.push({ id: res.id, date: hoyLocal(), exercise: log.dataset.log, weight: w, reps: r });
       renderWorkout(); renderGym();
     } catch (err) {
-      toast('Couldn\'t save that set — check the numbers and try again.', 'err');
+      toast('Couldn\'t save that set right now — please try again in a moment.');
     }
     return;
   }
@@ -599,11 +603,11 @@ document.getElementById('workoutBox')?.addEventListener('click', async (e) => {
   if (undo) {
     const id = +undo.dataset.undo;
     try {
-      await api('/api/gym/set/' + id, { method: 'DELETE' });
+      await api('/api/gym/set/' + id, { method: 'DELETE', quiet: true });
       S.gym_sets = (S.gym_sets || []).filter(s => s.id != id);
       renderWorkout(); renderGym();
     } catch (err) {
-      toast('Couldn\'t undo that set — try again.', 'err');
+      toast('Couldn\'t undo that set right now — please try again.');
     }
     return;
   }
@@ -799,16 +803,84 @@ document.getElementById('gymEditBtn')?.addEventListener('click', async () => {
   load();
 });
 
-function goTab(name) {
-  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  const sec = document.getElementById('tab-' + name);
-  if (sec) sec.classList.add('active');
-  window.scrollTo(0, 0);
+// Modal de documentación (overlay con scroll y X, sin salir de la pantalla)
+function docModal(title, html) {
+  const back = document.createElement('div');
+  back.className = 'modal-back doc-back';
+  back.innerHTML = `<div class="modal-card doc-card">
+    <div class="doc-head"><h3>${title}</h3><button class="doc-x" title="Close">✕</button></div>
+    <div class="doc-body">${html}</div></div>`;
+  document.body.appendChild(back);
+  requestAnimationFrame(() => back.classList.add('show'));
+  const close = () => { back.classList.remove('show'); setTimeout(() => back.remove(), 280); };
+  back.querySelector('.doc-x').addEventListener('click', close);
+  back.addEventListener('click', (e) => { if (e.target === back) close(); });
+  document.addEventListener('keydown', function esc(ev) { if (ev.key === 'Escape') { close(); document.removeEventListener('keydown', esc); } });
 }
-document.getElementById('gymGuideBtn')?.addEventListener('click', () => goTab('guide'));
+const GYM_MANUAL_HTML = `
+  <div class="guide-block">
+    <h2>🏋️ How to log a workout</h2>
+    <p>The app shows <b>today's workout</b> automatically based on the day of the week. Each exercise is a card with its photo, target muscles, sets × reps and rest time.</p>
+    <p>Every planned set is a row. The active row has two boxes — <b>weight (kg)</b> and <b>reps</b>. Type them and tap <b>✓</b>; the set is saved and the next one becomes active. When you finish all sets the exercise turns green (<b>✓ done</b>). You can add an <b>Extra</b> set, or undo any set with <b>✕</b>.</p>
+    <p>Training a different muscle group today? Use the dropdown to pick another day's plan — sets always save to <b>today's date</b>.</p>
+  </div>
+  <div class="guide-block">
+    <h2>🧠 Smart history &amp; targets</h2>
+    <p>Each exercise remembers your <b>last session</b> and shows it (e.g. <i>20kg×10, 20kg×10, 22.5kg×8</i>) plus a <b>target for today</b>:</p>
+    <ul>
+      <li>If you hit the <b>top of the rep range on every set</b> last time → it suggests <b>+2.5 kg</b>.</li>
+      <li>If not → it suggests the <b>same weight, +1 rep</b>.</li>
+    </ul>
+    <p>The boxes come <b>pre-filled</b> with that suggestion. This is the core of real progress: <b>progressive overload</b>.</p>
+  </div>
+  <div class="guide-block">
+    <h2>📈 How progression works</h2>
+    <ul>
+      <li><b class="g-ok">⬆ Stronger</b> — more weight or more total volume (weight × reps).</li>
+      <li><b class="g-mut">➡ Matched</b> — same performance. Still a win.</li>
+      <li><b class="g-bad">⬇ Below</b> — a bit less. Normal after bad sleep or low food. The weekly trend is what counts.</li>
+    </ul>
+  </div>
+  <div class="guide-block">
+    <h2>⚖️ How the Goal Weight is recommended</h2>
+    <p>Leave Goal Weight blank and the app recommends one from your <b>height</b> and <b>physical goal</b>, using BMI as a sensible anchor:</p>
+    <ul>
+      <li><b>Fat loss / abs / definition</b> → BMI ≈ 22 (lean, abs-visible).</li>
+      <li><b>Muscle / mass / strength</b> → BMI ≈ 24.5.</li>
+      <li>Otherwise (athletic/recomp) → BMI ≈ 23.</li>
+    </ul>
+    <p>Formula: <b>goal kg = target BMI × (height in m)²</b>. If you're already leaner than the fat-loss target it eases toward maintaining. It updates on its own as your goal, height or weight change — never fixed forever. You can override it in <b>Edit</b> anytime.</p>
+    <p class="hint">BMI is a rough guide, not body-fat. The real proof is the mirror, the waist tape and how clothes fit.</p>
+  </div>
+  <div class="guide-block">
+    <h2>📐 How to register measurements</h2>
+    <p>Tap <b>+ Log this week</b>. Use a sewing tape, in the morning, before eating, relaxed, same day each week. Leave blank what you didn't measure.</p>
+    <ul>
+      <li><b>Waist</b> — around the navel. The #1 fat-loss signal.</li>
+      <li><b>Chest</b> — across the nipples, arms down.</li>
+      <li><b>Arm</b> — flexed bicep, thickest point.</li>
+      <li><b>Hips</b> — widest part of the glutes.</li>
+      <li><b>Thigh</b> — highest point, under the glute.</li>
+      <li><b>Weight</b> — same scale, morning, after bathroom.</li>
+    </ul>
+  </div>
+  <div class="guide-block">
+    <h2>📉 How to read the charts</h2>
+    <p>The chart plots <b>weight (gold)</b> and <b>waist (purple)</b> over the weeks. Both trending <b>down</b> = losing fat. The measurement cards show <b>latest vs start</b>, green when waist/weight drop.</p>
+  </div>
+  <div class="guide-block">
+    <h2>❓ FAQ</h2>
+    <p><b>Will lifting make me bulky instead of losing fat?</b> No. Fat loss comes from a calorie deficit (food); lifting keeps the muscle that gives you shape. Without lifting you'd just get "skinny-fat".</p>
+    <p><b>When will I see changes?</b> 3–4 weeks to notice yourself, 6–8 weeks for others. One week shows nothing.</p>
+    <p><b>The scale went up this week.</b> Water and food move it daily. Judge by the 2-week trend.</p>
+    <p><b>Do I need my weight to start?</b> No. Log what you can; add weight when you have a scale.</p>
+    <p><b>Does it cost anything?</b> No. Everything is free and stored in your own database.</p>
+  </div>`;
+function openGymManual() { docModal('📖 Gym Guide', GYM_MANUAL_HTML); }
+
+document.getElementById('gymGuideBtn')?.addEventListener('click', openGymManual);
 document.getElementById('gymGoal')?.addEventListener('click', (e) => {
-  if (e.target.id === 'gymWhyLink') goTab('guide');
+  if (e.target.id === 'gymWhyLink') openGymManual();
 });
 
 document.getElementById('gymHistory')?.addEventListener('click', async (e) => {
@@ -2788,6 +2860,25 @@ function horaOrden(t) {
     'Sleep': 23 * 60, 'Dormir': 23 * 60 };
   return orden[t] != null ? orden[t] : 23 * 60 + 30;   // desconocidos, casi al final
 }
+// ---- Overrides de hora de actividades (solo hoy / esta semana / permanente) ----
+function getTimeOv() { try { return JSON.parse((S.profile || {}).time_overrides || '{}'); } catch { return {}; } }
+async function saveTimeOv(o) { await api('/api/profile', { body: { key: 'time_overrides', value: JSON.stringify(o) } }); }
+function weekKeyOf(iso) {                       // id de semana = fecha del lunes de esa semana
+  const d = new Date(iso + 'T00:00:00');
+  const lun = (d.getDay() + 6) % 7;            // 0 = lunes
+  d.setDate(d.getDate() - lun);
+  return localISO(d);
+}
+function effTime(key, iso, def) {              // hora efectiva según overrides (día > semana > permanente > default)
+  const o = getTimeOv();
+  const dk = `${iso}|${key}`;
+  if (o.day && o.day[dk] != null) return o.day[dk];
+  const wk = weekKeyOf(iso);
+  if (o.week && o.week[wk] && o.week[wk][key] != null) return o.week[wk][key];
+  if (o.perm && o.perm[key] != null) return o.perm[key];
+  return def;
+}
+
 function renderRoutineDay() {
   const val = $('#dayPick').value;
   if (!val) return;
@@ -2824,6 +2915,8 @@ function renderRoutineDay() {
   if (diffDays >= 0 && diffDays % 9 === 0 && !hiddenDay.has(`${iso}|laundry`)) {
     lista.push({ t: '09:00', title: '🧺 Do the laundry', d: 'Reminder — every 9 days.', key: 'laundry' });
   }
+  // aplicar overrides de hora (la lista se reordena sola con la nueva hora)
+  lista.forEach(a => { a.t = effTime(a.key, iso, a.t); });
   // ORDENAR TODO por hora real (los textos como Sleep/Afternoon/Night van al final en orden lógico)
   lista.sort((a, b) => horaOrden(a.t) - horaOrden(b.t));
   const done = new Set(S.rdone || []);
@@ -2837,7 +2930,7 @@ function renderRoutineDay() {
       : `<button class="hide-main" data-wd="${wd}" data-day="${iso}" data-key="${a.key}" title="Remove / replace">✕</button>`;
     return `<div class="routine-block ${a.work ? 'work' : ''} ${isDone ? 'done' : ''}">
       <span class="rb-time">${a.t}</span>
-      <div class="rb-body"><div class="rb-title">${a.title} ${delBtn}</div><div class="rb-desc">${a.d}</div></div>
+      <div class="rb-body"><div class="rb-title">${a.title} <button class="edit-time" data-key="${a.key}" data-day="${iso}" data-cur="${a.t}" title="Edit time">⏰</button> ${delBtn}</div><div class="rb-desc">${a.d}</div></div>
       <button class="rb-check ${isDone ? 'on' : ''}" data-day="${iso}" data-act="${a.key}">${isDone ? '✓' : ''}</button>
     </div>`;
   }).join('');
@@ -2919,6 +3012,34 @@ document.addEventListener('click', async (e) => {
     if (!r || !r[0].trim()) return;
     await api('/api/course/done', { body: { career: addC.dataset.name, title: r[0] } });
     toast('🎓 Course logged!');
+    load();
+    return;
+  }
+
+  const etBtn = e.target.closest('.edit-time');
+  if (etBtn) {
+    const key = etBtn.dataset.key, iso = etBtn.dataset.day, cur = etBtn.dataset.cur;
+    const r = await modal({ icon: '⏰', title: 'Edit time',
+      text: 'Set a new time (24h format, e.g. 18:30). The activity moves and re-sorts itself.',
+      fields: [
+        { type: 'text', label: 'New time', value: cur, placeholder: 'HH:MM' },
+        { type: 'select', label: 'Apply to', options: [
+          { v: 'day', t: 'Only today' },
+          { v: 'week', t: 'This week' },
+          { v: 'perm', t: 'Permanently' }
+        ] }
+      ], okText: 'Save time' });
+    if (!r) return;
+    let nt = String(r[0] || '').trim();
+    if (!nt) { toast('Type a time, e.g. 18:30'); return; }
+    if (/^\d{1,2}$/.test(nt)) nt = nt.padStart(2, '0') + ':00';      // "18" -> "18:00"
+    const scope = r[1] || 'day';
+    const o = getTimeOv();
+    if (scope === 'day') { o.day = o.day || {}; o.day[`${iso}|${key}`] = nt; }
+    else if (scope === 'week') { const wk = weekKeyOf(iso); o.week = o.week || {}; o.week[wk] = o.week[wk] || {}; o.week[wk][key] = nt; }
+    else { o.perm = o.perm || {}; o.perm[key] = nt; }
+    await saveTimeOv(o);
+    toast(scope === 'day' ? '⏰ Updated for today' : scope === 'week' ? '⏰ Updated for this week' : '⏰ Updated permanently');
     load();
     return;
   }

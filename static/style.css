@@ -884,3 +884,36 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .g-ok { color: var(--ok); }
 .g-bad { color: var(--hp, #ff5c7a); }
 .g-mut { color: var(--mut); }
+
+/* ---------- doc modal (manual) + workout banner ---------- */
+.doc-card {
+  width: min(640px, 94vw); max-height: 86vh; padding: 0; overflow: hidden;
+  display: flex; flex-direction: column; text-align: left;
+}
+.doc-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 22px; border-bottom: 1px solid var(--line); flex: 0 0 auto;
+}
+.doc-head h3 { margin: 0; text-align: left; }
+.doc-x {
+  background: transparent; border: 1px solid var(--line); color: var(--mut);
+  width: 36px; height: 36px; border-radius: 10px; cursor: pointer; font-size: 1rem; font-weight: 800;
+}
+.doc-x:hover { color: var(--txt); border-color: var(--accent); }
+.doc-body { padding: 8px 22px 22px; overflow-y: auto; flex: 1 1 auto; }
+.doc-body .guide-block { border-bottom: 1px solid var(--line); padding: 14px 0; }
+.doc-body .guide-block:last-child { border-bottom: 0; }
+.doc-body h2 { font-size: 1rem; margin-bottom: 6px; }
+.doc-body p { color: var(--mut); text-align: left; margin: 6px 0; line-height: 1.6; font-size: .9rem; }
+.doc-body ul { margin: 6px 0; padding-left: 20px; line-height: 1.7; color: var(--mut); font-size: .9rem; }
+.doc-body b { color: var(--txt); }
+.workout-banner {
+  background: rgba(124,92,255,.12); border: 1px solid var(--accent);
+  border-radius: 10px; padding: 10px 12px; margin-bottom: 12px;
+  font-size: .85rem; color: var(--txt); line-height: 1.5;
+}
+.edit-time {
+  background: transparent; border: none; cursor: pointer; font-size: .9rem;
+  opacity: .65; padding: 0 4px;
+}
+.edit-time:hover { opacity: 1; }
