@@ -179,7 +179,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 61;
+const FRONT_V = 62;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -585,6 +585,12 @@ function renderWorkout() {
 document.getElementById('workoutBox')?.addEventListener('click', async (e) => {
   const log = e.target.closest('[data-log]');
   if (log) {
+    // si HOY es día de descanso, no se registra: mensaje amable (aunque estés viendo otro plan)
+    const todayPlan = WORKOUT_PLAN[new Date().getDay()];
+    if (todayPlan && todayPlan.rest) {
+      toast('Today is your rest day 🌿 — there\'s no workout to log. Rest is part of the plan!');
+      return;
+    }
     const card = log.closest('.ex-card');
     const w = parseFloat(String(card.querySelector('.set-w').value).replace(',', '.')) || 0;
     const r = parseInt(card.querySelector('.set-r').value, 10) || 0;
