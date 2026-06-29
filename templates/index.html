@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<link rel="stylesheet" href="/static/style.css?v=59">
+<link rel="stylesheet" href="/static/style.css?v=60">
 </head>
 <body>
 
@@ -23,6 +23,7 @@
   <button data-tab="metas">🎯 Goals</button>
   <button data-tab="life">📅 Life</button>
   <button data-tab="gym">🏋️ Gym</button>
+  <button data-tab="guide">📖 Guide</button>
   <button data-tab="suenos">✨ Wishlist</button>
   <button data-tab="anime">📺 Anime</button>
   <button data-tab="libros">📚 Books</button>
@@ -280,7 +281,10 @@
 <section id="tab-gym" class="tab">
   <div class="row-between">
     <h1>🏋️ Gym &amp; Fitness</h1>
-    <button class="btn-gold" id="gymLogBtn">+ Log this week</button>
+    <div class="gym-head-btns">
+      <button class="btn-mini" id="gymGuideBtn">📖 Guide</button>
+      <button class="btn-gold" id="gymLogBtn">+ Log this week</button>
+    </div>
   </div>
   <p class="hint">Your body, tracked. Measure weekly, same day, in the morning. The tape tells the truth the scale hides.</p>
 
@@ -312,6 +316,78 @@
   <div class="panel gym-help">
     <h2>📏 How to take your measurements</h2>
     <div id="gymHelp"></div>
+  </div>
+</section>
+
+<!-- ============ GUIDE / HELP CENTER ============ -->
+<section id="tab-guide" class="tab">
+  <h1>📖 Gym Guide &amp; Help Center</h1>
+  <p class="hint">Everything about how the Gym module thinks. The app stays clean — all the explanations live here.</p>
+
+  <div class="panel guide-block">
+    <h2>🏋️ How to log a workout</h2>
+    <p>Open <b>Gym</b>. The app shows <b>today's workout</b> automatically based on the day of the week. Each exercise is a card with its photo, target muscles, sets × reps and rest time.</p>
+    <p>Every planned set is shown as a row. The active row has two boxes: <b>weight (kg)</b> and <b>reps</b>. Type them and tap <b>✓</b> — the set is saved and the next one becomes active. When you finish all sets the exercise turns green (<b>✓ done</b>). You can add an <b>Extra</b> set, or undo any set with <b>✕</b>.</p>
+    <p>Training a different muscle group today? Use the dropdown at the top to pick another day's plan. Sets are always saved to <b>today's date</b>.</p>
+  </div>
+
+  <div class="panel guide-block">
+    <h2>🧠 Smart history &amp; targets</h2>
+    <p>Each exercise remembers your <b>last session</b> and shows it (e.g. <i>20kg×10, 20kg×10, 22.5kg×8</i>). Based on it, you get a <b>target for today</b>:</p>
+    <ul>
+      <li>If you hit the <b>top of the rep range on every set</b> last time → it suggests <b>+2.5 kg</b>.</li>
+      <li>If not → it suggests the <b>same weight, +1 rep</b>.</li>
+    </ul>
+    <p>The weight/reps boxes come <b>pre-filled</b> with that suggestion so logging takes seconds. This is the core of real progress: <b>progressive overload</b> — doing a little more over time.</p>
+  </div>
+
+  <div class="panel guide-block">
+    <h2>📈 How progression works</h2>
+    <p>After you log sets, each exercise shows a badge comparing today with your last session:</p>
+    <ul>
+      <li><b class="g-ok">⬆ Stronger</b> — more weight or more total volume (weight × reps).</li>
+      <li><b class="g-mut">➡ Matched</b> — same performance. Still a win.</li>
+      <li><b class="g-bad">⬇ Below</b> — a bit less. Normal on bad-sleep or low-food days. The trend over weeks is what counts.</li>
+    </ul>
+  </div>
+
+  <div class="panel guide-block">
+    <h2>⚖️ How the Goal Weight recommendation is calculated</h2>
+    <p>If you leave Goal Weight blank, the app recommends one from your <b>height</b> and <b>physical goal</b>, using BMI as a sensible anchor:</p>
+    <ul>
+      <li>Goal about <b>fat loss / abs / definition</b> → <b>BMI ≈ 22</b> (lean, abs-visible look).</li>
+      <li>Goal about <b>muscle / mass / strength</b> → <b>BMI ≈ 24.5</b>.</li>
+      <li>Anything else (recomp/athletic) → <b>BMI ≈ 23</b>.</li>
+    </ul>
+    <p>Formula: <b>goal kg = target BMI × (height in m)²</b>. If you're already leaner than the fat-loss target, it eases the goal toward maintaining. It <b>updates on its own</b> as your goal, height or weight change — it's never a fixed-forever number. You can always set your own value in <b>Edit</b>, and it will respect it.</p>
+    <p class="hint">BMI is a rough guide, not a body-fat measure. With muscle, the real proof is the mirror, the waist tape and how your clothes fit — not the exact number.</p>
+  </div>
+
+  <div class="panel guide-block">
+    <h2>📐 How to register measurements</h2>
+    <p>Tap <b>+ Log this week</b>. Use a simple sewing tape, in the morning, before eating, relaxed (don't suck in), same day each week. Leave blank what you didn't measure.</p>
+    <ul>
+      <li><b>Waist</b> — around the navel. The #1 fat-loss signal.</li>
+      <li><b>Chest</b> — across the nipples, arms down.</li>
+      <li><b>Arm</b> — flexed bicep, thickest point.</li>
+      <li><b>Hips</b> — widest part of the glutes.</li>
+      <li><b>Thigh</b> — highest point, under the glute.</li>
+      <li><b>Weight</b> — same scale, morning, after bathroom.</li>
+    </ul>
+  </div>
+
+  <div class="panel guide-block">
+    <h2>📉 How to read the charts</h2>
+    <p>The progress chart plots <b>weight (gold)</b> and <b>waist (purple)</b> over the weeks. Both trending <b>down</b> = you're losing fat. The measurement cards show your <b>latest value vs your start</b>, with a green arrow when waist/weight drop.</p>
+  </div>
+
+  <div class="panel guide-block">
+    <h2>❓ FAQ</h2>
+    <p><b>Will lifting make me bulky instead of losing fat?</b> No. Muscle and fat are different tissues. Fat loss comes from a calorie deficit (food); lifting keeps the muscle that gives you shape. Without lifting you'd just get "skinny-fat".</p>
+    <p><b>When will I see changes?</b> 3–4 weeks to notice yourself, 6–8 weeks for others. One week shows nothing.</p>
+    <p><b>The scale went up this week.</b> Water, food and a new training stimulus move it daily. Judge by the 2-week trend, not one reading.</p>
+    <p><b>Do I need my weight to start?</b> No. Log what you can; add weight when you have a scale.</p>
+    <p><b>Is my data safe / does it cost anything?</b> Everything is free and stored in your own database. No premium, no external service required.</p>
   </div>
 </section>
 
@@ -377,7 +453,7 @@
 </section>
 
 </main>
-<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v59</b></footer>
-<script src="/static/app.js?v=59"></script>
+<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v60</b></footer>
+<script src="/static/app.js?v=60"></script>
 </body>
 </html>
