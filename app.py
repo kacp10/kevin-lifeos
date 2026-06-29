@@ -15,7 +15,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 61  # debe coincidir con FRONT_V en static/app.js
+VERSION = 62  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -1207,12 +1207,18 @@ def gym_set_add():
         return int(n) if integer else n
     weight = to_num(j.get('weight'))
     reps = to_num(j.get('reps'), integer=True)
+    created = datetime.now().isoformat()
     try:
-        cur = db().execute(
+        db().execute(
             'INSERT INTO gym_sets (date, exercise, weight, reps, created) VALUES (?,?,?,?,?)',
-            (d, ex, weight, reps, datetime.now().isoformat()))
+            (d, ex, weight, reps, created))
         db().commit()
-        return jsonify(ok=True, id=cur.lastrowid)
+        # recuperar el id de forma portable (SQLite y Postgres): por su timestamp único
+        row = db().execute(
+            'SELECT id FROM gym_sets WHERE date=? AND exercise=? AND created=? ORDER BY id DESC',
+            (d, ex, created)).fetchone()
+        new_id = dict(row)['id'] if row else None
+        return jsonify(ok=True, id=new_id)
     except Exception as e:
         return jsonify(error='Could not save the set: ' + str(e)), 400
 
