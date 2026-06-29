@@ -179,7 +179,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 59;
+const FRONT_V = 60;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -526,19 +526,39 @@ function renderWorkout() {
     const sug = gymSuggest(id, reps);
     const prog = gymProgression(id);
     const done = today.length >= sets;
-    const doneRows = today.map((s, i) => `<div class="set-row set-done">
-      <span class="set-n">Set ${i + 1}</span>
-      <span class="set-val">${(+s.weight) || 0} kg × ${s.reps}</span>
-      <button class="set-undo" data-undo="${s.id}" title="Undo set">✕</button></div>`).join('');
-    const nextN = today.length + 1;
-    const wVal = today.length ? ((+today[today.length - 1].weight) || '') : (sug.weight || '');
-    const rVal = today.length ? (today[today.length - 1].reps || '') : (sug.reps || '');
-    const activeRow = `<div class="set-row set-active">
-      <span class="set-n">Set ${nextN}</span>
-      <input class="set-w" type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" value="${wVal}">
-      <span class="set-x">×</span>
-      <input class="set-r" type="number" inputmode="numeric" min="0" placeholder="reps" value="${rVal}">
-      <button class="set-log" data-log="${id}" title="Log this set">✓</button></div>`;
+    // Mostrar TODAS las series: hechas (✓), la activa (inputs) y las que faltan (objetivo).
+    const shown = Math.max(sets, today.length);
+    let rowsHtml = '';
+    for (let i = 0; i < shown; i++) {
+      if (i < today.length) {                       // serie ya registrada
+        const s = today[i];
+        rowsHtml += `<div class="set-row set-done">
+          <span class="set-n">Set ${i + 1}</span>
+          <span class="set-val">${(+s.weight) || 0} kg × ${s.reps}</span>
+          <button class="set-undo" data-undo="${s.id}" title="Undo set">✕</button></div>`;
+      } else if (i === today.length) {              // serie activa (a registrar ahora)
+        const wVal = today.length ? ((+today[today.length - 1].weight) || '') : (sug.weight || '');
+        const rVal = today.length ? (today[today.length - 1].reps || '') : (sug.reps || '');
+        rowsHtml += `<div class="set-row set-active">
+          <span class="set-n">Set ${i + 1}</span>
+          <input class="set-w" type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" value="${wVal}">
+          <span class="set-x">×</span>
+          <input class="set-r" type="number" inputmode="numeric" min="0" placeholder="reps" value="${rVal}">
+          <button class="set-log" data-log="${id}" title="Log this set">✓</button></div>`;
+      } else {                                       // series que faltan (objetivo)
+        rowsHtml += `<div class="set-row set-upcoming">
+          <span class="set-n">Set ${i + 1}</span>
+          <span class="set-val mut">target ${reps} reps</span></div>`;
+      }
+    }
+    if (today.length >= shown) {                     // todo hecho: fila opcional para una serie extra
+      rowsHtml += `<div class="set-row set-active set-extra">
+        <span class="set-n">Extra</span>
+        <input class="set-w" type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" value="${(+today[today.length - 1].weight) || ''}">
+        <span class="set-x">×</span>
+        <input class="set-r" type="number" inputmode="numeric" min="0" placeholder="reps" value="">
+        <button class="set-log" data-log="${id}" title="Log an extra set">✓</button></div>`;
+    }
     return `<div class="ex-card ${done ? 'ex-done' : ''}" data-ex="${id}">
       <div class="ex-top">
         <img class="ex-img" loading="lazy" src="${GYM_IMG}${ex.img}/0.jpg" alt="" onerror="this.classList.add('noimg')">
@@ -553,7 +573,7 @@ function renderWorkout() {
         <div class="ex-suggest">🎯 ${sug.text}</div>
         ${prog ? `<div class="ex-prog ${prog.cls}">${prog.text}</div>` : ''}
       </div>
-      <div class="ex-sets">${doneRows}${activeRow}</div>
+      <div class="ex-sets">${rowsHtml}</div>
     </div>`;
   }).join('');
 }
@@ -564,22 +584,56 @@ document.getElementById('workoutBox')?.addEventListener('click', async (e) => {
     const card = log.closest('.ex-card');
     const w = parseFloat(String(card.querySelector('.set-w').value).replace(',', '.')) || 0;
     const r = parseInt(card.querySelector('.set-r').value, 10) || 0;
-    if (r <= 0) { toast('Type the reps first'); return; }
-    const res = await api('/api/gym/set', { body: { date: hoyLocal(), exercise: log.dataset.log, weight: w, reps: r } });
-    S.gym_sets = S.gym_sets || [];
-    S.gym_sets.push({ id: res.id, date: hoyLocal(), exercise: log.dataset.log, weight: w, reps: r });
-    renderWorkout(); renderGym();
+    if (r <= 0) { toast('Type the reps first 💪'); return; }
+    try {
+      const res = await api('/api/gym/set', { body: { date: hoyLocal(), exercise: log.dataset.log, weight: w, reps: r } });
+      S.gym_sets = S.gym_sets || [];
+      S.gym_sets.push({ id: res.id, date: hoyLocal(), exercise: log.dataset.log, weight: w, reps: r });
+      renderWorkout(); renderGym();
+    } catch (err) {
+      toast('Couldn\'t save that set — check the numbers and try again.', 'err');
+    }
     return;
   }
   const undo = e.target.closest('[data-undo]');
   if (undo) {
     const id = +undo.dataset.undo;
-    await api('/api/gym/set/' + id, { method: 'DELETE' });
-    S.gym_sets = (S.gym_sets || []).filter(s => s.id != id);
-    renderWorkout(); renderGym();
+    try {
+      await api('/api/gym/set/' + id, { method: 'DELETE' });
+      S.gym_sets = (S.gym_sets || []).filter(s => s.id != id);
+      renderWorkout(); renderGym();
+    } catch (err) {
+      toast('Couldn\'t undo that set — try again.', 'err');
+    }
     return;
   }
 });
+
+// Recomendación inteligente de peso objetivo (basada sobre todo en el objetivo físico + estatura)
+function recommendGoalWeight(g) {
+  const h = g.height ? +g.height : null;           // cm
+  if (!h || h < 120 || h > 230) return null;       // sin estatura razonable no se calcula
+  const hm = h / 100;
+  const txt = (g.goal || '').toLowerCase();
+  let bmi = 23, why = 'an athletic, balanced build (BMI ≈ 23)';
+  if (/(fat|grasa|abs|abdomin|lean|defin|cut|llant|delgad|marcar|perder|adelgaz)/.test(txt)) {
+    bmi = 22; why = 'a lean, defined look so your abs show (BMI ≈ 22)';
+  } else if (/(muscle|m[uú]sculo|masa|mass|volum|gain|ganar|grande|bulk|fuerza)/.test(txt)) {
+    bmi = 24.5; why = 'building muscle mass (BMI ≈ 24.5)';
+  }
+  let kg = +(bmi * hm * hm).toFixed(1);
+  const ents = (g.entries || []).filter(e => e.weight != null);
+  const curW = ents.length ? ents[ents.length - 1].weight : null;
+  if (curW != null && bmi <= 22 && kg >= curW) kg = +(curW - 1).toFixed(1);  // ya está magro: meta = mantener
+  return { kg, why, bmi };
+}
+// Peso objetivo efectivo: manual si el usuario lo fijó, si no la recomendación automática
+function effectiveGoal(g) {
+  if (g.weightManual && g.weightGoal != null && g.weightGoal !== '')
+    return { kg: +g.weightGoal, auto: false };
+  const rec = recommendGoalWeight(g);
+  return rec ? { kg: rec.kg, auto: true, why: rec.why } : null;
+}
 
 function renderGym() {
   const panel = document.getElementById('gymStats');
@@ -594,23 +648,29 @@ function renderGym() {
   const startDate = g.start || (first && first.date) || null;
   const semanas = startDate ? Math.max(0, Math.floor((Date.now() - new Date(startDate + 'T00:00:00')) / (7 * 86400000))) : 0;
   const curW = last && last.weight != null ? last.weight : null;
-  const goalW = (g.weightGoal != null && g.weightGoal !== '') ? +g.weightGoal : null;
+  const eg = effectiveGoal(g);
+  const goalW = eg ? eg.kg : null;
   const toGo = (curW != null && goalW != null) ? +(curW - goalW).toFixed(1) : null;
   const exHabit = (S.habits || []).find(h => h.name === 'Exercise');
   const exStreak = exHabit ? rachaHabito(exHabit.id, new Set(S.marks || [])) : 0;
   const card = (label, val, sub) => `<div class="card gym-card"><label>${label}</label><strong>${val}</strong>${sub ? `<small>${sub}</small>` : ''}</div>`;
   panel.innerHTML =
     card('Current weight', curW != null ? curW + ' kg' : '—', curW == null ? 'log it when you have it' : '') +
-    card('Goal weight', goalW != null ? goalW + ' kg' : '—', '') +
+    card('Goal weight', goalW != null ? goalW + ' kg' : '—', eg ? (eg.auto ? '✨ auto · tap Edit to override' : 'set by you') : 'add your height for auto') +
     card('To go', toGo != null ? (toGo > 0 ? toGo + ' kg' : '🎉 reached!') : '—', '') +
     card('Weeks in', semanas, startDate ? 'since ' + startDate : 'set a start date') +
     card('🔥 Training streak', exStreak + (exStreak === 1 ? ' day' : ' days'), 'from your Exercise habit');
 
   // objetivo
   const goalBox = document.getElementById('gymGoal');
+  const goalWLine = goalW != null
+    ? `${goalW} kg ${eg.auto ? '<span class="auto-tag">✨ auto</span>' : '<span class="auto-tag manual">manual</span>'}`
+    : '— (add your height to get an auto recommendation)';
   goalBox.innerHTML =
     `<div class="gym-goal-row"><span>🏁 Start date</span><b>${g.start || '—'}</b></div>
-     <div class="gym-goal-row"><span>⚖️ Goal weight</span><b>${goalW != null ? goalW + ' kg' : '— (optional)'}</b></div>
+     <div class="gym-goal-row"><span>📏 Height</span><b>${g.height ? g.height + ' cm' : '—'}</b></div>
+     <div class="gym-goal-row"><span>⚖️ Goal weight</span><b>${goalWLine}</b></div>
+     ${eg && eg.auto ? `<div class="gym-goal-why">✨ Recommended for ${eg.why}. You can override it in Edit. <span class="link-like" id="gymWhyLink">How is this calculated?</span></div>` : ''}
      <div class="gym-goal-row"><span>💪 Physical goal</span><b>${g.goal ? esc(g.goal) : 'Lower body fat · abs back · athletic, defined look'}</b></div>`;
 
   // gráfica
@@ -722,17 +782,33 @@ document.getElementById('gymEditBtn')?.addEventListener('click', async () => {
   const r = await modal({ icon: '🎯', title: 'My goal',
     fields: [
       { type: 'text', label: 'Start date (YYYY-MM-DD)', value: g.start || hoyLocal(), placeholder: 'YYYY-MM-DD' },
-      { type: 'number', min: 0, label: 'Goal weight in kg (optional)', value: g.weightGoal ?? '', placeholder: 'kg' },
-      { type: 'text', label: 'Physical goal', value: g.goal || '', placeholder: 'e.g. lose fat, get abs back' }
+      { type: 'number', min: 0, label: 'Height in cm', value: g.height ?? '', placeholder: 'e.g. 172' },
+      { type: 'text', label: 'Physical goal', value: g.goal || '', placeholder: 'e.g. lose fat, get abs back' },
+      { type: 'number', min: 0, label: 'Goal weight in kg — leave blank for smart auto', value: (g.weightManual ? g.weightGoal : '') ?? '', placeholder: 'auto' }
     ], okText: 'Save' });
   if (!r) return;
   g.start = String(r[0] || '').trim() || g.start;
-  const w = String(r[1] ?? '').trim();
-  g.weightGoal = w === '' ? null : (+w.replace(/[^0-9.]/g, '') || null);
+  const h = String(r[1] ?? '').trim();
+  g.height = h === '' ? null : (+h.replace(/[^0-9.]/g, '') || null);
   g.goal = String(r[2] || '').trim();
+  const w = String(r[3] ?? '').trim();
+  if (w === '') { g.weightManual = false; g.weightGoal = null; }    // auto
+  else { g.weightManual = true; g.weightGoal = +w.replace(/[^0-9.]/g, '') || null; }
   await saveGym(g);
   toast('🎯 Goal updated');
   load();
+});
+
+function goTab(name) {
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  const sec = document.getElementById('tab-' + name);
+  if (sec) sec.classList.add('active');
+  window.scrollTo(0, 0);
+}
+document.getElementById('gymGuideBtn')?.addEventListener('click', () => goTab('guide'));
+document.getElementById('gymGoal')?.addEventListener('click', (e) => {
+  if (e.target.id === 'gymWhyLink') goTab('guide');
 });
 
 document.getElementById('gymHistory')?.addEventListener('click', async (e) => {
