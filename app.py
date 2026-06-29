@@ -15,7 +15,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 62  # debe coincidir con FRONT_V en static/app.js
+VERSION = 63  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -904,16 +904,20 @@ def career_new():
 
 @app.post('/api/career')
 def career_update():
-    j = request.json
-    field = j['field']
+    j = request.json or {}
+    field = j.get('field')
     if field not in ('name', 'icon', 'step', 'course', 'pct', 'active'):
         return jsonify(error='Field not allowed'), 400
+    try:
+        cid = int(j.get('id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid career id'), 400
     if field == 'active':   # solo una activa a la vez
         db().execute('UPDATE careers SET active=0')
-        db().execute('UPDATE careers SET active=1 WHERE id=?', (int(j['id']),))
+        db().execute('UPDATE careers SET active=1 WHERE id=?', (cid,))
     else:
-        val = int(j['value'] or 0) if field in ('step', 'pct') else j['value']
-        db().execute(f'UPDATE careers SET {field}=? WHERE id=?', (val, int(j['id'])))
+        val = int(j.get('value') or 0) if field in ('step', 'pct') else j.get('value')
+        db().execute(f'UPDATE careers SET {field}=? WHERE id=?', (val, cid))
     db().commit()
     return jsonify(ok=True)
 
