@@ -15,7 +15,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 59  # debe coincidir con FRONT_V en static/app.js
+VERSION = 60  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -1193,13 +1193,28 @@ def profile_set():
 
 @app.post('/api/gym/set')
 def gym_set_add():
-    j = request.json
-    cur = db().execute(
-        'INSERT INTO gym_sets (date, exercise, weight, reps, created) VALUES (?,?,?,?,?)',
-        (j['date'], j['exercise'], float(j.get('weight') or 0), int(j.get('reps') or 0),
-         datetime.now().isoformat()))
-    db().commit()
-    return jsonify(ok=True, id=cur.lastrowid)
+    j = request.json or {}
+    ex = (j.get('exercise') or '').strip()
+    if not ex:
+        return jsonify(error='No exercise given'), 400
+    d = (str(j.get('date') or '').strip()) or date.today().isoformat()
+
+    def to_num(v, integer=False):
+        try:
+            n = float(str(v).lower().replace(',', '.').replace('kg', '').replace('reps', '').strip() or 0)
+        except (ValueError, TypeError):
+            n = 0
+        return int(n) if integer else n
+    weight = to_num(j.get('weight'))
+    reps = to_num(j.get('reps'), integer=True)
+    try:
+        cur = db().execute(
+            'INSERT INTO gym_sets (date, exercise, weight, reps, created) VALUES (?,?,?,?,?)',
+            (d, ex, weight, reps, datetime.now().isoformat()))
+        db().commit()
+        return jsonify(ok=True, id=cur.lastrowid)
+    except Exception as e:
+        return jsonify(error='Could not save the set: ' + str(e)), 400
 
 
 @app.delete('/api/gym/set/<int:i>')
