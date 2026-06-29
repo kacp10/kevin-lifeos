@@ -179,7 +179,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 62;
+const FRONT_V = 63;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -543,7 +543,7 @@ function renderWorkout() {
       } else if (i === today.length) {              // serie activa (a registrar ahora)
         const wVal = today.length ? ((+today[today.length - 1].weight) || '') : (sug.weight || '');
         const rVal = today.length ? (today[today.length - 1].reps || '') : (sug.reps || '');
-        rowsHtml += `<div class="set-row set-active">
+        rowsHtml += `<div class="set-row set-live">
           <span class="set-n">Set ${i + 1}</span>
           <input class="set-w" type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" value="${wVal}">
           <span class="set-x">×</span>
@@ -556,7 +556,7 @@ function renderWorkout() {
       }
     }
     if (today.length >= shown) {                     // todo hecho: fila opcional para una serie extra
-      rowsHtml += `<div class="set-row set-active set-extra">
+      rowsHtml += `<div class="set-row set-live set-extra">
         <span class="set-n">Extra</span>
         <input class="set-w" type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" value="${(+today[today.length - 1].weight) || ''}">
         <span class="set-x">×</span>
@@ -2972,7 +2972,7 @@ document.addEventListener('change', async (e) => {
 // Carreras: set active, add career, add course
 document.addEventListener('click', async (e) => {
   const setA = e.target.closest('.set-active');
-  if (setA) { await api('/api/career', { body: { id: +setA.dataset.career, field: 'active', value: 1 } }); toast('★ Focus updated'); load(); return; }
+  if (setA && setA.dataset.career) { await api('/api/career', { body: { id: +setA.dataset.career, field: 'active', value: 1 } }); toast('★ Focus updated'); load(); return; }
 
   if (e.target.id === 'addCareerBtn') {
     const r = await modal({ icon: '🚀', title: 'Add a career',
@@ -3561,7 +3561,7 @@ const DEL_MSG = {
 };
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('.del-x');
-  if (!b) return;
+  if (!b || !b.dataset.type) return;   // ignora botones .del-x propios de otros módulos (ej. historial gym)
   e.stopPropagation();
   if (!await confirmModal('Confirmar', DEL_MSG[b.dataset.type])) return;
   await api(`/api/${b.dataset.type}/${b.dataset.id}`, { method: 'DELETE' });
