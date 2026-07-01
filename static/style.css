@@ -860,7 +860,7 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
   border: 1px solid var(--line); border-radius: 8px; padding: 7px 8px;
   font-size: .95rem; text-align: center;
 }
-.set-active .set-x { color: var(--mut); }
+.set-live .set-x { color: var(--mut); }
 
 /* ---------- GYM: goal auto + guide ---------- */
 .gym-head-btns { display: flex; gap: 8px; align-items: center; }
@@ -917,3 +917,49 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
   opacity: .65; padding: 0 4px;
 }
 .edit-time:hover { opacity: 1; }
+
+/* ---------- career bank flow ---------- */
+.bank-btn {
+  width: 100%; margin-top: 6px; background: var(--gold); color: #2a1e05;
+  border: none; border-radius: 10px; padding: 9px; font-weight: 800;
+  cursor: pointer; font-size: .85rem;
+}
+.bank-btn:hover { filter: brightness(1.06); }
+
+/* ---------- gym: replace exercise, set controls, celebration ---------- */
+.ex-actions { display: flex; flex-direction: column; gap: 6px; margin-left: auto; flex: 0 0 auto; }
+.replace-btn, .restore-btn {
+  background: transparent; border: 1px solid var(--line); color: var(--mut);
+  border-radius: 8px; padding: 5px 9px; font-size: .74rem; cursor: pointer; white-space: nowrap;
+}
+.replace-btn:hover { border-color: var(--accent); color: var(--txt); }
+.restore-btn:hover { border-color: var(--gold); color: var(--gold); }
+.swap-tag { color: var(--gold); font-weight: 700; }
+.set-ctrl { display: flex; justify-content: space-between; margin-top: 8px; gap: 8px; }
+.set-adj {
+  background: transparent; border: 1px dashed var(--line); color: var(--mut);
+  border-radius: 8px; padding: 5px 10px; font-size: .78rem; cursor: pointer;
+}
+.set-adj:hover { border-color: var(--accent); color: var(--txt); }
+.ex-variation { margin-top: 4px; color: var(--gold); }
+.ex-variation .link-like { color: var(--gold); font-weight: 700; }
+
+.alt-card { width: min(520px, 92vw); }
+.alt-body { display: flex; flex-direction: column; gap: 8px; }
+.alt-pick {
+  display: flex; align-items: center; gap: 12px; padding: 8px; border: 1px solid var(--line);
+  border-radius: 10px; cursor: pointer; transition: border-color .15s;
+}
+.alt-pick:hover { border-color: var(--accent); background: rgba(124,92,255,.06); }
+.alt-img { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; background: #fff; flex: 0 0 56px; }
+.alt-img.noimg { background: var(--card, #20203a); }
+.alt-info b { display: block; font-size: .92rem; }
+.alt-info small { color: var(--mut); }
+
+.celebrate-card {
+  width: min(360px, 90vw); text-align: center; padding: 32px 24px;
+}
+.celebrate-icon { font-size: 3rem; margin-bottom: 10px; animation: pop-in .4s ease; }
+.celebrate-card h3 { margin-bottom: 8px; }
+.celebrate-card p { color: var(--mut); margin-bottom: 18px; line-height: 1.5; }
+@keyframes pop-in { 0% { transform: scale(.5); opacity: 0; } 70% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
