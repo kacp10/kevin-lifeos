@@ -15,7 +15,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 64  # debe coincidir con FRONT_V en static/app.js
+VERSION = 66  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -132,7 +132,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS careers (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, icon TEXT DEFAULT '🎯',
         step INTEGER DEFAULT 0, course TEXT DEFAULT '', pct INTEGER DEFAULT 0,
-        active INTEGER DEFAULT 0, bank INTEGER DEFAULT 0);
+        active INTEGER DEFAULT 0, bank INTEGER DEFAULT 0, goal_id INTEGER DEFAULT NULL);
     CREATE TABLE IF NOT EXISTS courses_done (
         id INTEGER PRIMARY KEY AUTOINCREMENT, career TEXT, title TEXT,
         finished_on TEXT);
@@ -400,6 +400,33 @@ def init_db():
             pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('career_bank_v1','1')")
         con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='career_goal_link_v1'").fetchone():
+        try:
+            con.execute("ALTER TABLE careers ADD COLUMN goal_id INTEGER DEFAULT NULL")
+        except Exception:
+            pass
+        try:
+            # enlazar retroactivamente carreras existentes con su meta correspondiente
+            # (por nombre "Learn X" o palabras clave), solo si hay una coincidencia única y clara
+            careers_rows = [dict(r) for r in con.execute('SELECT * FROM careers').fetchall()]
+            goals_rows = [dict(r) for r in con.execute('SELECT * FROM goals').fetchall()]
+            for car in careers_rows:
+                if car.get('goal_id'):
+                    continue
+                name_l = (car['name'] or '').lower()
+                candidates = [g for g in goals_rows if
+                              ('learn ' + name_l) in (g['name'] or '').lower()
+                              or name_l in (g['name'] or '').lower()
+                              or (re.search(r'ingl|english', name_l) and re.search(r'ingl|english', (g['name'] or '').lower()))
+                              or (re.search(r'data|anal[íi]tic|datos', name_l) and re.search(r'data|anal[íi]tic|datos', (g['name'] or '').lower()))
+                              or (re.search(r'ciber|cyber|security', name_l) and re.search(r'ciber|cyber|security', (g['name'] or '').lower()))]
+                if len(candidates) == 1:
+                    con.execute('UPDATE careers SET goal_id=? WHERE id=?', (candidates[0]['id'], car['id']))
+                    print(f"  + carrera \"{car['name']}\" enlazada a meta \"{candidates[0]['name']}\"")
+        except Exception:
+            pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('career_goal_link_v1','1')")
+        con.commit()
     if not con.execute("SELECT 1 FROM config WHERE key='gym_baseline_v1'").fetchone():
         try:
             row = con.execute("SELECT value FROM study_profile WHERE key='gym_data'").fetchone()
@@ -503,7 +530,9 @@ def index():
 
 
 def _sync_metas_carreras(d):
-    """Sincroniza el % de cada meta de Goals con el progreso de su carrera (por palabras clave).
+    """Sincroniza el % de cada meta de Goals con el progreso de su carrera.
+    Prioriza el enlace explícito (careers.goal_id); si no existe, lo busca por
+    palabras clave y lo deja enlazado para la próxima vez (sin ambigüedad futura).
     Blindada: si algo falla, no tumba la app."""
     try:
         import re as _re
@@ -518,15 +547,30 @@ def _sync_metas_carreras(d):
         careers = [dict(r) for r in d.execute('SELECT * FROM careers').fetchall()]
         goals = [dict(r) for r in d.execute('SELECT * FROM goals').fetchall()]
         for c in careers:
-            prog = min(round((c.get('step') or 0) * 25 + ((c.get('pct') or 0) / 100) * 25), 100)
-            ck = keys(c.get('name'))
-            best, bestscore = None, 0
-            for g in goals:
-                score = len(ck & keys(g.get('name')))
-                if score > bestscore:
-                    bestscore = score; best = g
-            if best and bestscore > 0 and (best.get('pct') or 0) != prog:
+            # progreso real: lo banqueado (nunca baja) o nivel+curso actual, el que sea mayor
+            prog = min(round(max((c.get('bank') or 0),
+                                  (c.get('step') or 0) * 25 + ((c.get('pct') or 0) / 100) * 25)), 100)
+            best = None
+            if c.get('goal_id'):
+                best = next((g for g in goals if g['id'] == c['goal_id']), None)
+            if not best:
+                ck = keys(c.get('name'))
+                bestscore = 0
+                for g in goals:
+                    score = len(ck & keys(g.get('name')))
+                    if score > bestscore:
+                        bestscore = score; best = g
+                if best and bestscore > 0:
+                    d.execute('UPDATE careers SET goal_id=? WHERE id=?', (best['id'], c['id']))
+            if not best:
+                continue
+            if (best.get('pct') or 0) != prog:
                 d.execute('UPDATE goals SET pct=? WHERE id=?', (prog, best['id']))
+                estado = best.get('status')
+                if prog >= 100 and estado != 'Lograda 🏆':
+                    d.execute("UPDATE goals SET status=? WHERE id=?", ('Lograda 🏆', best['id']))
+                elif prog > 0 and estado == 'Pendiente':
+                    d.execute("UPDATE goals SET status=? WHERE id=?", ('En proceso 🔥', best['id']))
         d.commit()
     except Exception as e:
         print('  (aviso) no se pudo sincronizar metas-carreras:', e)
@@ -881,10 +925,11 @@ def habit_del(i):
 
 @app.post('/api/goal/new')
 def goal_new():
-    db().execute('INSERT INTO goals (name) VALUES (?)',
-                 (request.json['name'].strip(),))
+    name = request.json['name'].strip()
+    db().execute('INSERT INTO goals (name) VALUES (?)', (name,))
     db().commit()
-    return jsonify(ok=True)
+    row = db().execute('SELECT id FROM goals WHERE name=? ORDER BY id DESC', (name,)).fetchone()
+    return jsonify(ok=True, id=dict(row)['id'] if row else None)
 
 
 @app.post('/api/goal')
@@ -918,17 +963,19 @@ def shift():
 @app.post('/api/career/new')
 def career_new():
     j = request.json
-    db().execute('INSERT INTO careers (name, icon) VALUES (?,?)',
-                 (j['name'].strip(), j.get('icon', '🎯')))
+    name = j['name'].strip()
+    icon = j.get('icon', '🎯')
+    db().execute('INSERT INTO careers (name, icon) VALUES (?,?)', (name, icon))
     db().commit()
-    return jsonify(ok=True)
+    row = db().execute('SELECT id FROM careers WHERE name=? AND icon=? ORDER BY id DESC', (name, icon)).fetchone()
+    return jsonify(ok=True, id=dict(row)['id'] if row else None)
 
 
 @app.post('/api/career')
 def career_update():
     j = request.json or {}
     field = j.get('field')
-    if field not in ('name', 'icon', 'step', 'course', 'pct', 'active', 'bank'):
+    if field not in ('name', 'icon', 'step', 'course', 'pct', 'active', 'bank', 'goal_id'):
         return jsonify(error='Field not allowed'), 400
     try:
         cid = int(j.get('id'))
@@ -939,6 +986,8 @@ def career_update():
         db().execute('UPDATE careers SET active=1 WHERE id=?', (cid,))
     else:
         val = int(j.get('value') or 0) if field in ('step', 'pct', 'bank') else j.get('value')
+        if field == 'goal_id' and (val == '' or val is None):
+            val = None
         db().execute(f'UPDATE careers SET {field}=? WHERE id=?', (val, cid))
     db().commit()
     return jsonify(ok=True)
