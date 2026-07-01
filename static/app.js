@@ -179,7 +179,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 63;
+const FRONT_V = 64;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -412,34 +412,34 @@ let gymChart = null;
 
 const GYM_IMG = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
 const EXERCISE_DB = {
-  bench:        { n: 'Bench Press',            m: 'Chest',         img: 'Barbell_Bench_Press_-_Medium_Grip' },
-  incline_db:   { n: 'Incline Dumbbell Press', m: 'Upper chest',   img: 'Incline_Dumbbell_Press' },
-  flyes:        { n: 'Dumbbell Flyes',         m: 'Chest',         img: 'Dumbbell_Flyes' },
-  pushups:      { n: 'Push-ups',               m: 'Chest',         img: 'Pushups' },
-  dips_chest:   { n: 'Chest Dips',             m: 'Chest',         img: 'Dips_-_Chest_Version' },
-  tri_pushdown: { n: 'Triceps Pushdown',       m: 'Triceps',       img: 'Triceps_Pushdown' },
-  tri_ext:      { n: 'Overhead Triceps Ext.',  m: 'Triceps',       img: 'Standing_Dumbbell_Triceps_Extension' },
-  dips_tri:     { n: 'Triceps Dips',           m: 'Triceps',       img: 'Dips_-_Triceps_Version' },
-  pullups:      { n: 'Pull-ups',               m: 'Back / Lats',   img: 'Pullups' },
-  lat_pull:     { n: 'Lat Pulldown',           m: 'Back / Lats',   img: 'Wide-Grip_Lat_Pulldown' },
-  bb_row:       { n: 'Barbell Row',            m: 'Back',          img: 'Bent_Over_Barbell_Row' },
-  cable_row:    { n: 'Seated Cable Row',       m: 'Back',          img: 'Seated_Cable_Rows' },
-  bb_curl:      { n: 'Barbell Curl',           m: 'Biceps',        img: 'Barbell_Curl' },
-  db_curl:      { n: 'Dumbbell Curl',          m: 'Biceps',        img: 'Dumbbell_Bicep_Curl' },
-  hammer:       { n: 'Hammer Curls',           m: 'Biceps',        img: 'Hammer_Curls' },
-  squat:        { n: 'Barbell Squat',          m: 'Quads / Legs',  img: 'Barbell_Squat' },
-  leg_press:    { n: 'Leg Press',              m: 'Quads / Legs',  img: 'Leg_Press' },
-  rdl:          { n: 'Romanian Deadlift',      m: 'Hamstrings',    img: 'Romanian_Deadlift' },
-  leg_ext:      { n: 'Leg Extensions',         m: 'Quads',         img: 'Leg_Extensions' },
-  leg_curl:     { n: 'Lying Leg Curl',         m: 'Hamstrings',    img: 'Lying_Leg_Curls' },
-  calf:         { n: 'Calf Raises',            m: 'Calves',        img: 'Standing_Calf_Raises' },
-  lunges:       { n: 'Dumbbell Lunges',        m: 'Legs / Glutes', img: 'Dumbbell_Lunges' },
-  db_press:     { n: 'DB Shoulder Press',      m: 'Shoulders',     img: 'Dumbbell_Shoulder_Press' },
-  lateral:      { n: 'Lateral Raise',          m: 'Side delts',    img: 'Side_Lateral_Raise' },
-  face_pull:    { n: 'Face Pull',              m: 'Rear delts',    img: 'Face_Pull' },
-  crunch:       { n: 'Crunches',               m: 'Abs',           img: 'Crunches' },
-  plank:        { n: 'Plank',                  m: 'Core',          img: 'Plank' },
-  hanging:      { n: 'Hanging Leg Raise',      m: 'Abs',           img: 'Hanging_Leg_Raise' }
+  bench:        { n: 'Bench Press',            m: 'Chest',         img: 'Barbell_Bench_Press_-_Medium_Grip', grp: 'chest',     eq: 'Barbell' },
+  incline_db:   { n: 'Incline Dumbbell Press', m: 'Upper chest',   img: 'Incline_Dumbbell_Press',             grp: 'chest',     eq: 'Dumbbell' },
+  flyes:        { n: 'Dumbbell Flyes',         m: 'Chest',         img: 'Dumbbell_Flyes',                     grp: 'chest',     eq: 'Dumbbell' },
+  pushups:      { n: 'Push-ups',               m: 'Chest',         img: 'Pushups',                            grp: 'chest',     eq: 'Bodyweight' },
+  dips_chest:   { n: 'Chest Dips',             m: 'Chest',         img: 'Dips_-_Chest_Version',               grp: 'chest',     eq: 'Dip bars' },
+  tri_pushdown: { n: 'Triceps Pushdown',       m: 'Triceps',       img: 'Triceps_Pushdown',                   grp: 'triceps',   eq: 'Cable' },
+  tri_ext:      { n: 'Overhead Triceps Ext.',  m: 'Triceps',       img: 'Standing_Dumbbell_Triceps_Extension', grp: 'triceps',  eq: 'Dumbbell' },
+  dips_tri:     { n: 'Triceps Dips',           m: 'Triceps',       img: 'Dips_-_Triceps_Version',             grp: 'triceps',   eq: 'Dip bars' },
+  pullups:      { n: 'Pull-ups',               m: 'Back / Lats',   img: 'Pullups',                            grp: 'back',      eq: 'Pull-up bar' },
+  lat_pull:     { n: 'Lat Pulldown',           m: 'Back / Lats',   img: 'Wide-Grip_Lat_Pulldown',             grp: 'back',      eq: 'Cable machine' },
+  bb_row:       { n: 'Barbell Row',            m: 'Back',          img: 'Bent_Over_Barbell_Row',              grp: 'back',      eq: 'Barbell' },
+  cable_row:    { n: 'Seated Cable Row',       m: 'Back',          img: 'Seated_Cable_Rows',                  grp: 'back',      eq: 'Cable machine' },
+  bb_curl:      { n: 'Barbell Curl',           m: 'Biceps',        img: 'Barbell_Curl',                       grp: 'biceps',    eq: 'Barbell' },
+  db_curl:      { n: 'Dumbbell Curl',          m: 'Biceps',        img: 'Dumbbell_Bicep_Curl',                grp: 'biceps',    eq: 'Dumbbell' },
+  hammer:       { n: 'Hammer Curls',           m: 'Biceps',        img: 'Hammer_Curls',                       grp: 'biceps',    eq: 'Dumbbell' },
+  squat:        { n: 'Barbell Squat',          m: 'Quads / Legs',  img: 'Barbell_Squat',                      grp: 'quads',     eq: 'Barbell' },
+  leg_press:    { n: 'Leg Press',              m: 'Quads / Legs',  img: 'Leg_Press',                          grp: 'quads',     eq: 'Machine' },
+  rdl:          { n: 'Romanian Deadlift',      m: 'Hamstrings',    img: 'Romanian_Deadlift',                  grp: 'hamstrings', eq: 'Barbell' },
+  leg_ext:      { n: 'Leg Extensions',         m: 'Quads',         img: 'Leg_Extensions',                     grp: 'quads',     eq: 'Machine' },
+  leg_curl:     { n: 'Lying Leg Curl',         m: 'Hamstrings',    img: 'Lying_Leg_Curls',                    grp: 'hamstrings', eq: 'Machine' },
+  calf:         { n: 'Calf Raises',            m: 'Calves',        img: 'Standing_Calf_Raises',               grp: 'calves',    eq: 'Machine / Bodyweight' },
+  lunges:       { n: 'Dumbbell Lunges',        m: 'Legs / Glutes', img: 'Dumbbell_Lunges',                    grp: 'quads',     eq: 'Dumbbell' },
+  db_press:     { n: 'DB Shoulder Press',      m: 'Shoulders',     img: 'Dumbbell_Shoulder_Press',            grp: 'shoulders', eq: 'Dumbbell' },
+  lateral:      { n: 'Lateral Raise',          m: 'Side delts',    img: 'Side_Lateral_Raise',                 grp: 'shoulders', eq: 'Dumbbell' },
+  face_pull:    { n: 'Face Pull',              m: 'Rear delts',    img: 'Face_Pull',                          grp: 'shoulders', eq: 'Cable' },
+  crunch:       { n: 'Crunches',               m: 'Abs',           img: 'Crunches',                           grp: 'abs',       eq: 'Bodyweight' },
+  plank:        { n: 'Plank',                  m: 'Core',          img: 'Plank',                              grp: 'abs',       eq: 'Bodyweight' },
+  hanging:      { n: 'Hanging Leg Raise',      m: 'Abs',           img: 'Hanging_Leg_Raise',                  grp: 'abs',       eq: 'Pull-up bar' }
 };
 // list item = [exerciseId, sets, repsRange, restSeconds]
 const WORKOUT_PLAN = {
@@ -491,6 +491,21 @@ function gymProgression(exId) {
   return { cls: 'bad', text: '⬇ A bit below last time — totally fine, rest & food matter too.' };
 }
 
+// ---- Preferencias de la rutina: reemplazos de ejercicio y # de series, por día de plan ----
+function getGymPrefs() { try { return JSON.parse((S.profile || {}).gym_prefs || '{}'); } catch { return {}; } }
+async function saveGymPrefs(p) { await api('/api/profile', { body: { key: 'gym_prefs', value: JSON.stringify(p) } }); }
+function slotKey(wd, origId) { return `${wd}_${origId}`; }
+function effectiveExId(wd, origId) { const p = getGymPrefs(); return (p.swaps && p.swaps[slotKey(wd, origId)]) || origId; }
+function effectiveSetCount(wd, origId, baseSets) {
+  const p = getGymPrefs(); const v = p.setcount && p.setcount[slotKey(wd, origId)];
+  return (v != null) ? v : baseSets;
+}
+function altsFor(origId) {
+  const orig = EXERCISE_DB[origId]; if (!orig) return [];
+  return Object.entries(EXERCISE_DB).filter(([k, v]) => k !== origId && v.grp === orig.grp).map(([k, v]) => ({ id: k, ...v }));
+}
+let GYM_CELEBRATED_DATE = null;
+
 function renderWorkout() {
   const box = document.getElementById('workoutBox');
   if (!box) return;
@@ -523,13 +538,23 @@ function renderWorkout() {
   const banner = offDay
     ? `<div class="workout-banner">📅 You're viewing <b>${plan.title.replace(/^\S+\s/, '')}</b>, but today is <b>${DAY_NAMES[todayWd]}</b>. Sets you log are saved to <b>today</b>. Switch the menu to <b>Today</b> for your scheduled workout.</div>`
     : '';
-  box.innerHTML = banner + plan.list.map(([id, sets, reps, rest]) => {
-    const ex = EXERCISE_DB[id]; if (!ex) return '';
+  let allDone = true;
+  box.innerHTML = banner + plan.list.map(([origId, baseSets, reps, rest]) => {
+    const origEx = EXERCISE_DB[origId]; if (!origEx) return '';
+    const id = effectiveExId(wd, origId);             // ejercicio efectivo (puede estar reemplazado)
+    const ex = EXERCISE_DB[id] || origEx;
+    const sets = effectiveSetCount(wd, origId, baseSets);  // # de series efectivo (puede estar editado)
     const today = gymSetsFor(id, hoyLocal());
     const last = gymLastSession(id);
     const sug = gymSuggest(id, reps);
     const prog = gymProgression(id);
     const done = today.length >= sets;
+    if (!done) allDone = false;
+    const swapped = id !== origId;
+    // sugerencia sutil de variación: 8+ sesiones distintas en el mismo ejercicio sin cambiarlo
+    const sessionsCount = new Set((S.gym_sets || []).filter(s => s.exercise === id).map(s => s.date)).size;
+    const suggestVariation = !swapped && sessionsCount >= 8 && altsFor(id).length > 0;
+
     // Mostrar TODAS las series: hechas (✓), la activa (inputs) y las que faltan (objetivo).
     const shown = Math.max(sets, today.length);
     let rowsHtml = '';
@@ -563,26 +588,115 @@ function renderWorkout() {
         <input class="set-r" type="number" inputmode="numeric" min="0" placeholder="reps" value="">
         <button class="set-log" data-log="${id}" title="Log an extra set">✓</button></div>`;
     }
+    // controles de # de series: quitar solo si hay filas "target" sin registrar aún
+    const canRemoveSet = sets > Math.max(1, today.length);
+    const setCtrl = `<div class="set-ctrl">
+      ${canRemoveSet ? `<button class="set-adj" data-adj="-1" data-wd="${wd}" data-orig="${origId}" data-base="${baseSets}">− Remove a set</button>` : '<span></span>'}
+      <button class="set-adj" data-adj="1" data-wd="${wd}" data-orig="${origId}" data-base="${baseSets}">+ Add a set</button>
+    </div>`;
+
     return `<div class="ex-card ${done ? 'ex-done' : ''}" data-ex="${id}">
       <div class="ex-top">
         <img class="ex-img" loading="lazy" src="${GYM_IMG}${ex.img}/0.jpg" alt="" onerror="this.classList.add('noimg')">
         <div class="ex-head">
           <div class="ex-name">${ex.n} ${done ? '<span class="ex-check">✓ done</span>' : ''}</div>
-          <div class="ex-mus">${ex.m}</div>
+          <div class="ex-mus">${ex.m}${swapped ? ' · <span class="swap-tag">🔄 replaced</span>' : ''}</div>
           <div class="ex-target">${sets} sets × ${reps} · rest ${rest}s</div>
+        </div>
+        <div class="ex-actions">
+          <button class="replace-btn" data-replace="${origId}" data-wd="${wd}" title="Replace exercise">🔄 Replace</button>
+          ${swapped ? `<button class="restore-btn" data-restore="${origId}" data-wd="${wd}" title="Restore original">↺ Original</button>` : ''}
         </div>
       </div>
       <div class="ex-coach">
         ${last ? `<div class="ex-last">📋 Last (${last.date.slice(5)}): ${fmtSets(last.sets)}</div>` : '<div class="ex-last mut">No history yet — today sets your baseline.</div>'}
         <div class="ex-suggest">🎯 ${sug.text}</div>
         ${prog ? `<div class="ex-prog ${prog.cls}">${prog.text}</div>` : ''}
+        ${suggestVariation ? `<div class="ex-variation">🔄 You've done this ${sessionsCount} sessions — <button class="link-like" data-replace="${origId}" data-wd="${wd}">try a variation?</button></div>` : ''}
       </div>
       <div class="ex-sets">${rowsHtml}</div>
+      ${setCtrl}
     </div>`;
   }).join('');
+
+  // celebración al completar toda la rutina de HOY (una sola vez por fecha)
+  if (allDone && (GYM_PLAN_SEL == null || GYM_PLAN_SEL === 'today') && wd === todayWd && GYM_CELEBRATED_DATE !== hoyLocal()) {
+    GYM_CELEBRATED_DATE = hoyLocal();
+    showWorkoutCelebration();
+  }
+}
+
+function showWorkoutCelebration() {
+  const back = document.createElement('div');
+  back.className = 'modal-back celebrate-back';
+  back.innerHTML = `<div class="modal-card celebrate-card">
+    <div class="celebrate-icon">🎉</div>
+    <h3>Great job!</h3>
+    <p>Workout completed.<br>See you tomorrow.</p>
+    <button class="m-ok">Nice!</button></div>`;
+  document.body.appendChild(back);
+  requestAnimationFrame(() => back.classList.add('show'));
+  const close = () => { back.classList.remove('show'); setTimeout(() => back.remove(), 280); };
+  back.querySelector('.m-ok').onclick = close;
+  back.onclick = (e) => { if (e.target === back) close(); };
+  setTimeout(close, 4000);
+}
+
+function exercisePickerModal(origId, wd) {
+  const alts = altsFor(origId);
+  const html = alts.map(a => `<div class="alt-pick" data-pick="${a.id}">
+      <img class="alt-img" loading="lazy" src="${GYM_IMG}${a.img}/0.jpg" alt="" onerror="this.classList.add('noimg')">
+      <div class="alt-info"><b>${a.n}</b><small>${a.m} · ${a.eq}</small></div>
+    </div>`).join('') || '<p class="hint">No alternatives found for this muscle group.</p>';
+  const back = document.createElement('div');
+  back.className = 'modal-back doc-back';
+  back.innerHTML = `<div class="modal-card doc-card alt-card">
+    <div class="doc-head"><h3>🔄 Replace exercise</h3><button class="doc-x" title="Close">✕</button></div>
+    <div class="doc-body alt-body">${html}</div></div>`;
+  document.body.appendChild(back);
+  requestAnimationFrame(() => back.classList.add('show'));
+  const close = () => { back.classList.remove('show'); setTimeout(() => back.remove(), 280); };
+  back.querySelector('.doc-x').addEventListener('click', close);
+  back.addEventListener('click', (e) => { if (e.target === back) close(); });
+  back.querySelectorAll('[data-pick]').forEach(el => el.addEventListener('click', async () => {
+    const p = getGymPrefs(); p.swaps = p.swaps || {};
+    p.swaps[slotKey(wd, origId)] = el.dataset.pick;
+    await saveGymPrefs(p);
+    close();
+    toast('🔄 Exercise replaced for this slot');
+    renderWorkout();
+  }));
 }
 
 document.getElementById('workoutBox')?.addEventListener('click', async (e) => {
+  const replaceBtn = e.target.closest('[data-replace]');
+  if (replaceBtn) { exercisePickerModal(replaceBtn.dataset.replace, replaceBtn.dataset.wd); return; }
+
+  const restoreBtn = e.target.closest('[data-restore]');
+  if (restoreBtn) {
+    const p = getGymPrefs(); p.swaps = p.swaps || {};
+    delete p.swaps[slotKey(restoreBtn.dataset.wd, restoreBtn.dataset.restore)];
+    await saveGymPrefs(p);
+    toast('↺ Original exercise restored');
+    renderWorkout();
+    return;
+  }
+
+  const adjBtn = e.target.closest('[data-adj]');
+  if (adjBtn) {
+    const wd = adjBtn.dataset.wd, orig = adjBtn.dataset.orig, base = +adjBtn.dataset.base, delta = +adjBtn.dataset.adj;
+    const p = getGymPrefs(); p.setcount = p.setcount || {};
+    const key = slotKey(wd, orig);
+    const cur = p.setcount[key] != null ? p.setcount[key] : base;
+    const today = gymSetsFor(effectiveExId(wd, orig), hoyLocal());
+    const next = Math.max(Math.max(1, today.length), Math.min(10, cur + delta));
+    if (delta < 0 && next >= cur) { toast('You already logged that many sets today'); return; }
+    p.setcount[key] = next;
+    await saveGymPrefs(p);
+    renderWorkout();
+    return;
+  }
+
   const log = e.target.closest('[data-log]');
   if (log) {
     // si HOY es día de descanso, no se registra: mensaje amable (aunque estés viendo otro plan)
@@ -651,8 +765,8 @@ function renderGym() {
   renderWorkout();
   const g = getGym();
   const entries = (g.entries || []).slice().sort((a, b) => (a.date < b.date ? -1 : 1));
-  const first = entries[0] || null;
-  const last = entries[entries.length - 1] || null;
+  const first = g.baseline || entries[0] || null;               // punto de partida FIJO, no se sobreescribe
+  const last = entries[entries.length - 1] || g.baseline || null;
 
   // resumen
   const startDate = g.start || (first && first.date) || null;
@@ -681,14 +795,15 @@ function renderGym() {
      <div class="gym-goal-row"><span>📏 Height</span><b>${g.height ? g.height + ' cm' : '—'}</b></div>
      <div class="gym-goal-row"><span>⚖️ Goal weight</span><b>${goalWLine}</b></div>
      ${eg && eg.auto ? `<div class="gym-goal-why">✨ Recommended for ${eg.why}. You can override it in Edit. <span class="link-like" id="gymWhyLink">How is this calculated?</span></div>` : ''}
-     <div class="gym-goal-row"><span>💪 Physical goal</span><b>${g.goal ? esc(g.goal) : 'Lower body fat · abs back · athletic, defined look'}</b></div>`;
+     <div class="gym-goal-row"><span>💪 Physical goal</span><b>${g.goal ? esc(g.goal) : 'Lower body fat · abs back · athletic, defined look'}</b></div>
+     ${g.baseline ? `<div class="gym-goal-row"><span>📍 Starting point (fixed)</span><b>${MEASURES.map(m => g.baseline[m.key] != null ? `${g.baseline[m.key]}${m.unit}` : null).filter(Boolean).join(' · ')} <button class="link-like" id="gymBaselineEdit">✎</button></b></div>` : ''}`;
 
   // gráfica
   renderGymChart(entries);
 
-  // medidas última vs inicio
+  // medidas última vs inicio (el inicio SIEMPRE es el baseline fijo, nunca se sobreescribe)
   const mBox = document.getElementById('gymMeasures');
-  if (!entries.length) {
+  if (!entries.length && !g.baseline) {
     mBox.innerHTML = '<p class="hint">No measurements yet. Tap “+ Log this week” to start — you don’t even need your weight yet, log what you can.</p>';
   } else {
     mBox.innerHTML = MEASURES.map(m => {
@@ -696,11 +811,13 @@ function renderGym() {
       const fv = first && first[m.key] != null ? first[m.key] : null;
       if (lv == null) return '';
       let delta = '';
-      if (fv != null && entries.length > 1) {
+      if (fv != null && lv !== fv) {
         const d = +(lv - fv).toFixed(1);
         const arrow = d < 0 ? '▼' : (d > 0 ? '▲' : '–');
         const cls = (d === 0 || m.good === 'flat') ? 'mut' : (d < 0 ? 'ok' : 'bad');
         delta = `<small class="${cls}">${arrow} ${Math.abs(d)} ${m.unit} vs start</small>`;
+      } else if (fv != null) {
+        delta = `<small class="mut">– same as start</small>`;
       }
       return `<div class="card-box gym-measure"><label>${m.label}</label><strong>${lv} ${m.unit}</strong>${delta}</div>`;
     }).join('') || '<p class="hint">Log some measurements to see your changes here.</p>';
@@ -871,6 +988,22 @@ const GYM_MANUAL_HTML = `
     </ul>
   </div>
   <div class="guide-block">
+    <h2>🔄 Replace an exercise</h2>
+    <p>Machine taken? Tap <b>🔄 Replace</b> on any exercise to see alternatives that train the <b>same muscle group</b>, with image, name, muscle and equipment. Pick one and it swaps <b>only that exercise</b>, for that day's slot — the rest of the workout stays untouched. Tap <b>↺ Original</b> anytime to go back. History for each exercise is tracked separately, so switching doesn't erase progress on either one.</p>
+  </div>
+  <div class="guide-block">
+    <h2>➕➖ Adjusting the number of sets</h2>
+    <p>Couldn't finish all sets today? Tap <b>− Remove a set</b> to drop the last planned one — it won't nag you for a set you're not doing. Feeling strong? Tap <b>+ Add a set</b> anytime, even after finishing. The app always saves <b>exactly what you did</b>, never more, never less.</p>
+  </div>
+  <div class="guide-block">
+    <h2>🎉 Finishing the day</h2>
+    <p>Complete every exercise's sets and a small celebration pops up — <i>"Great job! Workout completed. See you tomorrow."</i> It closes on its own or with the button.</p>
+  </div>
+  <div class="guide-block">
+    <h2>🧠 How "smart" is the routine, honestly?</h2>
+    <p>The <b>weekly split</b> (which muscles on which day) is fixed and doesn't rewrite itself — you stay in control. What <b>does</b> adapt automatically: the <b>weight/rep suggestion</b> for every exercise, based on your last session (progressive overload). After <b>8+ sessions</b> on the same exercise without a swap, you'll see a subtle "try a variation?" nudge. Manual tools (Replace, +/− sets) give you flexibility meanwhile.</p>
+  </div>
+  <div class="guide-block">
     <h2>📉 How to read the charts</h2>
     <p>The chart plots <b>weight (gold)</b> and <b>waist (purple)</b> over the weeks. Both trending <b>down</b> = losing fat. The measurement cards show <b>latest vs start</b>, green when waist/weight drop.</p>
   </div>
@@ -885,8 +1018,23 @@ const GYM_MANUAL_HTML = `
 function openGymManual() { docModal('📖 Gym Guide', GYM_MANUAL_HTML); }
 
 document.getElementById('gymGuideBtn')?.addEventListener('click', openGymManual);
-document.getElementById('gymGoal')?.addEventListener('click', (e) => {
-  if (e.target.id === 'gymWhyLink') openGymManual();
+document.getElementById('gymGoal')?.addEventListener('click', async (e) => {
+  if (e.target.id === 'gymWhyLink') { openGymManual(); return; }
+  if (e.target.id === 'gymBaselineEdit') {
+    const g = getGym();
+    const b = g.baseline || {};
+    const r = await modal({ icon: '📍', title: 'Starting measurements',
+      text: 'This is your fixed reference point — every "vs start" comparison uses this. Only edit it to correct a mistake.',
+      fields: MEASURES.map(m => ({ type: 'number', min: 0, label: `${m.label} (${m.unit})`, value: b[m.key] ?? '' })),
+      okText: 'Save' });
+    if (!r) return;
+    const nb = { date: b.date || g.start || hoyLocal() };
+    MEASURES.forEach((m, i) => { const raw = String(r[i] ?? '').trim(); if (raw !== '') nb[m.key] = +raw.replace(/[^0-9.]/g, '') || 0; });
+    g.baseline = nb;
+    await saveGym(g);
+    toast('📍 Starting point updated');
+    load();
+  }
 });
 
 document.getElementById('gymHistory')?.addEventListener('click', async (e) => {
@@ -2745,7 +2893,11 @@ function metaDeCarrera(c) {
 }
 
 function progresoCareer(c) {
-  return Math.min(Math.round((c.step || 0) * 25 + ((c.pct || 0) / 100) * 25), 100);
+  // el progreso general = lo ya "banqueado" (cursos completados en niveles previos, nunca baja)
+  // o el nivel actual + el % del curso activo (lo que sea mayor). Así, empezar un curso
+  // nuevo dentro del MISMO nivel resetea el % del curso, pero NUNCA el % general ya ganado.
+  const porNivel = (c.step || 0) * 25 + ((c.pct || 0) / 100) * 25;
+  return Math.min(Math.round(Math.max(c.bank || 0, porNivel)), 100);
 }
 function renderCareer() {
   const wrap = document.getElementById('careerPanel');
@@ -2777,6 +2929,7 @@ function renderCareer() {
         <input data-career="${c.id}" data-f="course" placeholder="Current course" value="${esc(c.course || '')}" style="flex:2">
         <input data-career="${c.id}" data-f="pct" type="number" min="0" max="100" value="${c.pct || 0}" placeholder="% course" style="flex:1">
       </div>
+      ${(c.pct || 0) >= 100 ? `<button class="bank-btn" data-bank="${c.id}" data-step="${c.step || 0}">🏁 Course complete — bank this 25% &amp; continue</button>` : ''}
       <p class="hint" style="margin:6px 0 8px">${STEP_DESC[c.step] || ''}</p>
       ${esIngles ? `<div class="eng-auto">🔥 <b>${diasIng} days</b> of English practice logged · this bar rises on its own as you complete your daily English block (≈30 days per step). Your effort moves it, not a manual number.</div>` : ''}
       <div class="career-foot">
@@ -3005,6 +3158,43 @@ document.addEventListener('click', async (e) => {
       toast('🚀 Career added, linked to your goal');
       // el sync por nombre lo conectará; si el usuario eligió una meta específica,
       // igual el emparejamiento por palabras clave suele acertar.
+    }
+    load();
+    return;
+  }
+
+  const bankBtn = e.target.closest('[data-bank]');
+  if (bankBtn) {
+    const id = +bankBtn.dataset.bank;
+    const c = (S.careers || []).find(x => x.id === id);
+    if (!c) return;
+    const stepName = PELDANOS[c.step || 0];
+    // 1) registrar el curso terminado en el historial (si tiene nombre)
+    if ((c.course || '').trim()) {
+      await api('/api/course/done', { body: { career: c.name, title: c.course.trim() } });
+    }
+    // 2) banquear el 25% de este nivel (nunca baja, aunque el próximo curso empiece en 0%)
+    const newBank = Math.min(100, ((c.step || 0) + 1) * 25);
+    await api('/api/career', { body: { id, field: 'bank', value: newBank } });
+    // 3) preguntar si continúa en el mismo nivel o avanza al siguiente
+    const isLast = (c.step || 0) >= PELDANOS.length - 1;
+    const cont = await confirmModal(`Continue in ${stepName}?`,
+      `You banked <b>${newBank}%</b> overall. Do you want to keep studying more ${stepName} courses, or move on to ${isLast ? 'finish here' : '<b>' + PELDANOS[(c.step || 0) + 1] + '</b>'}?`
+      + `<br><br>Tap <b>Yes</b> to add another ${stepName} course now, or <b>No</b> to move on.`);
+    if (cont) {
+      const r = await modal({ icon: '🎓', title: `Next course in ${stepName}`,
+        fields: [{ type: 'text', placeholder: 'Course name' }], okText: 'Start course' });
+      if (r && r[0].trim()) {
+        await api('/api/career', { body: { id, field: 'course', value: r[0].trim() } });
+        await api('/api/career', { body: { id, field: 'pct', value: 0 } });
+      }
+    } else if (!isLast) {
+      await api('/api/career', { body: { id, field: 'step', value: (c.step || 0) + 1 } });
+      await api('/api/career', { body: { id, field: 'course', value: '' } });
+      await api('/api/career', { body: { id, field: 'pct', value: 0 } });
+      toast(`🚀 Onward to ${PELDANOS[(c.step || 0) + 1]}!`);
+    } else {
+      toast('🎉 100%! You completed the whole career path!');
     }
     load();
     return;
