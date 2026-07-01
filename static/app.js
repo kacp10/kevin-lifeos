@@ -179,7 +179,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 64;
+const FRONT_V = 66;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -332,7 +332,7 @@ function snapshotDeudasVivas() {
   return set;
 }
 
-function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Confirmar', danger = false, extraBtn = null }) {
+function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Confirmar', danger = false, extraBtn = null, cancelText = null }) {
   return new Promise((resolve) => {
     const back = document.createElement('div');
     back.className = 'modal-back';
@@ -351,7 +351,7 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
       <h3>${title}</h3>${text ? `<p>${text}</p>` : ''}
       ${fieldsHtml}
       <div class="modal-btns">
-        ${fields.length || !danger ? '<button class="m-cancel">Cancel</button>' : ''}
+        ${fields.length || !danger || cancelText ? `<button class="m-cancel">${cancelText || 'Cancel'}</button>` : ''}
         ${extraBtn ? `<button class="m-extra danger">${extraBtn}</button>` : ''}
         <button class="m-ok ${danger ? 'danger' : ''}">${okText}</button>
       </div></div>`;
@@ -439,7 +439,37 @@ const EXERCISE_DB = {
   face_pull:    { n: 'Face Pull',              m: 'Rear delts',    img: 'Face_Pull',                          grp: 'shoulders', eq: 'Cable' },
   crunch:       { n: 'Crunches',               m: 'Abs',           img: 'Crunches',                           grp: 'abs',       eq: 'Bodyweight' },
   plank:        { n: 'Plank',                  m: 'Core',          img: 'Plank',                              grp: 'abs',       eq: 'Bodyweight' },
-  hanging:      { n: 'Hanging Leg Raise',      m: 'Abs',           img: 'Hanging_Leg_Raise',                  grp: 'abs',       eq: 'Pull-up bar' }
+  hanging:      { n: 'Hanging Leg Raise',      m: 'Abs',           img: 'Hanging_Leg_Raise',                  grp: 'abs',       eq: 'Pull-up bar' },
+  // --- alternativas extra (más opciones para "Replace") ---
+  cable_cross:  { n: 'Cable Crossover',        m: 'Chest',         img: 'Cable_Crossover',                    grp: 'chest',     eq: 'Cable' },
+  machine_bench:{ n: 'Machine Bench Press',    m: 'Chest',         img: 'Machine_Bench_Press',                grp: 'chest',     eq: 'Machine' },
+  db_bench:     { n: 'Dumbbell Bench Press',   m: 'Chest',         img: 'Dumbbell_Bench_Press',               grp: 'chest',     eq: 'Dumbbell' },
+  close_grip:   { n: 'Close-Grip Bench Press', m: 'Triceps',       img: 'Close-Grip_Barbell_Bench_Press',     grp: 'triceps',   eq: 'Barbell' },
+  bench_dips2:  { n: 'Bench Dips',             m: 'Triceps',       img: 'Bench_Dips',                         grp: 'triceps',   eq: 'Bodyweight' },
+  cable_ext_1:  { n: '1-Arm Cable Extension',  m: 'Triceps',       img: 'Cable_One_Arm_Tricep_Extension',     grp: 'triceps',   eq: 'Cable' },
+  tbar_row:     { n: 'T-Bar Row',              m: 'Back',          img: 'Lying_T-Bar_Row',                    grp: 'back',      eq: 'Machine' },
+  one_arm_row:  { n: 'One-Arm Dumbbell Row',   m: 'Back',          img: 'One-Arm_Dumbbell_Row',               grp: 'back',      eq: 'Dumbbell' },
+  deadlift:     { n: 'Barbell Deadlift',       m: 'Back / Posterior', img: 'Barbell_Deadlift',                grp: 'back',      eq: 'Barbell' },
+  chinup:       { n: 'Chin-Up',                m: 'Back / Lats',   img: 'Chin-Up',                            grp: 'back',      eq: 'Pull-up bar' },
+  concentration:{ n: 'Concentration Curl',     m: 'Biceps',        img: 'Concentration_Curls',                grp: 'biceps',    eq: 'Dumbbell' },
+  preacher:     { n: 'Preacher Curl',          m: 'Biceps',        img: 'Preacher_Curl',                      grp: 'biceps',    eq: 'Barbell' },
+  cable_curl2:  { n: 'Cable Curl',             m: 'Biceps',        img: 'High_Cable_Curls',                   grp: 'biceps',    eq: 'Cable' },
+  front_squat:  { n: 'Front Squat',            m: 'Quads / Legs',  img: 'Front_Squat_Clean_Grip',             grp: 'quads',     eq: 'Barbell' },
+  hack_squat:   { n: 'Hack Squat',             m: 'Quads / Legs',  img: 'Hack_Squat',                         grp: 'quads',     eq: 'Machine' },
+  goblet:       { n: 'Goblet Squat',           m: 'Quads / Legs',  img: 'Goblet_Squat',                       grp: 'quads',     eq: 'Kettlebell' },
+  stiff_db:     { n: 'Stiff-Leg DB Deadlift',  m: 'Hamstrings',    img: 'Stiff-Legged_Dumbbell_Deadlift',     grp: 'hamstrings', eq: 'Dumbbell' },
+  good_morning: { n: 'Good Morning',           m: 'Hamstrings',    img: 'Good_Morning',                       grp: 'hamstrings', eq: 'Barbell' },
+  seated_calf:  { n: 'Seated Calf Raise',      m: 'Calves',        img: 'Seated_Calf_Raise',                  grp: 'calves',    eq: 'Machine' },
+  donkey_calf:  { n: 'Donkey Calf Raises',     m: 'Calves',        img: 'Donkey_Calf_Raises',                 grp: 'calves',    eq: 'Machine' },
+  arnold:       { n: 'Arnold Press',           m: 'Shoulders',     img: 'Arnold_Dumbbell_Press',              grp: 'shoulders', eq: 'Dumbbell' },
+  bb_press:     { n: 'Barbell Shoulder Press', m: 'Shoulders',     img: 'Barbell_Shoulder_Press',             grp: 'shoulders', eq: 'Barbell' },
+  upright_row:  { n: 'Upright Row',            m: 'Shoulders',     img: 'Upright_Barbell_Row',                grp: 'shoulders', eq: 'Barbell' },
+  rear_delt:    { n: 'Cable Rear Delt Fly',    m: 'Rear delts',    img: 'Cable_Rear_Delt_Fly',                grp: 'shoulders', eq: 'Cable' },
+  cable_crunch: { n: 'Cable Crunch',           m: 'Abs',           img: 'Cable_Crunch',                       grp: 'abs',       eq: 'Cable' },
+  russian_twist:{ n: 'Russian Twist',          m: 'Obliques',      img: 'Russian_Twist',                      grp: 'abs',       eq: 'Bodyweight' },
+  ab_roller:    { n: 'Ab Roller',              m: 'Abs',           img: 'Ab_Roller',                          grp: 'abs',       eq: 'Ab wheel' },
+  situp:        { n: 'Sit-Up',                 m: 'Abs',           img: 'Sit-Up',                             grp: 'abs',       eq: 'Bodyweight' },
+  reverse_crunch:{ n: 'Reverse Crunch',        m: 'Abs',           img: 'Reverse_Crunch',                     grp: 'abs',       eq: 'Bodyweight' }
 };
 // list item = [exerciseId, sets, repsRange, restSeconds]
 const WORKOUT_PLAN = {
@@ -493,7 +523,11 @@ function gymProgression(exId) {
 
 // ---- Preferencias de la rutina: reemplazos de ejercicio y # de series, por día de plan ----
 function getGymPrefs() { try { return JSON.parse((S.profile || {}).gym_prefs || '{}'); } catch { return {}; } }
-async function saveGymPrefs(p) { await api('/api/profile', { body: { key: 'gym_prefs', value: JSON.stringify(p) } }); }
+async function saveGymPrefs(p) {
+  await api('/api/profile', { body: { key: 'gym_prefs', value: JSON.stringify(p) } });
+  S.profile = S.profile || {};
+  S.profile.gym_prefs = JSON.stringify(p);   // reflejar local YA, para que renderWorkout() lo vea sin esperar un reload
+}
 function slotKey(wd, origId) { return `${wd}_${origId}`; }
 function effectiveExId(wd, origId) { const p = getGymPrefs(); return (p.swaps && p.swaps[slotKey(wd, origId)]) || origId; }
 function effectiveSetCount(wd, origId, baseSets) {
@@ -1053,6 +1087,7 @@ async function load(animate) {
   S = await api('/api/state?month=' + ym);
   checkVersion();
   await syncCarreraIngles();   // sube la barra de Inglés según los días de práctica reales
+  // Career -> Goal ahora se sincroniza en el servidor (cada vez que se pide /api/state), no aquí.
   renderFreedom();
   renderInicio();
   renderShopping();
@@ -1272,6 +1307,25 @@ function renderFreedom() {
     const bar = panel.querySelector('.freedom-bar i');
     if (bar) setTimeout(() => { bar.style.width = bar.dataset.w + '%'; }, 100);
   });
+  syncDebtGoal(Math.round(pct));   // 🔓 Your road to freedom -> Goals: "Get out of debt" sube sola
+}
+// Enlaza el % de "Your road to freedom" con la meta de deudas en Goals (por palabras clave),
+// igual que Career -> Goal: tu esfuerzo pagando deudas mueve la meta sola, sin tocar nada a mano.
+function syncDebtGoal(pct) {
+  const re = /deuda|debt/i;
+  const cand = (S.goals || []).filter(g => re.test(g.name || ''));
+  if (cand.length !== 1) return;   // si hay 0 o varias coincidencias, no adivina (evita enlazar mal)
+  const g = cand[0];
+  if ((g.pct || 0) === pct) return;
+  api('/api/goal', { body: { id: g.id, field: 'pct', value: pct } });
+  g.pct = pct;
+  if (pct >= 100 && g.status !== 'Lograda 🏆') {
+    api('/api/goal', { body: { id: g.id, field: 'status', value: 'Lograda 🏆' } });
+    g.status = 'Lograda 🏆';
+  } else if (pct > 0 && g.status === 'Pendiente') {
+    api('/api/goal', { body: { id: g.id, field: 'status', value: 'En proceso 🔥' } });
+    g.status = 'En proceso 🔥';
+  }
 }
 
 function renderInicio() {
@@ -2575,15 +2629,8 @@ function nombreMetaFoco(foco) {
                             : /data|anal[íi]tic|datos/.test(n);
   });
 }
-// sincroniza la meta conectada con el progreso de carrera (sin pasar de lo que ya tenga manual si es mayor)
-async function syncMeta(foco) {
-  const meta = nombreMetaFoco(foco);
-  if (!meta) return;
-  const prog = progresoCarrera(foco);
-  if (prog !== (meta.pct || 0)) {
-    await api('/api/goal', { body: { id: meta.id, field: 'pct', value: prog } });
-  }
-}
+// (La sincronización Career -> Goal ahora vive en el servidor: _sync_metas_carreras en app.py,
+// que corre en cada /api/state y usa goal_id si existe, o lo busca y enlaza por nombre.)
 
 /* ====== LIFE: generador de rutina inteligente ====== */
 const SHIFTS = {
@@ -3147,17 +3194,19 @@ document.addEventListener('click', async (e) => {
       fields: [{ type: 'select', options: goalOpts }], okText: 'Continue' });
     if (g === null) return;
     const choice = g[0];
-    await api('/api/career/new', { body: { name: careerName, icon } });
+    const newCareer = await api('/api/career/new', { body: { name: careerName, icon } });
+    const careerId = newCareer.id;
     if (choice === '__new__') {
-      // crear la meta en Goals con un nombre alineado para que el emparejamiento la conecte
-      await api('/api/goal/new', { body: { name: 'Learn ' + careerName } });
+      // crear la meta en Goals Y guardar el enlace explícito (career.goal_id) para que sincronice siempre
+      const newGoal = await api('/api/goal/new', { body: { name: 'Learn ' + careerName } });
+      if (careerId && newGoal.id) await api('/api/career', { body: { id: careerId, field: 'goal_id', value: newGoal.id } });
       toast('🚀 Career + goal created and linked');
     } else if (choice === '__none__') {
       toast('🚀 Career added (no goal linked)');
     } else {
+      // meta existente elegida: guardar el enlace explícito (antes no se guardaba nada)
+      if (careerId) await api('/api/career', { body: { id: careerId, field: 'goal_id', value: +choice } });
       toast('🚀 Career added, linked to your goal');
-      // el sync por nombre lo conectará; si el usuario eligió una meta específica,
-      // igual el emparejamiento por palabras clave suele acertar.
     }
     load();
     return;
@@ -3176,11 +3225,13 @@ document.addEventListener('click', async (e) => {
     // 2) banquear el 25% de este nivel (nunca baja, aunque el próximo curso empiece en 0%)
     const newBank = Math.min(100, ((c.step || 0) + 1) * 25);
     await api('/api/career', { body: { id, field: 'bank', value: newBank } });
-    // 3) preguntar si continúa en el mismo nivel o avanza al siguiente
+    // 3) preguntar si continúa en el mismo nivel o avanza al siguiente (con botones Sí/No claros)
     const isLast = (c.step || 0) >= PELDANOS.length - 1;
-    const cont = await confirmModal(`Continue in ${stepName}?`,
-      `You banked <b>${newBank}%</b> overall. Do you want to keep studying more ${stepName} courses, or move on to ${isLast ? 'finish here' : '<b>' + PELDANOS[(c.step || 0) + 1] + '</b>'}?`
-      + `<br><br>Tap <b>Yes</b> to add another ${stepName} course now, or <b>No</b> to move on.`);
+    const nextName = isLast ? null : PELDANOS[(c.step || 0) + 1];
+    const cont = await modal({ icon: '🎓', title: `Continue in ${stepName}?`,
+      text: `You banked <b>${newBank}%</b> overall.<br><br>Do you want to keep studying more <b>${stepName}</b> courses, or move on to ${isLast ? 'finish here' : '<b>' + nextName + '</b>'}?`,
+      okText: `Yes, more ${stepName}`,
+      cancelText: isLast ? 'No, I\'m done' : `No, go to ${nextName}` }) === true;
     if (cont) {
       const r = await modal({ icon: '🎓', title: `Next course in ${stepName}`,
         fields: [{ type: 'text', placeholder: 'Course name' }], okText: 'Start course' });
