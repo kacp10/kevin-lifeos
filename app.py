@@ -15,7 +15,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 63  # debe coincidir con FRONT_V en static/app.js
+VERSION = 64  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -132,7 +132,7 @@ def init_db():
     CREATE TABLE IF NOT EXISTS careers (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, icon TEXT DEFAULT '🎯',
         step INTEGER DEFAULT 0, course TEXT DEFAULT '', pct INTEGER DEFAULT 0,
-        active INTEGER DEFAULT 0);
+        active INTEGER DEFAULT 0, bank INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS courses_done (
         id INTEGER PRIMARY KEY AUTOINCREMENT, career TEXT, title TEXT,
         finished_on TEXT);
@@ -392,6 +392,28 @@ def init_db():
         except Exception:
             pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('eat_clean_v1','1')")
+        con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='career_bank_v1'").fetchone():
+        try:
+            con.execute("ALTER TABLE careers ADD COLUMN bank INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('career_bank_v1','1')")
+        con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='gym_baseline_v1'").fetchone():
+        try:
+            row = con.execute("SELECT value FROM study_profile WHERE key='gym_data'").fetchone()
+            g = json.loads(dict(row)['value']) if row else {}
+            if not g.get('baseline'):
+                g['baseline'] = {'date': g.get('start') or date.today().isoformat(),
+                                  'weight': 77, 'waist': 92, 'chest': 100, 'arm': 32, 'hip': 96, 'thigh': 49}
+                if not g.get('start'):
+                    g['start'] = g['baseline']['date']
+                con.execute("INSERT OR REPLACE INTO study_profile VALUES ('gym_data', ?)", (json.dumps(g),))
+                print('  + medidas iniciales de gym registradas como punto de partida')
+        except Exception:
+            pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('gym_baseline_v1','1')")
         con.commit()
     if not con.execute("SELECT 1 FROM config WHERE key='detalle_v1'").fetchone():
         with open(os.path.join(BASE, 'seed_data.json'), encoding='utf-8') as f:
@@ -906,7 +928,7 @@ def career_new():
 def career_update():
     j = request.json or {}
     field = j.get('field')
-    if field not in ('name', 'icon', 'step', 'course', 'pct', 'active'):
+    if field not in ('name', 'icon', 'step', 'course', 'pct', 'active', 'bank'):
         return jsonify(error='Field not allowed'), 400
     try:
         cid = int(j.get('id'))
@@ -916,7 +938,7 @@ def career_update():
         db().execute('UPDATE careers SET active=0')
         db().execute('UPDATE careers SET active=1 WHERE id=?', (cid,))
     else:
-        val = int(j.get('value') or 0) if field in ('step', 'pct') else j.get('value')
+        val = int(j.get('value') or 0) if field in ('step', 'pct', 'bank') else j.get('value')
         db().execute(f'UPDATE careers SET {field}=? WHERE id=?', (val, cid))
     db().commit()
     return jsonify(ok=True)
