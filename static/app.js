@@ -1,7 +1,7 @@
 /* KEVIN LIFE OS — frontend */
 let S = null;          // estado global del servidor
 let pieChart = null;
-// Plugin: dibuja el % dentro de cada pedazo de la torta (con borde oscuro para que se lea sobre cualquier color)
+// Plugin: dibuja el % DENTRO de cada pedazo de la torta (con borde oscuro para que se lea sobre cualquier color)
 const sliceLabels = {
   id: 'sliceLabels',
   afterDatasetsDraw(chart) {
@@ -9,23 +9,26 @@ const sliceLabels = {
     const meta = chart.getDatasetMeta(0);
     const data = (chart.data.datasets[0] || {}).data || [];
     const total = data.reduce((a, b) => a + (b || 0), 0) || 1;
+    // tamaño de fuente responsive según el radio real del gráfico (nunca se sale en móvil)
+    const arc0 = meta.data[0];
+    const outerR = arc0 ? arc0.getProps(['outerRadius'], true).outerRadius : 60;
+    const innerR = arc0 ? arc0.getProps(['innerRadius'], true).innerRadius : 30;
+    const fontPx = Math.max(9, Math.min(15, Math.round(outerR * 0.16)));
     meta.data.forEach((arc, i) => {
       const val = data[i] || 0;
       const pct = Math.round((val / total) * 100);
       if (pct < 1) return;                 // 0% real: nada que mostrar
-      let pos = arc.tooltipPosition();     // punto medio del arco (para rebanadas grandes)
-      if (pct < 12) {                      // rebanada chica (ej. Savings): etiqueta hacia afuera
-        const p = arc.getProps(['startAngle', 'endAngle', 'outerRadius', 'x', 'y'], true);
-        const mid = (p.startAngle + p.endAngle) / 2;
-        const r = p.outerRadius + 14;
-        pos = { x: p.x + Math.cos(mid) * r, y: p.y + Math.sin(mid) * r };
-      }
+      // SIEMPRE dentro del anillo: punto medio entre radio interno y externo, en el ángulo medio del arco
+      const p = arc.getProps(['startAngle', 'endAngle', 'outerRadius', 'innerRadius', 'x', 'y'], true);
+      const mid = (p.startAngle + p.endAngle) / 2;
+      const r = (p.innerRadius + p.outerRadius) / 2;
+      const pos = { x: p.x + Math.cos(mid) * r, y: p.y + Math.sin(mid) * r };
       ctx.save();
-      ctx.font = '700 14px Inter, system-ui, sans-serif';
+      ctx.font = `700 ${fontPx}px Inter, system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.lineWidth = 3.5;
-      ctx.strokeStyle = 'rgba(19,16,34,.9)';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(19,16,34,.92)';
       ctx.strokeText(pct + '%', pos.x, pos.y);
       ctx.fillStyle = '#fff';
       ctx.fillText(pct + '%', pos.x, pos.y);
@@ -179,7 +182,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 67;
+const FRONT_V = 68;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -216,7 +219,8 @@ const PAY_METHODS = [
   { id: 'Tarjeta Nicole', label: 'Nicole (credit)', logo: '💳', card: true },
   { id: 'Davivienda', label: 'Davivienda (credit)', logo: '🔻', card: true },
   { id: 'Codensa', label: 'Codensa (credit)', logo: '🟠', card: true },
-  { id: 'Banco de Bogotá', label: 'Banco de Bogotá (credit)', logo: '🔵', card: true }
+  { id: 'Banco de Bogotá', label: 'Banco de Bogotá (credit)', logo: '🔵', card: true },
+  { id: 'ADDI', label: 'ADDI (credit)', logo: '🟢', card: true }
 ];
 const payMethod = (id) => PAY_METHODS.find(m => m.id === id) || PAY_METHODS[0];
 // el ingreso del mes actual (editable) o el del plan por defecto
@@ -1215,21 +1219,40 @@ document.addEventListener('click', async (e) => {
     const slots = it ? (it.slots || 1) : 1;
     const done = it ? (it.done || 0) : 0;
     const completaAhora = it && (done + 1) === slots;   // este toque lo deja completo
-    await api('/api/shopping/tick', { body: { id } });
-    if (completaAhora) {
-      const r = await modal({ icon: '🛒', title: 'How much did it cost?',
-        text: `You bought <b>${esc(it.name)}</b>. Log it in your expense tracker to keep the record. (Leave blank to skip.)`,
-        fields: [
-          { type: 'money', label: 'Amount', placeholder: 'e.g. 25.000' },
-          { type: 'select', label: 'Paid with', options: PAY_METHODS.map(m => ({ v: m.id, t: `${m.logo} ${m.label}` })) }
-        ], okText: 'Log expense' });
-      if (r && r[0]) {
-        const amount = +String(r[0]).replace(/[^0-9]/g, '') || 0;
-        if (amount > 0) {
-          await api('/api/expense/new', { body: { name: it.name, amount, method: r[1] || 'Efectivo', kind: 'once', month: S.plan.months[MES] } });
-          toast(`🧾 ${fmt(amount)} logged in expenses`);
-        }
-      }
+    if (!completaAhora) {
+      await api('/api/shopping/tick', { body: { id } });   // subtarea intermedia: solo suma una raya
+      load();
+      return;
+    }
+    // Se compró: pedir monto + método (idéntico a Life & Services), y registrar la compra.
+    const r = await modal({ icon: '🛒', title: 'You bought it!',
+      text: `<b>${esc(it.name)}</b> — how much did it cost and how did you pay? This moves it to your purchase history. (Leave amount blank to just mark it bought.)`,
+      fields: [
+        { type: 'money', label: 'Amount', placeholder: 'e.g. 25.000' },
+        { type: 'select', label: 'Paid with', options: PAY_METHODS.map(m => ({ v: m.id, t: `${m.logo} ${m.label}` })) }
+      ], okText: 'Mark as bought' });
+    if (r === null) return;   // canceló: no lo marca (sigue en la lista)
+    const amount = +String(r[0] || '').replace(/[^0-9]/g, '') || 0;
+    const method = r[1] || 'Efectivo';
+    const m = payMethod(method);
+    // 1) marcar como comprado -> sale de la lista, entra al historial
+    await api('/api/shopping/bought', { body: { id, cost: amount, method } });
+    // 2) si pagó con tarjeta de crédito: MISMO flujo financiero que Services/Used a Card
+    if (amount > 0 && m.card) {
+      const rc = await modal({ icon: m.logo, title: 'Paid with ' + m.id,
+        text: `<b>${esc(it.name)}</b> will be charged to <b>${m.id}</b>. In how many installments? It adds to ${m.id}'s debt automatically.`,
+        fields: [{ type: 'number', placeholder: '# installments (1 = single)', min: 1, value: '1' }],
+        okText: 'Add to card' });
+      const cuotas = rc ? Math.max(1, +rc[0] || 1) : 1;
+      await api('/api/compra', { body: { creditor: method, concepto: it.name, valor: amount, cuotas, start: MES } });
+      await api('/api/expense/new', { body: { name: it.name, amount, method, kind: 'once', month: S.plan.months[MES] } });
+      toast(`💳 ${esc(it.name)} → ${m.id} (${cuotas} ${cuotas === 1 ? 'installment' : 'installments'})`);
+    } else if (amount > 0) {
+      // efectivo/débito: solo gasto del mes, sin cuotas (igual que hoy)
+      await api('/api/expense/new', { body: { name: it.name, amount, method, kind: 'once', month: S.plan.months[MES] } });
+      toast(`🧾 ${fmt(amount)} logged in expenses`);
+    } else {
+      toast('✓ Marked as bought — moved to history.');
     }
     load();
     return;
@@ -1239,36 +1262,64 @@ document.addEventListener('click', async (e) => {
     toast('🧹 Cleared checked items'); load();
     return;
   }
+  const unbuy = e.target.closest('.shop-unbuy');
+  if (unbuy) {
+    await api('/api/shopping/unbuy', { body: { id: +unbuy.dataset.id } });
+    toast('↩ Back on your list'); load();
+    return;
+  }
 });
 
 function renderShopping() {
   const cont = document.getElementById('shoppingList');
   if (!cont) return;
-  const items = S.shopping || [];
-  if (!items.length) {
+  const all = S.shopping || [];
+  const activos = all.filter(it => !it.bought_at);          // pendientes: NO comprados
+  const comprados = all.filter(it => it.bought_at)          // historial: comprados
+    .sort((a, b) => (b.bought_at || '').localeCompare(a.bought_at || ''));
+
+  if (!activos.length) {
     cont.innerHTML = '<p class="hint">Nothing on the list. Add what you need above. 🛒</p>';
-    return;
+  } else {
+    cont.innerHTML = activos.map(it => {
+      const slots = it.slots || 1;
+      const done = it.done || 0;
+      const complete = slots > 0 && done >= slots;
+      let rayas = '';
+      if (slots > 1) {
+        rayas = '<span class="shop-slots">' +
+          Array.from({ length: slots }, (_, k) =>
+            `<i class="slot ${k < done ? 'on' : ''}"></i>`).join('') + '</span>';
+      }
+      return `<div class="shop-item ${complete ? 'done' : ''}" data-id="${it.id}">
+        <button class="shop-check ${complete ? 'on' : ''}" data-id="${it.id}" title="${slots > 1 ? 'Tap once per task (' + done + '/' + slots + ')' : 'Mark as bought'}">
+          ${complete ? '✓' : (slots > 1 ? done : '')}
+        </button>
+        <span class="shop-name">${esc(it.name)}</span>
+        ${rayas}
+        <button class="del-x" data-type="shopping" data-id="${it.id}">✕</button>
+      </div>`;
+    }).join('');
   }
-  cont.innerHTML = items.map(it => {
-    const slots = it.slots || 1;
-    const done = it.done || 0;
-    const complete = slots > 0 && done >= slots;
-    // rayas: una marca por cada sub-tarea (para Cloe = 3)
-    let rayas = '';
-    if (slots > 1) {
-      rayas = '<span class="shop-slots">' +
-        Array.from({ length: slots }, (_, k) =>
-          `<i class="slot ${k < done ? 'on' : ''}"></i>`).join('') + '</span>';
+
+  // Historial de compras (solo lectura + opción de devolver a la lista o borrar)
+  const hist = document.getElementById('shoppingHistory');
+  if (hist) {
+    if (!comprados.length) {
+      hist.innerHTML = '';
+    } else {
+      hist.innerHTML = `<details class="shop-hist"><summary>🧾 Purchase history (${comprados.length})</summary>` +
+        comprados.map(it => {
+          const mLogo = (payMethod(it.method) || {}).logo || '';
+          return `<div class="shop-hist-row">
+            <span class="shop-hist-name">✓ ${esc(it.name)}</span>
+            <span class="shop-hist-meta">${it.cost ? fmt(it.cost) : ''} ${mLogo} · ${it.bought_at || ''}</span>
+            <button class="shop-unbuy" data-id="${it.id}" title="Return to list">↩</button>
+            <button class="del-x" data-type="shopping" data-id="${it.id}" title="Remove from history">✕</button>
+          </div>`;
+        }).join('') + '</details>';
     }
-    return `<div class="shop-item ${complete ? 'done' : ''}" data-id="${it.id}">
-      <button class="shop-check ${complete ? 'on' : ''}" data-id="${it.id}" title="${slots > 1 ? 'Tap once per task (' + done + '/' + slots + ')' : 'Mark done'}">
-        ${complete ? '✓' : (slots > 1 ? done : '')}
-      </button>
-      <span class="shop-name">${esc(it.name)}</span>
-      ${rayas}
-      <button class="del-x" data-type="shopping" data-id="${it.id}">✕</button>
-    </div>`;
-  }).join('');
+  }
 }
 
 function renderFreedom() {
@@ -2335,9 +2386,14 @@ document.addEventListener('click', async (e) => {
 
 /* ---------- DESGLOSE ---------- */
 function calcItem(it, i) {
-  const [nombre, cuota, pagadas, total, fijo, detId] = it;
-  if (total == null) {                       // cargo fijo o saldo libre, no envejece
-    return { label: nombre, cuota, saldo: fijo || 0, done: false };
+  const [nombre, cuota, pagadas, total, fijo, detId, abonadoFijo] = it;
+  if (total == null) {                       // cargo fijo o saldo libre
+    const ab = abonadoFijo || 0;
+    const saldo = Math.max((fijo || 0) - ab, 0);
+    // done cuando ya se abonó todo (solo aplica a líneas con saldo real > 0 originalmente)
+    const done = (fijo || 0) > 0 && saldo <= 0;
+    return { label: nombre, cuota, saldo, done,
+             fijoPay: (fijo || 0) > 0 && detId ? { id: detId, saldo } : null };
   }
   const num = pagadas + i + 1;               // cuota que se paga en el mes elegido
   if (num > total) {
@@ -2416,7 +2472,10 @@ function renderDesglose() {
             ? ` <button class="redefer-btn mini" data-type="${it.redefer.type}" data-id="${it.redefer.id}" data-cuotas="${it.redefer.cuotas}" title="Reschedule">🔄</button>`
               + ` <button class="cuota-btn" data-act="abonar" data-rtype="${it.redefer.type}" data-id="${it.redefer.id}" title="Pay installments in advance">💵</button>`
               + ` <button class="del-x" data-type="${it.redefer.type === 'extra_debt' ? 'debt_extra' : it.redefer.type}" data-id="${it.redefer.id}" title="Remove this line">✕</button>`
-            : ''}</td>
+            : (it.fijoPay
+              ? ` <button class="fijo-pay-btn" data-id="${it.fijoPay.id}" data-saldo="${it.fijoPay.saldo}" title="Pay this loan (full or partial)">💵 Pay</button>`
+                + ` <button class="del-x" data-type="detalle" data-id="${it.fijoPay.id}" title="Remove this line">✕</button>`
+              : '')}</td>
            <td class="num">${it.cuota ? fmt(it.cuota) : '—'}</td>
            <td class="num">${it.saldo ? fmt(it.saldo) : '—'}</td></tr>`).join('') +
       '</table>' +
@@ -3559,6 +3618,31 @@ document.addEventListener('click', async (e) => {
     const n = Math.max(1, Math.min(maxN, +r[0]));
     await api(endpoint, { body: { id, cuotas_pagadas: n } });
     toast(n >= maxN ? '✅ Fully paid — those installments are gone.' : `💵 Paid ${n} installment(s) — debt reduced.`);
+    load();
+    return;
+  }
+  // Pago de préstamo de SALDO FIJO (Estiven, Jean Karlo, etc.): total o parcial
+  const fijo = e.target.closest('.fijo-pay-btn');
+  if (fijo) {
+    const id = +fijo.dataset.id;
+    const saldo = +fijo.dataset.saldo || 0;
+    let nombre = 'This loan';
+    for (const items of Object.values(S.detalle || {})) { const m = items.find(it => it[5] === id); if (m) { nombre = m[0]; break; } }
+    const r = await modal({ icon: '💵', title: 'Pay this loan',
+      text: `<b>${esc(nombre)}</b> · balance ${fmt(saldo)}.<br><br>Pay the full balance, or enter a partial amount. When it reaches 0 it disappears from the breakdown (kept in history).`,
+      fields: [{ type: 'money', placeholder: `Amount (blank = full ${fmt(saldo)})`, value: '' }],
+      okText: 'Pay', extraBtn: `Pay full ${fmt(saldo)}` });
+    if (r === null) return;
+    if (r === 'EXTRA') {
+      await api('/api/detalle/abonar_fijo', { body: { id, full: true } });
+      toast('✅ Loan paid in full — moved to history.');
+    } else {
+      const monto = +r[0] || 0;
+      if (!monto || monto <= 0) { toast('Enter an amount greater than 0, or use “Pay full”.'); return; }
+      const full = monto >= saldo;
+      await api('/api/detalle/abonar_fijo', { body: { id, monto } });
+      toast(full ? '✅ Loan paid in full — moved to history.' : `💵 Paid ${fmt(monto)} — balance reduced.`);
+    }
     load();
     return;
   }

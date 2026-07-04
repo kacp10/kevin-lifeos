@@ -963,3 +963,16 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .celebrate-card h3 { margin-bottom: 8px; }
 .celebrate-card p { color: var(--mut); margin-bottom: 18px; line-height: 1.5; }
 @keyframes pop-in { 0% { transform: scale(.5); opacity: 0; } 70% { transform: scale(1.1); } 100% { transform: scale(1); opacity: 1; } }
+
+/* ---------- shopping purchase history ---------- */
+.shop-hist { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.shop-hist summary { cursor: pointer; color: var(--mut); font-size: .85rem; font-weight: 600; padding: 4px 0; }
+.shop-hist-row { display: flex; align-items: center; gap: 8px; padding: 6px 2px; border-bottom: 1px solid var(--line); font-size: .85rem; }
+.shop-hist-name { flex: 1; color: var(--mut); }
+.shop-hist-meta { color: var(--mut); font-size: .78rem; white-space: nowrap; }
+.shop-unbuy { background: transparent; border: 1px solid var(--line); border-radius: 6px; cursor: pointer; padding: 2px 7px; color: var(--mut); }
+.shop-unbuy:hover { border-color: var(--gold); color: var(--gold); }
+
+/* ---------- fixed-loan pay button ---------- */
+.fijo-pay-btn { background: var(--ok); color: #062a22; border: none; border-radius: 7px; padding: 3px 9px; font-size: .76rem; font-weight: 700; cursor: pointer; }
+.fijo-pay-btn:hover { filter: brightness(1.08); }
