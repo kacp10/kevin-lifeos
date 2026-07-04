@@ -15,7 +15,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 66  # debe coincidir con FRONT_V en static/app.js
+VERSION = 67  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -53,6 +53,25 @@ def to_int(v):
         return int(round(float(s)))
     except ValueError:
         return 0
+
+
+def safe_field_update(table, allowed_fields, int_fields, j, coerce=None, default_field=None):
+    """UPDATE de un solo campo con whitelist centralizada (una sola línea de defensa
+    en vez de repetir la validación en cada endpoint). Nunca deja pasar un campo
+    fuera de `allowed_fields`, y usa `coerce` (por defecto: entero tolerante) solo
+    para los campos listados en `int_fields`. Devuelve la respuesta jsonify lista."""
+    field = j.get('field', default_field)
+    if field not in allowed_fields:
+        return jsonify(error='Field not allowed'), 400
+    try:
+        rid = int(j.get('id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid id'), 400
+    fn = coerce or (lambda v: int(v or 0))
+    val = fn(j.get('value')) if field in int_fields else j.get('value')
+    db().execute(f'UPDATE {table} SET {field}=? WHERE id=?', (val, rid))
+    db().commit()
+    return jsonify(ok=True)
 
 
 def db():
@@ -187,6 +206,20 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT, creditor TEXT, concepto TEXT,
         valor INTEGER, cuotas INTEGER, start INTEGER);
     ''')
+    # Índices: gym_sets/abonos/payment_checks crecen indefinidamente con el uso;
+    # estos evitan que las consultas se vuelvan lentas cuando haya mucho historial.
+    # IF NOT EXISTS los hace seguros de correr en cada arranque, en SQLite y Postgres.
+    for idx_sql in (
+        'CREATE INDEX IF NOT EXISTS idx_gym_sets_date_ex ON gym_sets(date, exercise)',
+        'CREATE INDEX IF NOT EXISTS idx_payment_checks_month ON payment_checks(month)',
+        'CREATE INDEX IF NOT EXISTS idx_abonos_fecha ON abonos(fecha)',
+        'CREATE INDEX IF NOT EXISTS idx_abonos_debt_id ON abonos(debt_id)',
+    ):
+        try:
+            con.execute(idx_sql)
+        except Exception as e:
+            print('  (aviso) no se pudo crear índice:', e)
+    con.commit()
     if first_time:
         with open(os.path.join(BASE, 'seed_data.json'), encoding='utf-8') as f:
             seed = json.load(f)
@@ -526,7 +559,7 @@ def _detalle_actual(d):
 
 @app.get('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', version=VERSION)
 
 
 def _sync_metas_carreras(d):
@@ -800,14 +833,8 @@ def close_month():
 
 @app.post('/api/dream')
 def dream():
-    j = request.json
-    field = j.get('field', 'saved')
-    if field not in ('saved', 'value', 'bought'):
-        return jsonify(error='Campo no permitido'), 400
-    db().execute(f'UPDATE dreams SET {field}=? WHERE id=?',
-                 (int(j['value'] or 0), int(j['id'])))
-    db().commit()
-    return jsonify(ok=True)
+    return safe_field_update('dreams', ('saved', 'value', 'bought'),
+                              ('saved', 'value', 'bought'), request.json or {}, default_field='saved')
 
 
 
@@ -890,14 +917,7 @@ def debt_new():
 
 @app.post('/api/debt_extra/edit')
 def debt_extra_edit():
-    j = request.json
-    field = j['field']
-    if field not in ('name', 'total', 'due_date'):
-        return jsonify(error='campo no permitido'), 400
-    val = int(j['value'] or 0) if field == 'total' else j['value']
-    db().execute(f'UPDATE extra_debts SET {field}=? WHERE id=?', (val, int(j['id'])))
-    db().commit()
-    return jsonify(ok=True)
+    return safe_field_update('extra_debts', ('name', 'total', 'due_date'), ('total',), request.json or {})
 
 
 @app.delete('/api/debt_extra/<int:i>')
@@ -934,14 +954,8 @@ def goal_new():
 
 @app.post('/api/goal')
 def goal_update():
-    j = request.json
-    field = j['field']
-    if field not in ('name', 'why', 'target', 'status', 'pct', 'next_step'):
-        return jsonify(error='Campo no permitido'), 400
-    value = int(j['value'] or 0) if field == 'pct' else j['value']
-    db().execute(f'UPDATE goals SET {field}=? WHERE id=?', (value, int(j['id'])))
-    db().commit()
-    return jsonify(ok=True)
+    return safe_field_update('goals', ('name', 'why', 'target', 'status', 'pct', 'next_step'),
+                              ('pct',), request.json or {})
 
 
 @app.delete('/api/goal/<int:i>')
@@ -1144,14 +1158,8 @@ def fund_new():
 
 @app.post('/api/fund')
 def fund_update():
-    j = request.json
-    field = j['field']
-    if field not in ('name', 'quota', 'frequency', 'last_deposit', 'saved'):
-        return jsonify(error='Field not allowed'), 400
-    val = to_int(j['value']) if field in ('quota', 'saved') else j['value']
-    db().execute(f'UPDATE fund SET {field}=? WHERE id=?', (val, int(j['id'])))
-    db().commit()
-    return jsonify(ok=True)
+    return safe_field_update('fund', ('name', 'quota', 'frequency', 'last_deposit', 'saved'),
+                              ('quota', 'saved'), request.json or {}, coerce=to_int)
 
 
 @app.delete('/api/fund/<int:i>')
@@ -1173,14 +1181,8 @@ def service_new():
 
 @app.post('/api/service')
 def service_update():
-    j = request.json
-    field = j['field']
-    if field not in ('name', 'amount', 'method', 'payday'):
-        return jsonify(error='Field not allowed'), 400
-    val = int(j['value'] or 0) if field == 'amount' else j['value']
-    db().execute(f'UPDATE services SET {field}=? WHERE id=?', (val, int(j['id'])))
-    db().commit()
-    return jsonify(ok=True)
+    return safe_field_update('services', ('name', 'amount', 'method', 'payday'),
+                              ('amount',), request.json or {})
 
 
 @app.delete('/api/service/<int:i>')
@@ -1542,14 +1544,7 @@ def anime_del(i):
 
 @app.post('/api/debt/edit')
 def debt_edit():
-    j = request.json
-    field = j['field']
-    if field not in ('name', 'initial'):
-        return jsonify(error='campo no permitido'), 400
-    val = int(j['value'] or 0) if field == 'initial' else j['value']
-    db().execute(f'UPDATE debts SET {field}=? WHERE id=?', (val, int(j['id'])))
-    db().commit()
-    return jsonify(ok=True)
+    return safe_field_update('debts', ('name', 'initial'), ('initial',), request.json or {})
 
 
 @app.delete('/api/debt/<int:i>')
@@ -1610,14 +1605,7 @@ def anime():
 
 @app.post('/api/book')
 def book():
-    j = request.json
-    field = j['field']
-    if field not in ('status', 'pages', 'current'):
-        return jsonify(error='Campo no permitido'), 400
-    db().execute(f'UPDATE books SET {field}=? WHERE id=?',
-                 (j['value'], int(j['id'])))
-    db().commit()
-    return jsonify(ok=True)
+    return safe_field_update('books', ('status', 'pages', 'current'), (), request.json or {})
 
 
 # Inicializar BD al importar (gunicorn en Render no usa __main__)
