@@ -179,7 +179,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 66;
+const FRONT_V = 67;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -242,11 +242,18 @@ async function api(path, opts) {
       body: opts.body ? JSON.stringify(opts.body) : undefined
     } : undefined);
   } catch (err) {
-    if (!opts || !opts.quiet) toast('⚠ Could not reach the server.', 'err');
+    if (!opts || !opts.quiet) toast('⚠ Could not reach the server. Check your connection and try again.', 'err');
     throw err;
   }
   if (!r.ok) {
-    if (!opts || !opts.quiet) toast('⚠ Error ' + r.status + '. Reinicia el servidor (Ctrl+C → python app.py)', 'err');
+    // Mensaje amigable en TODA la app (no solo gym): intenta usar el {error:'...'} que el
+    // backend ya devuelve; si no hay uno claro, cae en un mensaje genérico sin jerga técnica.
+    let friendly = 'Something went wrong saving that. Please try again in a moment.';
+    try {
+      const body = await r.clone().json();
+      if (body && body.error) friendly = body.error;
+    } catch { /* la respuesta no traía JSON con detalle: se usa el mensaje genérico */ }
+    if (!opts || !opts.quiet) toast('⚠ ' + friendly, 'err');
     throw new Error(r.status + ' en ' + path);
   }
   return r.json();
@@ -810,7 +817,7 @@ function renderGym() {
   const goalW = eg ? eg.kg : null;
   const toGo = (curW != null && goalW != null) ? +(curW - goalW).toFixed(1) : null;
   const exHabit = (S.habits || []).find(h => h.name === 'Exercise');
-  const exStreak = exHabit ? rachaHabito(exHabit.id, new Set(S.marks || [])) : 0;
+  const exStreak = exHabit ? rachaHabito(exHabit.id, new Set(S.marks || []), [6]) : 0;
   const card = (label, val, sub) => `<div class="card gym-card"><label>${label}</label><strong>${val}</strong>${sub ? `<small>${sub}</small>` : ''}</div>`;
   panel.innerHTML =
     card('Current weight', curW != null ? curW + ' kg' : '—', curW == null ? 'log it when you have it' : '') +
@@ -1855,8 +1862,25 @@ document.addEventListener('click', async (e) => {
     // guardar cambios campo por campo
     await api('/api/service', { body: { id: s.id, field: 'name', value: r[0] } });
     await api('/api/service', { body: { id: s.id, field: 'amount', value: +r[1] || 0 } });
-    await api('/api/service', { body: { id: s.id, field: 'method', value: r[2] } });
+    const oldMethod = s.method, newMethod = r[2];
+    await api('/api/service', { body: { id: s.id, field: 'method', value: newMethod } });
     await api('/api/service', { body: { id: s.id, field: 'payday', value: r[3] } });
+    // Si el método CAMBIÓ a una tarjeta de crédito: igual que "Used a Card" en Expenses,
+    // preguntar cuotas y registrarlo en el desglose de esa tarjeta (DebtBoss).
+    if (newMethod !== oldMethod) {
+      const mNew = payMethod(newMethod);
+      if (mNew.card) {
+        const rc = await modal({ icon: mNew.logo, title: 'Paid with ' + mNew.id,
+          text: `<b>${esc(r[0])}</b> will be charged to <b>${mNew.id}</b>. In how many installments? It will add to ${mNew.id}'s debt automatically.`,
+          fields: [{ type: 'number', placeholder: '# installments (1 = single)', min: 1, value: '1' }],
+          okText: 'Add to card' });
+        if (rc) {
+          const cuotas = Math.max(1, +rc[0] || 1);
+          await api('/api/compra', { body: { creditor: newMethod, concepto: r[0] || s.name, valor: +r[1] || s.amount, cuotas, start: MES } });
+          toast(`💳 ${esc(r[0])} linked to ${mNew.id} (${cuotas} ${cuotas === 1 ? 'installment' : 'installments'})`);
+        }
+      }
+    }
     toast('✓ Service updated'); load();
     return;
   }
@@ -2408,14 +2432,15 @@ function renderDesglose() {
 
 /* ---------- HÁBITOS ---------- */
 // Calcula días consecutivos de un hábito hasta hoy (o hasta ayer si hoy aún no se marca)
-function rachaHabito(habitId, marks) {
+function rachaHabito(habitId, marks, extraSkipDays = []) {
   let streak = 0;
   const d = new Date();
   // si hoy no está marcado, empezar a contar desde ayer (no rompe la racha aún)
   const hoyKey = `${habitId}|${localISO(d)}`;
   if (!marks.has(hoyKey)) d.setDate(d.getDate() - 1);
   for (let k = 0; k < 400; k++) {
-    if (d.getDay() === 0) { d.setDate(d.getDate() - 1); continue; }   // domingo = descanso: no rompe ni cuenta la racha
+    const dow = d.getDay();
+    if (dow === 0 || extraSkipDays.includes(dow)) { d.setDate(d.getDate() - 1); continue; }   // domingo (todos) + días extra (ej. sábado para Exercise): no rompen ni cuentan la racha
     const key = `${habitId}|${localISO(d)}`;
     if (marks.has(key)) { streak++; d.setDate(d.getDate() - 1); }
     else break;
@@ -2436,7 +2461,7 @@ function renderHabitos() {
   for (let d = 1; d <= daysInMonth; d++) html += `<th>${d}</th>`;
   html += '</tr>';
   S.habits.forEach(h => {
-    const racha = rachaHabito(h.id, marks);
+    const racha = rachaHabito(h.id, marks, h.name === 'Exercise' ? [6] : []);
     const fuego = racha > 0 ? ` <span class="streak" title="${racha} days in a row">🔥${racha}</span>` : '';
     html += `<tr><td class="hname">${h.name}${fuego} <button class="del-x" data-type="habit" data-id="${h.id}">✕</button></td>`;
     for (let d = 1; d <= daysInMonth; d++) {
@@ -2463,7 +2488,14 @@ $('#habitGrid').addEventListener('click', async (e) => {
   const c = e.target.closest('.cell');
   if (!c) return;
   await api('/api/habit', { body: { habit_id: +c.dataset.h, day: c.dataset.day } });
-  load();
+  // parche local: togglear la marca sin re-pedir TODO el estado (acción muy frecuente)
+  const key = `${c.dataset.h}|${c.dataset.day}`;
+  S.marks = S.marks || [];
+  const i = S.marks.indexOf(key);
+  if (i >= 0) S.marks.splice(i, 1); else S.marks.push(key);
+  renderHabitos();
+  renderAchievements();
+  if (typeof renderGym === 'function') renderGym();   // por si el hábito es Exercise: refresca la racha en Gym también
 });
 
 $('#closeMonth').addEventListener('click', async (e) => {
@@ -2484,7 +2516,7 @@ function renderAchievements() {
   const metasLogradas = (S.goals || []).filter(g => g.status === 'Lograda 🏆').length;
   const abonos = (S.abonos || []).length;
   const cursosFin = (S.courses_done || []).length;
-  const maxRacha = Math.max(0, ...(S.habits || []).map(h => rachaHabito(h.id, new Set(S.marks))));
+  const maxRacha = Math.max(0, ...(S.habits || []).map(h => rachaHabito(h.id, new Set(S.marks), h.name === 'Exercise' ? [6] : [])));
   const librosFin = (S.books || []).filter(b => b.status === 'Terminado').length;
   const ahorroTotal = (S.dreams || []).reduce((s, d) => s + (d.saved || 0), 0);
   const totalDebts = (S.debts || []).length;
@@ -3013,7 +3045,10 @@ function actividadesDelDia(wd, shiftKey) {
   }
 
   const acts = [];
-  acts.push({ t: '6:00', title: 'Abs + jump rope', d: '4 min abs + ~10 min jump rope (increase over time). Wake up the body. ⚡', key: 'ejercicio' });
+  const esSabado = (shiftKey === 'sabado' || shiftKey === 'sabado11');
+  if (!esSabado) {   // ejercicio matutino solo lunes a viernes (sábado y domingo son descanso de gym)
+    acts.push({ t: '6:00', title: 'Abs + jump rope', d: '4 min abs + ~10 min jump rope (increase over time). Wake up the body. ⚡', key: 'ejercicio' });
+  }
   acts.push({ t: '6:20', title: '💧 Water + gratitude', d: 'A big glass of water on waking, and name one thing you\'re grateful for. Tiny ritual, big day. 🙏', key: 'morning' });
 
   if (sh.work) {
@@ -3032,9 +3067,8 @@ function actividadesDelDia(wd, shiftKey) {
     acts.push({ t: 'Sleep', title: 'Off to bed', d: 'Sleeping well is a habit on your list. Protect it like a payment.', key: 'dormir' });
   } else if (shiftKey === 'sabado' || shiftKey === 'sabado11') {
     acts.push({ t: '8:00', title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
-    const [si, sfin] = sh.work || [10, 18];
+    const [si] = sh.work || [10, 18];
     acts.push({ t: `${si}:00`, title: '💼 WORK Saturday (locked)', d: 'Saturday shift. Take the rest of the day easy.', work: true, key: 'work' });
-    acts.push({ t: `${sfin + 1}:00`, title: 'Light gym or a walk', d: 'Something easy, you already worked today.', key: 'gym' });
     acts.push({ t: 'Night', title: '📖 Read', d: 'Calm close — advance your book.', key: 'leer' });
     acts.push({ t: 'Night', title: '🧴 Skincare PM', d: 'Night routine: cleanse + serum + moisturizer.', key: 'skincare' });
   } else {
@@ -3121,6 +3155,18 @@ function renderRoutineDay() {
   if (diffDays >= 0 && diffDays % 9 === 0 && !hiddenDay.has(`${iso}|laundry`)) {
     lista.push({ t: '09:00', title: '🧺 Do the laundry', d: 'Reminder — every 9 days.', key: 'laundry' });
   }
+  // 📏 Gym measurements: cada 7 días (semanal) desde tu fecha de inicio en el módulo Gym
+  try {
+    const gymData = JSON.parse((S.profile || {}).gym_data || '{}');
+    const startG = gymData.start || (gymData.baseline && gymData.baseline.date);
+    if (startG) {
+      const [sy, sm, sd] = startG.split('-').map(Number);
+      const diffG = Math.round((Date.UTC(yy, mm - 1, dd) - Date.UTC(sy, sm - 1, sd)) / 86400000);
+      if (diffG >= 0 && diffG % 7 === 0 && !hiddenDay.has(`${iso}|gymmeasure`)) {
+        lista.push({ t: '08:00', title: '📏 Take your measurements', d: 'Weekly check-in — weight, waist, chest, arm, hip, thigh. Same time, same conditions as always. Log it in Gym → + Log this week.', key: 'gymmeasure' });
+      }
+    }
+  } catch { /* sin datos de gym aún: no mostrar el recordatorio */ }
   // aplicar overrides de hora (la lista se reordena sola con la nueva hora)
   lista.forEach(a => { a.t = effTime(a.key, iso, a.t); });
   // ORDENAR TODO por hora real (los textos como Sleep/Afternoon/Night van al final en orden lógico)
