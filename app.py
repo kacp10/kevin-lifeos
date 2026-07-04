@@ -15,7 +15,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 67  # debe coincidir con FRONT_V en static/app.js
+VERSION = 68  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -189,11 +189,12 @@ def init_db():
         day TEXT, note TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS shopping (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, slots INTEGER DEFAULT 1,
-         done INTEGER DEFAULT 0, created TEXT DEFAULT '');
+         done INTEGER DEFAULT 0, created TEXT DEFAULT '',
+         bought_at TEXT DEFAULT '', cost INTEGER DEFAULT 0, method TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS detalle_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT, grupo TEXT, nombre TEXT,
         cuota INTEGER DEFAULT 0, pagadas INTEGER DEFAULT 0, total INTEGER DEFAULT 0,
-        fijo INTEGER DEFAULT 0, orden INTEGER DEFAULT 0);
+        fijo INTEGER DEFAULT 0, orden INTEGER DEFAULT 0, abonado_fijo INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS extra_debts (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, total INTEGER,
         cuota INTEGER DEFAULT 0, cuotas INTEGER DEFAULT 0, start INTEGER DEFAULT 0,
@@ -475,6 +476,21 @@ def init_db():
             pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('gym_baseline_v1','1')")
         con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='detalle_abonado_fijo_v1'").fetchone():
+        try:
+            con.execute("ALTER TABLE detalle_items ADD COLUMN abonado_fijo INTEGER DEFAULT 0")
+        except Exception:
+            pass   # ya existe (BD nueva creada con la columna): sin problema
+        con.execute("INSERT OR IGNORE INTO config VALUES ('detalle_abonado_fijo_v1','1')")
+        con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='shopping_history_v1'").fetchone():
+        for col, decl in (('bought_at', "TEXT DEFAULT ''"), ('cost', 'INTEGER DEFAULT 0'), ('method', "TEXT DEFAULT ''")):
+            try:
+                con.execute(f"ALTER TABLE shopping ADD COLUMN {col} {decl}")
+            except Exception:
+                pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('shopping_history_v1','1')")
+        con.commit()
     if not con.execute("SELECT 1 FROM config WHERE key='detalle_v1'").fetchone():
         with open(os.path.join(BASE, 'seed_data.json'), encoding='utf-8') as f:
             _sd = json.load(f)
@@ -542,7 +558,7 @@ DETALLE = _SEED.get('detalle', {})
 
 
 def _detalle_actual(d):
-    """Reconstruye el desglose desde la tabla editable, con el formato [nombre,cuota,pagadas,total,fijo]."""
+    """Reconstruye el desglose desde la tabla editable, con el formato [nombre,cuota,pagadas,total,fijo,id,abonado_fijo]."""
     out = {}
     rows = d.execute('SELECT * FROM detalle_items ORDER BY orden, id').fetchall()
     for r in rows:
@@ -551,7 +567,7 @@ def _detalle_actual(d):
             [r['nombre'], r['cuota'],
              r['pagadas'] if r['total'] else None,
              r['total'] if r['total'] else None,
-             r['fijo'], r['id']])
+             r['fijo'], r['id'], r.get('abonado_fijo', 0) or 0])
     return out
 
 
@@ -1079,6 +1095,41 @@ def shopping_new():
     return jsonify(ok=True)
 
 
+@app.post('/api/shopping/bought')
+def shopping_bought():
+    """Marca un item como COMPRADO: registra fecha, costo y método. A partir de aquí
+    sale de la lista activa (Shopping & To Buy) y aparece solo en el historial de compras."""
+    j = request.json or {}
+    try:
+        iid = int(j.get('id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid id'), 400
+    row = db().execute('SELECT * FROM shopping WHERE id=?', (iid,)).fetchone()
+    if not row:
+        return jsonify(error='Item not found'), 404
+    it = dict(row)
+    cost = to_int(j.get('cost'))
+    method = j.get('method') or ''
+    # marcar completo + comprado (bought_at es lo que lo mueve al historial)
+    db().execute('UPDATE shopping SET done=slots, bought_at=?, cost=?, method=? WHERE id=?',
+                 (date.today().isoformat(), cost, method, iid))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/shopping/unbuy')
+def shopping_unbuy():
+    """Devuelve un item del historial a la lista activa (por si se marcó por error)."""
+    j = request.json or {}
+    try:
+        iid = int(j.get('id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid id'), 400
+    db().execute("UPDATE shopping SET bought_at='', done=0 WHERE id=?", (iid,))
+    db().commit()
+    return jsonify(ok=True)
+
+
 @app.post('/api/shopping/tick')
 def shopping_tick():
     """Suma una raya. Cuando done == slots, el item queda completado (tachado)."""
@@ -1105,7 +1156,7 @@ def shopping_del(i):
 @app.post('/api/shopping/clear_done')
 def shopping_clear():
     """Borra los items ya completados (done >= slots)."""
-    db().execute('DELETE FROM shopping WHERE done >= slots AND slots > 0')
+    db().execute("DELETE FROM shopping WHERE done >= slots AND slots > 0 AND (bought_at IS NULL OR bought_at = '')")
     db().commit()
     return jsonify(ok=True)
 
@@ -1382,6 +1433,38 @@ def detalle_del(i):
     db().execute('DELETE FROM detalle_items WHERE id=?', (i,))
     db().commit()
     return jsonify(ok=True)
+
+
+@app.post('/api/detalle/abonar_fijo')
+def detalle_abonar_fijo():
+    """Abona a un cargo de SALDO FIJO (préstamos sin cuotas: Estiven, Jean Karlo, etc.).
+    monto = cantidad a abonar; si full=True, salda todo el saldo restante.
+    Cuando el saldo llega a 0, la línea desaparece del desglose (queda en la tabla con
+    abonado_fijo == fijo, para trazabilidad; no se borra)."""
+    j = request.json or {}
+    try:
+        iid = int(j.get('id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid id'), 400
+    row = db().execute('SELECT * FROM detalle_items WHERE id=?', (iid,)).fetchone()
+    if not row:
+        return jsonify(error='Loan not found'), 404
+    it = dict(row)
+    fijo = it.get('fijo') or 0
+    if not fijo or it.get('total'):
+        return jsonify(error='This line is not a fixed-balance loan'), 400
+    ya = it.get('abonado_fijo') or 0
+    restante = max(fijo - ya, 0)
+    if j.get('full'):
+        monto = restante
+    else:
+        monto = to_int(j.get('monto'))
+        if monto <= 0:
+            return jsonify(error='Enter an amount greater than 0'), 400
+    nuevo = min(ya + monto, fijo)
+    db().execute('UPDATE detalle_items SET abonado_fijo=? WHERE id=?', (nuevo, iid))
+    db().commit()
+    return jsonify(ok=True, abonado=nuevo, saldo=max(fijo - nuevo, 0))
 
 
 @app.post('/api/extra_debt/abonar')
