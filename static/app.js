@@ -182,7 +182,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 69;
+const FRONT_V = 71;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -315,6 +315,7 @@ function flashDerrota(nombre) {
 
 function celebrate({ icon = '🎉', title = '', text = '', confettiOn = true }) {
   if (confettiOn) confetti();
+  if (typeof petCelebrate === 'function') petCelebrate();   // la mascota también festeja
   const back = document.createElement('div');
   back.className = 'modal-back celebrate';
   back.innerHTML = `<div class="modal-card celebrate-card">
@@ -2211,7 +2212,9 @@ function renderBoss(animate) {
       const botones = esTarjeta ? '' :
         ` <button class="ed-core" data-id="${d.id}" title="Edit / adjust amount">✎</button>` +
         ` <button class="del-x" data-type="debt" data-id="${d.id}" title="Borrar deuda">✕</button>`;
-      return `<div class="debt-item">
+      const banner = bossBanner(d.name);   // 🖼️ slot de imagen del jefe (si la subiste)
+      return `<div class="debt-item${banner ? ' has-boss-img' : ''}">
+        ${banner}
         <div class="row-between"><span>${d.name}${botones}</span>
           <strong>${fmt(r)}</strong></div>
         <div class="mini-bar"><i style="width:${Math.max(w, 0)}%"></i></div>
@@ -4051,4 +4054,154 @@ $('#animeNew').addEventListener('submit', async (e) => {
   load();
 });
 
-load();
+/* ============================================================
+   🤖 MASCOTA ROBOT — companion flotante que reacciona a tu vida
+   ============================================================
+   ── SLOTS DE IMAGEN (para usar TUS propias imágenes) ─────────
+   Por defecto la mascota es un robot dibujado en SVG (pesa casi nada
+   y puede animarse: parpadea, respira, celebra). Si quieres usar TUS
+   PROPIAS imágenes, sube archivos .webp/.png a /static/img/ y pon aquí
+   sus rutas. Deja en null los que no uses (esos seguirán con el SVG).
+
+   Recomendado: imágenes cuadradas ~256x256, fondo transparente, < 200 KB.
+   Un estado por "humor" de la mascota:
+------------------------------------------------------------ */
+const MASCOT_IMG = {
+  idle:      '/static/img/pet-idle.webp',       // normal, en reposo
+  happy:     '/static/img/pet-happy.webp',      // vas bien / derrotaste deuda
+  worried:   '/static/img/pet-worried.webp',    // income en rojo
+  celebrate: '/static/img/pet-celebrate.webp',  // meta lograda
+  sleepy:    '/static/img/pet-sleepy.webp'      // sin actividad
+};
+
+/* ── SLOTS DE IMAGEN: BANNER DE CADA JEFE DE DEUDA ───────────
+   Una imagen que aparece ARRIBA de la barra de cada jefe (deuda).
+   La clave debe ser el NOMBRE EXACTO de la deuda como aparece en tu app.
+   Sube las imágenes a /static/img/ y pon la ruta. Deja fuera las que no uses.
+   Recomendado: banner horizontal ~600x200, .webp, < 200 KB.
+   Ejemplo listo (descoméntalo y ajusta cuando tengas las imágenes):        */
+const BOSS_IMG = {
+  // 'Tarjeta DV — Jefe Final': '/static/img/boss-davivienda.webp',
+  // 'ADDI':                     '/static/img/boss-addi.webp',
+  // 'Codensa':                  '/static/img/boss-codensa.webp',
+  // 'Banco de Bogotá':          '/static/img/boss-bogota.webp'
+};
+function bossBanner(name) {
+  const src = BOSS_IMG[name];
+  return src ? `<div class="boss-banner"><img loading="lazy" src="${src}" alt="${name}"></div>` : '';
+}
+
+/* ── SLOTS DE IMAGEN: CABECERA DE CADA TAB ───────────────────
+   Un ícono/detalle pequeño junto al título de cada sección.
+   La clave es el id de la tab (data-tab). Sube a /static/img/ y pon la ruta.
+   Recomendado: cuadrada ~64x64, .webp/.png transparente, < 50 KB.               */
+const TAB_IMG = {
+  // home:    '/static/img/tab-home.webp',
+  // gym:     '/static/img/tab-gym.webp',
+  // life:    '/static/img/tab-life.webp',
+  // deudas:  '/static/img/tab-deudas.webp'
+};
+
+// Robot SVG por defecto (una cara simple que cambia de expresión según el humor)
+function mascotSVG(mood) {
+  const eyes = {
+    idle:      '<circle cx="34" cy="42" r="5" fill="#131022"/><circle cx="62" cy="42" r="5" fill="#131022"/>',
+    happy:     '<path d="M29 42 q5 -6 10 0" stroke="#131022" stroke-width="3" fill="none" stroke-linecap="round"/><path d="M57 42 q5 -6 10 0" stroke="#131022" stroke-width="3" fill="none" stroke-linecap="round"/>',
+    worried:   '<circle cx="34" cy="43" r="5" fill="#131022"/><circle cx="62" cy="43" r="5" fill="#131022"/><path d="M27 33 l12 4 M69 33 l-12 4" stroke="#131022" stroke-width="2.5" stroke-linecap="round"/>',
+    celebrate: '<path d="M29 40 l10 4 -10 4" stroke="#131022" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M67 40 l-10 4 10 4" stroke="#131022" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>',
+    sleepy:    '<path d="M29 43 h10 M57 43 h10" stroke="#131022" stroke-width="3" stroke-linecap="round"/>'
+  }[mood] || '';
+  const mouth = {
+    idle:      '<path d="M40 58 q8 5 16 0" stroke="#131022" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
+    happy:     '<path d="M38 56 q10 10 20 0" stroke="#131022" stroke-width="3" fill="none" stroke-linecap="round"/>',
+    worried:   '<path d="M40 60 q8 -5 16 0" stroke="#131022" stroke-width="2.5" fill="none" stroke-linecap="round"/>',
+    celebrate: '<ellipse cx="48" cy="59" rx="8" ry="6" fill="#131022"/>',
+    sleepy:    '<circle cx="48" cy="59" r="3" fill="#131022"/>'
+  }[mood] || '';
+  const glow = mood === 'celebrate' ? '<circle cx="48" cy="50" r="46" fill="none" stroke="var(--gold)" stroke-width="2" opacity=".6" class="pet-halo"/>' : '';
+  return `<svg viewBox="0 0 96 104" xmlns="http://www.w3.org/2000/svg" class="pet-svg mood-${mood}">
+    ${glow}
+    <line x1="48" y1="6" x2="48" y2="16" stroke="var(--accent)" stroke-width="2.5"/>
+    <circle cx="48" cy="6" r="4" fill="var(--gold)" class="pet-antenna"/>
+    <rect x="12" y="16" width="72" height="66" rx="20" fill="var(--accent)"/>
+    <rect x="20" y="26" width="56" height="40" rx="14" fill="#eef0ff"/>
+    ${eyes}${mouth}
+    <rect x="30" y="84" width="14" height="14" rx="4" fill="var(--accent)"/>
+    <rect x="52" y="84" width="14" height="14" rx="4" fill="var(--accent)"/>
+  </svg>`;
+}
+
+const PET_LINES = {
+  happy:     ['Looking good! 🔥', 'Debt going down. Proud of you.', 'Keep this pace!', 'You showed up today. 💪'],
+  worried:   ['Careful with spending this month.', "Income's tight — you got this.", 'Small steps still count.'],
+  celebrate: ['🎉 HUGE! You did it!', 'Boss defeated! ☠', "That's a win. Enjoy it!"],
+  sleepy:    ["Zzz... tap me when you're back.", 'Resting. Come log something!'],
+  idle:      ['Hey Kevin 👋', 'Tap me anytime.', 'One task at a time.', "I'm here with you."]
+};
+
+let _petMoodTimer = null;
+function petMood() {
+  // deriva el "humor" de tu situación real (misma fuente de verdad: S)
+  try {
+    const i = (typeof MES === 'number') ? MES : 0;
+    const ingreso = (typeof ingresoDelMes === 'function') ? ingresoDelMes(i) : 0;
+    if (ingreso > 0) {
+      const checks = new Set(S.checks || []);
+      const mk = (typeof monthKey === 'function') ? monthKey(i) : '';
+      let pagado = 0;
+      for (const s of (S.servicios || [])) {
+        if (s.method === 'Fondo') continue;
+        if (payMethod(s.method).card) continue;
+        if (checks.has(`${s.name}|${mk}`)) pagado += s.amount;
+      }
+      if (pagado > ingreso) return 'worried';
+    }
+    return 'idle';
+  } catch { return 'idle'; }
+}
+
+function renderPet(forceMood) {
+  const body = document.getElementById('petBody');
+  if (!body) return;
+  const mood = forceMood || petMood();
+  const img = MASCOT_IMG[mood] || MASCOT_IMG.idle;
+  body.innerHTML = img
+    ? `<img src="${img}" alt="companion" class="pet-img mood-${mood}">`
+    : mascotSVG(mood);
+  body.parentElement.dataset.mood = mood;
+}
+
+function petSay(mood, ms = 3200) {
+  const bubble = document.getElementById('petBubble');
+  if (!bubble) return;
+  const lines = PET_LINES[mood] || PET_LINES.idle;
+  bubble.textContent = lines[Math.floor(Math.random() * lines.length)];
+  bubble.classList.add('show');
+  renderPet(mood === 'idle' ? null : mood);
+  clearTimeout(_petMoodTimer);
+  _petMoodTimer = setTimeout(() => { bubble.classList.remove('show'); renderPet(); }, ms);
+}
+
+// reacciones que otras partes de la app pueden disparar
+function petCelebrate() { petSay('celebrate', 4000); }
+function petHappy() { petSay('happy'); }
+
+// click en la mascota: saluda / da un tip según el humor actual
+document.getElementById('petMascot')?.addEventListener('click', () => {
+  const m = petMood();
+  petSay(m === 'worried' ? 'worried' : (Math.random() < 0.5 ? 'happy' : 'idle'));
+});
+
+// Cabeceras de tab: si hay imagen en TAB_IMG para una tab, la antepone al texto del botón.
+function applyTabImages() {
+  document.querySelectorAll('#tabs [data-tab]').forEach(btn => {
+    const src = TAB_IMG[btn.dataset.tab];
+    if (src && !btn.querySelector('.tab-img')) {
+      const img = document.createElement('img');
+      img.className = 'tab-img'; img.src = src; img.alt = '';
+      btn.prepend(img);
+    }
+  });
+}
+
+load().then(() => { applyTabImages(); renderPet(); setTimeout(() => petSay('idle'), 900); });
