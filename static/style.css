@@ -1137,3 +1137,14 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
   .cell-pop, .boss-bar.haki-mid, .boss-bar.haki-max, .boss-bar.haki-max::before,
   #bossHp, .mini-bar > i, .freedom-bar > i, .pet-mascot { animation: none !important; transition: none !important; }
 }
+
+/* ---------- citas agendadas (appointments) ---------- */
+.appt-title { font-weight: 800; color: var(--mut); font-size: .8rem; margin: 14px 0 6px; letter-spacing: .03em; }
+.appt-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 11px; margin-bottom: 6px;
+  border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.02);
+}
+.appt-row.appt-soon { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(124,92,255,.25); }
+.appt-info { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.appt-info small { color: var(--mut); }
+.appt-when { color: var(--accent); font-weight: 700; }

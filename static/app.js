@@ -208,7 +208,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 72;
+const FRONT_V = 73;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -2917,6 +2917,33 @@ function renderLife() {
   }
   tip += ` You have ${studyDays} study ${studyDays === 1 ? 'session' : 'sessions'} logged — every ✓ is real progress. A goal's 100% is never given: you earn it day by day, and YOU decide when you truly got there.`;
     $('#lifeTip').textContent = tip;
+  renderAppointments();
+}
+
+// Lista de citas/eventos AGENDADOS desde el calendario (scheduled=1), ordenadas por fecha próxima
+function renderAppointments() {
+  const box = document.getElementById('apptList');
+  if (!box) return;
+  const hoy = hoyLocal();
+  const items = (S.routine_extra || [])
+    .filter(a => a.scheduled && a.day && a.day >= hoy)
+    .sort((a, b) => a.day.localeCompare(b.day) || (a.time || '').localeCompare(b.time || ''));
+  if (!items.length) { box.innerHTML = ''; return; }
+  const [hy, hm, hd] = hoy.split('-').map(Number);
+  const hoyUTC = Date.UTC(hy, hm - 1, hd);
+  box.innerHTML = '<div class="appt-title">📅 Scheduled</div>' + items.map(a => {
+    const [yy, mm, dd] = a.day.split('-').map(Number);
+    const diff = Math.round((Date.UTC(yy, mm - 1, dd) - hoyUTC) / 86400000);
+    const when = diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : `in ${diff} days`;
+    const soon = diff <= 3 ? ' appt-soon' : '';
+    return `<div class="appt-row${soon}">
+      <div class="appt-info">
+        <b>${esc(a.title)}</b>
+        <small>${fmtFecha(a.day)}${a.time ? ' · ' + a.time : ''} · <span class="appt-when">${when}</span></small>
+      </div>
+      <button class="del-x" data-type="routine_extra" data-id="${a.id}" title="Cancel">✕</button>
+    </div>`;
+  }).join('');
 }
 
 // Cuenta cuántos días distintos completaste el bloque de inglés
@@ -3485,6 +3512,35 @@ document.addEventListener('click', async (e) => {
     } else {
       toast(scope === 'week' ? `✕ Removed every ${dayName}` : scope === 'mf' ? '✕ Removed Monday to Friday' : '✕ Removed for this day only');
     }
+    load();
+    return;
+  }
+
+  if (e.target.id === 'scheduleApptBtn') {
+    // 1) elegir la fecha (cualquier día: este mes, en 2 meses, lo que sea)
+    const today = hoyLocal();
+    const rf = await modal({ icon: '📅', title: 'Pick a date',
+      text: 'Choose the day of your appointment, course or event. Your companion will remind you 3 days before, counting down to the day.',
+      fields: [{ type: 'date', label: 'Date', value: '', min: today }],
+      okText: 'Next' });
+    if (!rf || !rf[0]) return;
+    const fecha = rf[0];                 // 'YYYY-MM-DD'
+    // 2) el MISMO modal de actividad, ya atado a esa fecha
+    const habitOpts = [{ v: '', t: '— None' }]
+      .concat((S.habits || []).map(h => ({ v: h.name, t: '🔥 ' + h.name })));
+    const r = await modal({ icon: '🗓️', title: 'Schedule for ' + fmtFecha(fecha),
+      text: "Add your appointment / course / event. You'll get reminders 3, 2 and 1 days before, and on the day.",
+      fields: [
+        { type: 'text', placeholder: 'Time (e.g. 15:00)' },
+        { type: 'text', placeholder: 'Appointment / course name' },
+        { type: 'text', placeholder: 'Short note (optional)' },
+        { type: 'select', options: habitOpts }
+      ], okText: 'Schedule it' });
+    if (!r || !r[1].trim()) return;
+    await api('/api/routine_extra/new', { body: {
+      time: r[0], title: r[1], descr: r[2], habit: r[3] || '',
+      day: fecha, scheduled: 1 } });
+    toast('📅 Scheduled for ' + fmtFecha(fecha));
     load();
     return;
   }
@@ -4216,6 +4272,42 @@ function petSay(mood, ms = 3200) {
 function petCelebrate() { petSay('celebrate', 4000); }
 function petHappy() { petSay('happy'); }
 
+// 📅 Recordatorios de CITAS AGENDADAS (solo las scheduled=1 del calendario).
+// El robot avisa 3, 2 y 1 días antes, y el mismo día. Devuelve el mensaje más urgente de hoy.
+function scheduledReminder() {
+  const hoy = hoyLocal();
+  const [hy, hm, hd] = hoy.split('-').map(Number);
+  const hoyUTC = Date.UTC(hy, hm - 1, hd);
+  let best = null;   // el más cercano (menor cantidad de días restantes)
+  for (const a of (S.routine_extra || [])) {
+    if (!a.scheduled || !a.day) continue;
+    const [yy, mm, dd] = a.day.split('-').map(Number);
+    if (!yy) continue;
+    const diff = Math.round((Date.UTC(yy, mm - 1, dd) - hoyUTC) / 86400000);
+    if (diff < 0 || diff > 3) continue;   // solo dentro de la ventana de 3 días -> hoy
+    let msg;
+    if (diff === 0)      msg = `📅 Today: ${a.title}${a.time ? ' at ' + a.time : ''}`;
+    else if (diff === 1) msg = `⏰ Tomorrow: ${a.title}`;
+    else                 msg = `🗓️ In ${diff} days: ${a.title}`;
+    if (best === null || diff < best.diff) best = { diff, msg };
+  }
+  return best;
+}
+
+// muestra el recordatorio de cita más urgente (si hay alguno hoy)
+function petCheckAppointments() {
+  const rem = scheduledReminder();
+  if (!rem) return false;
+  const bubble = document.getElementById('petBubble');
+  if (!bubble) return false;
+  bubble.textContent = rem.msg;
+  bubble.classList.add('show');
+  renderPet(rem.diff === 0 ? 'happy' : 'idle');
+  clearTimeout(_petMoodTimer);
+  _petMoodTimer = setTimeout(() => { bubble.classList.remove('show'); renderPet(); }, 6000);
+  return true;
+}
+
 // click en la mascota: saluda / da un tip según el humor actual
 document.getElementById('petMascot')?.addEventListener('click', () => {
   const m = petMood();
@@ -4234,4 +4326,9 @@ function applyTabImages() {
   });
 }
 
-load().then(() => { applyTabImages(); renderPet(); setTimeout(() => petSay('idle'), 900); });
+load().then(() => {
+  applyTabImages();
+  renderPet();
+  // al abrir la app: si hay una cita en la ventana de 3 días, el robot la recuerda; si no, saluda
+  setTimeout(() => { if (!petCheckAppointments()) petSay('idle'); }, 900);
+});
