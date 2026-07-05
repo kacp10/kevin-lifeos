@@ -381,6 +381,15 @@
 </section>
 
 </main>
+
+<!-- 🤖 MASCOTA ROBOT — companion flotante. Reacciona a tu situación (deudas, racha, income).
+     Para usar TU PROPIA imagen en vez del robot SVG: sube un PNG/WEBP a /static/img/ y mira
+     la sección "SLOTS DE IMAGEN" documentada en app.js (buscar: MASCOT_IMG). -->
+<div id="petMascot" class="pet-mascot" title="Your companion">
+  <div id="petBubble" class="pet-bubble"></div>
+  <div id="petBody" class="pet-body"><!-- el SVG (o tu imagen) se inyecta aquí --></div>
+</div>
+
 <footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v{{ version }}</b></footer>
 <script src="/static/app.js?v={{ version }}"></script>
 </body>
