@@ -208,7 +208,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 73;
+const FRONT_V = 75;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1238,6 +1238,33 @@ if (shopForm) shopForm.addEventListener('submit', async (e) => {
   e.target.reset(); document.getElementById('shSlots').value = 1;
   toast('🛒 Added to your list'); load();
 });
+// 🛒 Abrir Shopping como modal desde el header de Home (ahorra espacio en la página)
+function openShoppingModal() {
+  const panel = document.getElementById('shoppingPanel');
+  if (!panel) return;
+  if (!document.getElementById('shopBackdrop')) {
+    const bd = document.createElement('div');
+    bd.id = 'shopBackdrop';
+    bd.onclick = closeShoppingModal;
+    document.body.appendChild(bd);
+  }
+  panel.classList.add('as-modal');
+  panel.style.display = 'block';
+  if (!panel.querySelector('.shop-modal-close')) {
+    const x = document.createElement('button');
+    x.className = 'shop-modal-close'; x.innerHTML = '✕'; x.title = 'Close';
+    x.onclick = closeShoppingModal;
+    panel.prepend(x);
+  }
+}
+function closeShoppingModal() {
+  const panel = document.getElementById('shoppingPanel');
+  const bd = document.getElementById('shopBackdrop');
+  if (panel) { panel.classList.remove('as-modal'); panel.style.display = 'none'; }
+  if (bd) bd.remove();
+}
+document.getElementById('openShoppingBtn')?.addEventListener('click', openShoppingModal);
+
 document.addEventListener('click', async (e) => {
   const chk = e.target.closest('.shop-check');
   if (chk) {
@@ -1304,6 +1331,9 @@ function renderShopping() {
   const activos = all.filter(it => !it.bought_at);          // pendientes: NO comprados
   const comprados = all.filter(it => it.bought_at)          // historial: comprados
     .sort((a, b) => (b.bought_at || '').localeCompare(a.bought_at || ''));
+  // contador en el botón del header (ítems pendientes, sin abrir el modal)
+  const btn = document.getElementById('openShoppingBtn');
+  if (btn) btn.innerHTML = '🛒 Shopping' + (activos.length ? ` <span class="shop-count">${activos.length}</span>` : '');
 
   if (!activos.length) {
     cont.innerHTML = '<p class="hint">Nothing on the list. Add what you need above. 🛒</p>';
@@ -1469,9 +1499,9 @@ function renderInicio() {
       const crecio = crecioCompras + cuotasReg;
       let html = '';
       if (crecio > 0)
-        html += `<div class="card red"><label>📈 Debt grew this month</label><strong>+${fmt(crecio)}</strong></div>`;
+        html += `<div class="card red"><label>📈 Debt grew</label><strong>+${fmt(crecio)}</strong></div>`;
       if (sinCuotas > 0)
-        html += `<div class="card red"><label>☠ Registered debts without installments (balance)</label><strong>${fmt(sinCuotas)}</strong></div>`;
+        html += `<div class="card red"><label>☠ Debts w/o installments</label><strong>${fmt(sinCuotas)}</strong></div>`;
       return html;
     })();
 
@@ -1503,7 +1533,7 @@ function renderInicio() {
         const v = ctx.parsed; const pct = Math.round((v / sumaTotal) * 100);
         return `${ctx.label}: ${fmt(v)} (${pct}%)`;
       } } }
-    }, cutout: '58%'
+    }, cutout: '58%', responsive: true, maintainAspectRatio: true, aspectRatio: 1.4
   };
   if (pieChart) { pieChart.data = data; pieChart.options = opts; pieChart.update(); }
   else pieChart = new Chart($('#pieChart'), { type: 'doughnut', data, options: opts, plugins: [sliceLabels] });
