@@ -15,7 +15,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 72  # debe coincidir con FRONT_V en static/app.js
+VERSION = 73  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -157,7 +157,8 @@ def init_db():
         finished_on TEXT);
     CREATE TABLE IF NOT EXISTS routine_extra (
         id INTEGER PRIMARY KEY AUTOINCREMENT, time TEXT, title TEXT, descr TEXT,
-        weekday INTEGER DEFAULT -1, day TEXT DEFAULT '', habit TEXT DEFAULT '');
+        weekday INTEGER DEFAULT -1, day TEXT DEFAULT '', habit TEXT DEFAULT '',
+        scheduled INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS routine_hidden (
         weekday INTEGER, akey TEXT, PRIMARY KEY (weekday, akey));
     CREATE TABLE IF NOT EXISTS routine_hidden_day (
@@ -490,6 +491,13 @@ def init_db():
             except Exception:
                 pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('shopping_history_v1','1')")
+        con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='routine_scheduled_v1'").fetchone():
+        try:
+            con.execute("ALTER TABLE routine_extra ADD COLUMN scheduled INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('routine_scheduled_v1','1')")
         con.commit()
     if not con.execute("SELECT 1 FROM config WHERE key='detalle_v1'").fetchone():
         with open(os.path.join(BASE, 'seed_data.json'), encoding='utf-8') as f:
@@ -1072,9 +1080,10 @@ def routine_hide():
 @app.post('/api/routine_extra/new')
 def routine_extra_new():
     j = request.json
-    db().execute('INSERT INTO routine_extra (time, title, descr, weekday, day, habit) VALUES (?,?,?,?,?,?)',
+    db().execute('INSERT INTO routine_extra (time, title, descr, weekday, day, habit, scheduled) VALUES (?,?,?,?,?,?,?)',
                  (j.get('time', ''), j['title'].strip(), j.get('descr', ''),
-                  int(j.get('weekday', -1)), j.get('day', ''), j.get('habit', '')))
+                  int(j.get('weekday', -1)), j.get('day', ''), j.get('habit', ''),
+                  1 if j.get('scheduled') else 0))
     db().commit()
     return jsonify(ok=True)
 
