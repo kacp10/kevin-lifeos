@@ -38,6 +38,32 @@ const sliceLabels = {
 };
 const $ = (q) => document.querySelector(q);
 const fmt = (n) => '$' + Math.round(n).toLocaleString('es-CO');
+
+// ¿el usuario pidió menos animación en su sistema? entonces no animamos (accesibilidad)
+const _reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Anima el texto de un elemento desde su número actual hasta `to`.
+// wrap(n) formatea cada paso (por defecto, moneda). Guarda el último valor en dataset para el próximo tween.
+function animateNumber(el, to, wrap = fmt, ms = 650) {
+  if (!el) return;
+  const from = (el.dataset.val != null) ? +el.dataset.val : to;
+  el.dataset.val = to;
+  if (_reduceMotion || from === to) { el.textContent = wrap(to); return; }
+  const t0 = performance.now();
+  const step = (t) => {
+    const p = Math.min((t - t0) / ms, 1);
+    const eased = 1 - Math.pow(1 - p, 3);            // easeOutCubic
+    el.textContent = wrap(from + (to - from) * eased);
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+// Anima el ancho (%) de una barra con transición suave (sin romper si ya tiene transition CSS)
+function animateWidth(el, pct) {
+  if (!el) return;
+  el.style.transition = _reduceMotion ? 'none' : 'width .8s cubic-bezier(.22,1,.36,1)';
+  requestAnimationFrame(() => { el.style.width = Math.max(0, Math.min(100, pct)) + '%'; });
+}
 // lee un input quitando los puntos de miles (para money-live)
 const numVal = (sel) => { const el = $(sel); return el ? +(el.value || '').replace(/\./g, '').replace(/[^0-9-]/g, '') || 0 : 0; };
 // engancha formateo de miles en vivo a un input
@@ -182,7 +208,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 71;
+const FRONT_V = 72;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -2167,11 +2193,10 @@ function renderBoss(animate) {
   const dmg = S.debts.reduce((s, d) => s + d.abonado, 0)
     + (S.extra_debts || []).reduce((s, d) => s + (d.abonado || 0), 0);
   const rest = init - dmg;
-  $('#bossInit').textContent = fmt(init);
-  $('#bossDmg').textContent = fmt(dmg);
-  $('#bossRest').textContent = fmt(rest);
-  requestAnimationFrame(() =>
-    $('#bossHp').style.width = Math.max(0, (rest / init) * 100) + '%');
+  animateNumber($('#bossInit'), init);
+  animateNumber($('#bossDmg'), dmg);
+  animateNumber($('#bossRest'), rest);
+  animateWidth($('#bossHp'), (rest / init) * 100);
 
   const sel = $('#abonoDebt');
   const optsCore = S.debts
@@ -2213,7 +2238,9 @@ function renderBoss(animate) {
         ` <button class="ed-core" data-id="${d.id}" title="Edit / adjust amount">✎</button>` +
         ` <button class="del-x" data-type="debt" data-id="${d.id}" title="Borrar deuda">✕</button>`;
       const banner = bossBanner(d.name);   // 🖼️ slot de imagen del jefe (si la subiste)
-      return `<div class="debt-item${banner ? ' has-boss-img' : ''}">
+      // aura de haki: entre más cerca de derrotarlo (menos vida), más intensa el aura
+      const hakiClass = w <= 15 ? 'haki-max' : (w <= 40 ? 'haki-mid' : '');
+      return `<div class="debt-item boss-bar ${hakiClass}${banner ? ' has-boss-img' : ''}">
         ${banner}
         <div class="row-between"><span>${d.name}${botones}</span>
           <strong>${fmt(r)}</strong></div>
@@ -2581,6 +2608,9 @@ $('#habitGrid').addEventListener('click', async (e) => {
   renderHabitos();
   renderAchievements();
   if (typeof renderGym === 'function') renderGym();   // por si el hábito es Exercise: refresca la racha en Gym también
+  // micro-rebote en la celda recién tocada (tras el re-render)
+  const cell = document.querySelector(`#habitGrid .cell[data-h="${c.dataset.h}"][data-day="${c.dataset.day}"]`);
+  if (cell) { cell.classList.remove('cell-pop'); void cell.offsetWidth; cell.classList.add('cell-pop'); }
 });
 
 $('#closeMonth').addEventListener('click', async (e) => {

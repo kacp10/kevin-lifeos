@@ -45,7 +45,11 @@ h2 { font-size: .8rem; text-transform: uppercase; letter-spacing: 2px; color: va
 
 main { padding: 24px; max-width: 1100px; margin: 0 auto; }
 .tab { display: none; }
-.tab.active { display: block; animation: fadein .25s ease; }
+.tab.active { display: block; animation: tab-in .34s cubic-bezier(.22,1,.36,1); }
+@keyframes tab-in {
+  from { opacity: 0; transform: translateY(12px) scale(.99); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
 @keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
 
 .row-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
@@ -1079,4 +1083,57 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .tab-img {
   width: 18px; height: 18px; object-fit: contain; vertical-align: middle;
   margin-right: 5px; border-radius: 4px;
+}
+
+/* ============================================================
+   ✨ ANIMACIONES DINÁMICAS + ☠ AURA DE HAKI
+   ============================================================ */
+
+/* micro-rebote al marcar una celda de hábito */
+.cell-pop { animation: cell-pop .38s cubic-bezier(.34,1.56,.64,1); }
+@keyframes cell-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.32); }
+  100% { transform: scale(1); }
+}
+
+/* barras (jefe y mini) con transición suave por defecto */
+#bossHp, .mini-bar > i, .freedom-bar > i { transition: width .8s cubic-bezier(.22,1,.36,1); }
+
+/* ── AURA DE HAKI en las barras de jefe cerca de caer ──
+   Inspirado en la IDEA del haki (aura de voluntad), estilo propio.
+   haki-mid: el jefe ya recibió daño fuerte. haki-max: está por caer. */
+.boss-bar { position: relative; border-radius: 12px; transition: box-shadow .4s; }
+.boss-bar.haki-mid {
+  box-shadow: 0 0 0 1px rgba(124,92,255,.4), 0 0 14px -2px rgba(124,92,255,.5);
+  animation: haki-pulse-mid 2.6s ease-in-out infinite;
+}
+.boss-bar.haki-max {
+  box-shadow: 0 0 0 1px rgba(176,108,255,.6), 0 0 22px 0 rgba(176,108,255,.7);
+  animation: haki-pulse-max 1.5s ease-in-out infinite;
+}
+.boss-bar.haki-max .mini-bar > i {
+  background: linear-gradient(90deg, #b06cff, #ff5c8a) !important;
+}
+.boss-bar.haki-max::before {
+  content: '☠ almost defeated'; position: absolute; top: -9px; right: 10px;
+  font-size: .64rem; font-weight: 800; letter-spacing: .04em;
+  color: #fff; background: linear-gradient(135deg,#7c5cff,#ff5c8a);
+  padding: 2px 8px; border-radius: 8px; box-shadow: 0 3px 10px rgba(176,108,255,.5);
+  animation: haki-tag 1.5s ease-in-out infinite;
+}
+@keyframes haki-pulse-mid {
+  0%,100% { box-shadow: 0 0 0 1px rgba(124,92,255,.35), 0 0 12px -3px rgba(124,92,255,.4); }
+  50%     { box-shadow: 0 0 0 1px rgba(124,92,255,.5), 0 0 18px -1px rgba(124,92,255,.6); }
+}
+@keyframes haki-pulse-max {
+  0%,100% { box-shadow: 0 0 0 1px rgba(176,108,255,.5), 0 0 16px 0 rgba(176,108,255,.55); }
+  50%     { box-shadow: 0 0 0 2px rgba(255,92,138,.7), 0 0 30px 2px rgba(176,108,255,.85); }
+}
+@keyframes haki-tag { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+
+/* respeta a quien pidió menos movimiento */
+@media (prefers-reduced-motion: reduce) {
+  .cell-pop, .boss-bar.haki-mid, .boss-bar.haki-max, .boss-bar.haki-max::before,
+  #bossHp, .mini-bar > i, .freedom-bar > i, .pet-mascot { animation: none !important; transition: none !important; }
 }
