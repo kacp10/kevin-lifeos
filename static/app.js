@@ -182,7 +182,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 68;
+const FRONT_V = 69;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1816,8 +1816,19 @@ function renderChecklist(i, deudas) {
   const checks = new Set(S.checks);
   // fila de servicio (editable): objeto {id,name,amount,method,payday}
   const svcRow = (s) => {
-    const paid = checks.has(`${s.name}|${mk}`);
     const m = payMethod(s.method);
+    // Servicio pagado con TARJETA DE CRÉDITO: ya está en la deuda de la tarjeta.
+    // Se muestra como "💳 en tarjeta" — cuenta como cubierto, no se marca a mano y NO toca el income.
+    if (m.card) {
+      return `<div class="check-item on-card" data-item="${s.name}" data-mk="${mk}" data-oncard="1">
+        <div class="box card-box-mini" title="Paid on card — already in your card debt">💳</div>
+        <div class="cmid">
+          <span class="cname">${esc(s.name)} <button class="svc-edit" data-id="${s.id}" title="Edit">✎</button></span>
+          <small>${m.logo} ${esc(s.method)} · on card <span class="oncard-tag">won't touch your salary</span></small>
+        </div>
+        <span class="cval">${fmt(s.amount)}</span></div>`;
+    }
+    const paid = checks.has(`${s.name}|${mk}`);
     return `<div class="check-item ${paid ? 'paid' : ''}" data-item="${s.name}" data-mk="${mk}">
       <div class="box">${paid ? '✓' : ''}</div>
       <div class="cmid">
@@ -1853,7 +1864,10 @@ function renderChecklist(i, deudas) {
     + `<button class="btn-add-svc" id="addServiceBtn">+ Add service</button>`;
   $('#checkDeudas').innerHTML = deudas.map(debtRow).join('');
   const total = serviciosVisibles.length + deudas.length;
-  const done = [...checks].filter(c => c.endsWith('|' + mk)).length;
+  // "pagados" = marcados con check + servicios en tarjeta (que cuentan como cubiertos solos)
+  const marcados = [...checks].filter(c => c.endsWith('|' + mk)).length;
+  const enTarjeta = serviciosVisibles.filter(s => payMethod(s.method).card && !checks.has(`${s.name}|${mk}`)).length;
+  const done = marcados + enTarjeta;
   $('#checkCount').textContent = `${done} / ${total} paid`;
 
   // ===== Barra de ingreso: gastado vs disponible (opción C) =====
@@ -1865,9 +1879,14 @@ function renderIncomeBar(i, mk, deudas) {
   if (!cont) return;
   const ingreso = ingresoDelMes(i);
   const checks = new Set(S.checks);
-  // lo "pagado" del mes = servicios marcados + deudas marcadas (lo que dio check)
+  // lo "pagado" del mes que SALE DEL SALARIO = servicios marcados pagados con débito/efectivo
+  // (los pagados con tarjeta de crédito NO cuentan: esa plata se fue a la deuda de la tarjeta, no al salario)
   let pagado = 0;
-  for (const s of (S.servicios || [])) if (s.method !== 'Fondo' && checks.has(`${s.name}|${mk}`)) pagado += s.amount;
+  for (const s of (S.servicios || [])) {
+    if (s.method === 'Fondo') continue;
+    if (payMethod(s.method).card) continue;           // tarjeta de crédito: no toca el income
+    if (checks.has(`${s.name}|${mk}`)) pagado += s.amount;
+  }
   for (const d of deudas) if (checks.has(`${d[0]}|${mk}`)) pagado += d[1];
   // + gastos sueltos del mes que no son a crédito
   const mesKey = S.plan.months[i];
@@ -1953,6 +1972,10 @@ document.addEventListener('click', async (e) => {
   // Marcar/desmarcar pago (servicio o deuda)
   const c = e.target.closest('.check-item');
   if (!c) return;
+  if (c.dataset.oncard) {   // servicio en tarjeta: ya está cubierto por la deuda, no se marca a mano
+    toast('💳 This one is on your card — it already counts in that card\'s debt.');
+    return;
+  }
   const estabaMarcado = c.classList.contains('paid');
   const body = { item: c.dataset.item, month: c.dataset.mk };
   // el jefe baja por el abono real (data-abono), no por el pago total con seguro/manejo

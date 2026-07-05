@@ -976,3 +976,14 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 /* ---------- fixed-loan pay button ---------- */
 .fijo-pay-btn { background: var(--ok); color: #062a22; border: none; border-radius: 7px; padding: 3px 9px; font-size: .76rem; font-weight: 700; cursor: pointer; }
 .fijo-pay-btn:hover { filter: brightness(1.08); }
+
+/* ---------- servicio pagado en tarjeta (no toca income) ---------- */
+.check-item.on-card { opacity: .92; }
+.check-item.on-card .box.card-box-mini {
+  background: linear-gradient(135deg, #7c5cff, #b06cff); color: #fff;
+  display: flex; align-items: center; justify-content: center; cursor: default;
+}
+.oncard-tag {
+  display: inline-block; margin-left: 4px; font-size: .72rem; color: var(--accent);
+  background: rgba(124,92,255,.12); padding: 1px 6px; border-radius: 6px;
+}
