@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kevin · Life OS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/static/style.css?v={{ version }}">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">KEVIN · <span>LIFE OS</span></div>
+  <div class="haki-badge" id="hakiBadge">😴 Haki asleep</div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <button data-tab="inicio" class="active">🏠 Home</button>
+  <button data-tab="alcancia">⚔ Debt Boss</button>
+  <button data-tab="habitos">🔥 Habits</button>
+  <button data-tab="metas">🎯 Goals</button>
+  <button data-tab="life">📅 Life</button>
+  <button data-tab="gym">🏋️ Gym</button>
+  <button data-tab="suenos">✨ Wishlist</button>
+  <button data-tab="anime">📺 Anime</button>
+  <button data-tab="libros">📚 Books</button>
+  <button data-tab="logros">🏆 Achievements</button>
+</nav>
+
+<main>
+
+<!-- ============ INICIO ============ -->
+<section id="tab-inicio" class="tab active">
+  <div class="freedom-panel" id="freedomPanel"></div>
+  <div class="row-between">
+    <h1>🏠 Your month in numbers</h1>
+    <select id="monthSel" class="month-select"></select>
+  </div>
+  <div class="cards" id="kpis"></div>
+
+  <div class="panel shopping-panel">
+    <div class="row-between">
+      <h2>🛒 Shopping & to-buy</h2>
+      <button class="btn-ghost" id="clearDoneBtn" title="Remove checked items">Clear done</button>
+    </div>
+    <p class="hint">Quick list so you don't forget. Tap to cross out. Checked items clear at the end of the day.</p>
+    <form id="shopNew" class="shop-form">
+      <input id="shName" placeholder="What to buy / do? (e.g. Eye drops)" required>
+      <input id="shSlots" type="number" min="1" max="9" value="1" title="How many sub-tasks?" style="width:70px">
+      <button class="btn-gold" type="submit">+ Add</button>
+    </form>
+    <div id="shoppingList"></div>
+    <div id="shoppingHistory"></div>
+  </div>
+
+  <div class="panel">
+    <div class="row-between">
+      <h2>💸 Expense tracker</h2>
+      <span style="display:flex;gap:8px">
+        <button class="btn-ghost" id="setPaydayBtn" title="When do you get paid?">📆 Payday</button>
+        <button class="btn-gold" id="setIncomeBtn">Set this month's income</button>
+      </span>
+    </div>
+    <p class="hint">Log where your money goes. If you pay with a credit card, it adds to that card's installments automatically.</p>
+    <form id="expenseNew" class="expense-form">
+      <input id="exName" placeholder="What was it? (e.g. Groceries, Netflix)" required>
+      <input id="exAmount" type="text" inputmode="numeric" class="money-live" placeholder="Amount" required>
+      <select id="exMethod"></select>
+      <select id="exKind">
+        <option value="once">One-time</option>
+        <option value="monthly">Monthly (recurring)</option>
+      </select>
+      <button class="btn-gold" type="submit">+ Log expense</button>
+    </form>
+    <div id="expenseSummary"></div>
+    <div id="expenseList"></div>
+    <div class="fund-box">
+      <div class="row-between">
+        <h3 class="mini-title">🏦 Company fund — your growing savings</h3>
+        <button class="btn-ghost" id="addFundBtn">+ Add concept</button>
+      </div>
+      <p class="hint">Your permanent savings & social contributions. The deposit is made on the 30th, so the "last deposit" shows the previous month until this month's lands. This one updates by itself every month.</p>
+      <div id="fundTable"></div>
+    </div>
+    <div class="piggy-box">
+      <div class="row-between">
+        <h3 class="mini-title">🐖 My piggy banks</h3>
+        <button class="btn-ghost" id="addPiggyBtn">+ New piggy bank</button>
+      </div>
+      <p class="hint">Your own savings goals (NU pockets, cash jars, whatever). You add money whenever you want — these don't update on their own.</p>
+      <div id="piggyList"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="row-between">
+      <h2>Monthly payment checklist</h2>
+      <strong id="checkCount" class="gold-txt"></strong>
+    </div>
+    <div id="incomeBar" class="income-bar"></div>
+    <div class="grid-2">
+      <div>
+        <h3 class="mini-title">Life & services</h3>
+        <div id="checkServicios"></div>
+      </div>
+      <div>
+        <h3 class="mini-title">Debt payments</h3>
+        <div id="checkDeudas"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h2>Where the money goes</h2>
+      <canvas id="pieChart" height="240"></canvas>
+      <div id="regla502030" class="rule-box"></div>
+    </div>
+    <div class="panel">
+      <h2>This month's payments</h2>
+      <table class="table" id="pagosTable"></table>
+      <p class="diag" id="diagnostico"></p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ALCANCÍA / BOSS ============ -->
+<section id="tab-alcancia" class="tab">
+  <div class="boss-arena">
+    <p class="boss-eyebrow">JEFE FINAL</p>
+    <h1 class="boss-name">LA DEUDA</h1>
+    <div class="boss-hp-wrap">
+      <div class="boss-hp" id="bossHp"></div>
+      <span class="dmg-float" id="dmgFloat"></span>
+    </div>
+    <div class="boss-stats">
+      <div><label>HP restante</label><strong id="bossRest">—</strong></div>
+      <div><label>Total damage dealt</label><strong id="bossDmg" class="gold">—</strong></div>
+      <div><label>HP inicial</label><strong id="bossInit">—</strong></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>💳 My credit cards</h2>
+    <p class="hint">Your own cards only: limit (cupo), what you owe now, available room, how much you've paid, and this month's payment. Raise a card's limit anytime with ✎ (for example after paying it all off).</p>
+    <div id="myCards"></div>
+  </div>
+
+  <div class="panel" id="amortPanel">
+    <div class="row-between">
+      <h2>🏦 Davivienda — real payoff tracker</h2>
+      <button class="card-cupo-edit" id="amortEdit" title="Edit loan details">✎</button>
+    </div>
+    <p class="hint">The realistic view of your refinanced card: how much of each payment is interest vs. real debt, your true remaining capital, and how extra payments kill it faster. Interest, insurance &amp; handling do NOT lower the boss — only capital does.</p>
+    <div id="amortDav"></div>
+  </div>
+
+  <div class="grid-2">
+    <div class="panel">
+      <h2>Attack (log a payment)</h2>
+      <form id="abonoForm" class="abono-form">
+        <select id="abonoDebt"></select>
+        <input type="text" inputmode="numeric" class="money-live" id="abonoValor" placeholder="Payment amount" required>
+        <button type="submit" class="btn-attack">⚔ Deal damage</button>
+      </form>
+      <p class="hint">Every installment or payment you make in real life, log it here and watch the bar go down.</p>
+      <h2>Historial de ataques</h2>
+      <ul class="abono-list" id="abonoList"></ul>
+    </div>
+    <div class="panel">
+      <h2>Each debt, its own bar</h2>
+      <div id="debtList"></div>
+      <h2 style="margin-top:18px">☠ A new enemy appeared</h2>
+      <form id="debtNew" class="abono-form">
+        <input id="ndName" placeholder="Which debt? (e.g. Falabella)" required>
+        <input id="ndValor" type="text" inputmode="numeric" class="money-live" placeholder="Total amount" required>
+        <input id="ndCuotas" type="number" min="0" max="60" placeholder="# installments (0 = none)">
+        <select id="ndStart"></select>
+        <input id="ndDue" type="date" title="Promised payment date (optional)">
+        <button class="btn-gold" type="submit">+ Registrar deuda</button>
+      </form>
+      <p class="hint">A brand-new debt (another person or bank). If you set installments, the monthly amount shows up in Home from the month you pick. With 0 installments it stays free to pay whenever — BUT if you promised a payment date, set it in the date box and it'll show up in Home that month so you don't forget. If you used a card that ALREADY exists, use "installment purchase" below.</p>
+      <h2 style="margin-top:18px">💳 Used a card? Installment purchase</h2>
+      <form id="compraNew" class="abono-form">
+        <select id="cpCred"></select>
+        <input id="cpConcepto" placeholder="What did you buy?" required>
+        <input id="cpValor" type="text" inputmode="numeric" class="money-live" placeholder="Total amount" required>
+        <input id="cpCuotas" type="number" min="1" max="60" placeholder="# installments" required>
+        <select id="cpStart"></select>
+        <button class="btn-gold" type="submit">Log purchase</button>
+      </form>
+      <p class="hint">The installment adds itself in Home from the chosen month (📈), grows the boss bar, and enters the breakdown. When the installments end, it returns to normal on its own.</p>
+      <ul class="abono-list" id="compraList"></ul>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Full debt breakdown — installment by installment</h2>
+    <div id="desglose"></div>
+  </div>
+</section>
+
+<!-- ============ HÁBITOS ============ -->
+<section id="tab-habitos" class="tab">
+  <div class="row-between">
+    <h1 id="habitMonthTitle">Habits</h1>
+    <button class="btn-gold" id="closeMonth">Close month → Haki history</button>
+  </div>
+  <div class="cards" id="habitStats"></div>
+  <form id="habitNew" class="abono-form" style="margin-bottom:14px">
+    <input id="hbName" placeholder="New habit (e.g. Cold shower)" required>
+    <button class="btn-gold" type="submit">+ Add habit</button>
+  </form>
+  <div class="panel scroll-x">
+    <table class="habit-grid" id="habitGrid"></table>
+  </div>
+  <div class="panel">
+    <h2>Haki history — months conquered (≥70%)</h2>
+    <div id="hakiHistory" class="haki-history"></div>
+    <canvas id="hakiChart" height="200" style="margin-top:14px"></canvas>
+  </div>
+</section>
+
+<!-- ============ METAS ============ -->
+<section id="tab-metas" class="tab">
+  <h1>🎯 Goals — what you're going to achieve</h1>
+  <div class="cards" id="goalStats"></div>
+  <form id="goalNew" class="abono-form" style="margin-bottom:14px">
+    <input id="glName" placeholder="What new goal?" required>
+    <button class="btn-gold" type="submit">+ Add goal</button>
+  </form>
+  <div class="panel scroll-x">
+    <table class="table" id="goalTable"></table>
+  </div>
+  <p class="hint">Edit any cell and it saves itself. A goal without a "next step" is just a wish: always write the next small action.</p>
+</section>
+
+<!-- ============ LIFE (rutina inteligente) ============ -->
+<section id="tab-life" class="tab">
+  <h1>📅 Life — your smart daily routine</h1>
+  <p class="hint">Tell me your work shift per day and I'll build your routine from 6am to reach your goals. Check off what you complete; if you couldn't do something, say why.</p>
+
+  <div class="panel">
+    <h2>1 · Your work week</h2>
+    <div id="shiftGrid" class="shift-grid"></div>
+  </div>
+
+  <div class="panel">
+    <h2>2 · Your career path</h2>
+    <p class="hint">Each career has 4 steps (25% each): Fundamentals → Intermediate → Projects → Professional. Your current course adds its % to the step you're on. Finishing one course does NOT complete the goal — only its slice. 100% comes with the strong certificate at the end. One active focus at a time.</p>
+    <div id="careerPanel"></div>
+  </div>
+
+  <div class="panel">
+    <div class="row-between">
+      <h2>3 · Your routine</h2>
+      <select id="dayPick" class="month-select"></select>
+    </div>
+    <div id="routineDay"></div>
+    <button class="btn-gold" id="addRoutineBtn" style="margin-top:10px">+ Add activity to this day</button>
+    <p class="hint" id="freeTimeHint" style="margin-top:8px"></p>
+  </div>
+
+  <div class="panel">
+    <div class="row-between">
+      <h2>4 · English mastery — the real system</h2>
+      <button class="btn-ghost" id="engHelpBtn">Why this works</button>
+    </div>
+    <div id="englishPanel"></div>
+  </div>
+
+  <div class="panel">
+    <h2>5 · Weekly advice</h2>
+    <p class="diag" id="lifeTip"></p>
+  </div>
+</section>
+
+<!-- ============ GYM & FITNESS ============ -->
+<section id="tab-gym" class="tab">
+  <div class="row-between">
+    <h1>🏋️ Gym &amp; Fitness</h1>
+    <div class="gym-head-btns">
+      <button class="btn-mini" id="gymGuideBtn">📖 Guide</button>
+      <button class="btn-gold" id="gymLogBtn">+ Log this week</button>
+    </div>
+  </div>
+  <p class="hint">Your body, tracked. Measure weekly, same day, in the morning. The tape tells the truth the scale hides.</p>
+
+  <div class="panel workout-panel">
+    <div class="row-between">
+      <h2 id="workoutTitle">🔥 Today's workout</h2>
+      <select id="workoutDay" class="workout-day-sel"></select>
+    </div>
+    <div id="workoutBox"></div>
+  </div>
+  <div class="cards" id="gymStats"></div>
+  <div class="panel">
+    <div class="row-between"><h2>🎯 My goal</h2><button class="btn-mini" id="gymEditBtn">✎ Edit</button></div>
+    <div id="gymGoal"></div>
+  </div>
+  <div class="panel">
+    <h2>📉 Progress over time</h2>
+    <canvas id="gymChart" height="220"></canvas>
+    <p class="hint" id="gymChartHint" style="margin-top:8px"></p>
+  </div>
+  <div class="panel">
+    <h2>📐 Measurements — latest vs start</h2>
+    <div class="card-grid" id="gymMeasures"></div>
+  </div>
+  <div class="panel">
+    <h2>🗓️ Weekly history</h2>
+    <div id="gymHistory" class="scroll-x"></div>
+  </div>
+  <div class="panel gym-help">
+    <h2>📏 How to take your measurements</h2>
+    <div id="gymHelp"></div>
+  </div>
+</section>
+
+<!-- ============ SUEÑOS ============ -->
+<section id="tab-suenos" class="tab">
+  <h1>✨ Wishlist — waiting for you on the other side</h1>
+  <p class="hint">Golden rule: pay in full, never in installments. Write down how much you've saved for each one.</p>
+  <form id="dreamNew" class="abono-form" style="margin-bottom:14px">
+    <input id="dnCat" list="catList" placeholder="Category" required>
+    <datalist id="catList">
+      <option>Dreams</option><option>Technology</option><option>Shopping</option>
+      <option>Room</option><option>Leisure</option><option>Personal</option>
+    </datalist>
+    <input id="dnName" placeholder="Which wish?" required>
+    <input id="dnValor" type="text" inputmode="numeric" class="money-live" placeholder="Price">
+    <button class="btn-gold" type="submit">+ Add wish</button>
+  </form>
+  <div id="dreamList"></div>
+</section>
+
+<!-- ============ ANIME ============ -->
+<section id="tab-anime" class="tab">
+  <h1>Anime Tracker</h1>
+  <div class="cards" id="animeStats"></div>
+  <div class="anime-filter" id="animeFilter">
+    <button data-f="todos" class="active">All</button>
+    <button data-f="Viéndolo 👀">Watching 👀</button>
+    <button data-f="En emisión 📡">Airing 📡</button>
+    <button data-f="Pendiente">Pendiente</button>
+    <button data-f="Finalizado ✅">Finished ✅</button>
+  </div>
+  <form id="animeNew" class="abono-form" style="margin-bottom:14px">
+    <input id="anName" placeholder="Anime name" required>
+    <button class="btn-gold" type="submit">+ Add anime</button>
+  </form>
+  <div class="panel scroll-x">
+    <table class="table" id="animeTable"></table>
+  </div>
+</section>
+
+<!-- ============ LIBROS ============ -->
+<section id="tab-libros" class="tab">
+  <h1>📚 Books</h1>
+  <form id="bookNew" class="abono-form" style="margin-bottom:14px">
+    <input id="bkTitle" placeholder="Book title" required>
+    <button class="btn-gold" type="submit">+ Add book</button>
+  </form>
+  <div class="anime-filter" id="bookFilter">
+    <button data-f="all" class="active">All</button>
+    <button data-f="Por comprar">To buy</button>
+    <button data-f="Por leer">To read</button>
+    <button data-f="Leyendo">Reading</button>
+    <button data-f="Terminado">Finished</button>
+  </div>
+  <div class="panel scroll-x"><table class="table" id="bookTable"></table></div>
+</section>
+
+<!-- ============ ACHIEVEMENTS ============ -->
+<section id="tab-logros" class="tab">
+  <h1>🏆 Achievements</h1>
+  <p class="hint">Medals you unlock by playing the long game. Locked ones show what's next.</p>
+  <div class="achievements-grid" id="achievementsGrid"></div>
+</section>
+
+</main>
+
+<!-- 🤖 MASCOTA ROBOT — companion flotante. Reacciona a tu situación (deudas, racha, income).
+     Para usar TU PROPIA imagen en vez del robot SVG: sube un PNG/WEBP a /static/img/ y mira
+     la sección "SLOTS DE IMAGEN" documentada en app.js (buscar: MASCOT_IMG). -->
+<div id="petMascot" class="pet-mascot" title="Your companion">
+  <div id="petBubble" class="pet-bubble"></div>
+  <div id="petBody" class="pet-body"><!-- el SVG (o tu imagen) se inyecta aquí --></div>
+</div>
+
+<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v{{ version }}</b></footer>
+<script src="/static/app.js?v={{ version }}"></script>
+</body>
+</html>
