@@ -15,7 +15,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 75  # debe coincidir con FRONT_V en static/app.js
+VERSION = 79  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -195,18 +195,19 @@ def init_db():
     CREATE TABLE IF NOT EXISTS detalle_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT, grupo TEXT, nombre TEXT,
         cuota INTEGER DEFAULT 0, pagadas INTEGER DEFAULT 0, total INTEGER DEFAULT 0,
-        fijo INTEGER DEFAULT 0, orden INTEGER DEFAULT 0, abonado_fijo INTEGER DEFAULT 0);
+        fijo INTEGER DEFAULT 0, orden INTEGER DEFAULT 0, abonado_fijo INTEGER DEFAULT 0,
+        start_month INTEGER DEFAULT -1);
     CREATE TABLE IF NOT EXISTS extra_debts (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, total INTEGER,
         cuota INTEGER DEFAULT 0, cuotas INTEGER DEFAULT 0, start INTEGER DEFAULT 0,
-        due_date TEXT DEFAULT '');
+        due_date TEXT DEFAULT '', abonado INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS goals (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, why TEXT DEFAULT '',
         target TEXT DEFAULT '', status TEXT DEFAULT 'Pendiente',
         pct INTEGER DEFAULT 0, next_step TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS compras (
         id INTEGER PRIMARY KEY AUTOINCREMENT, creditor TEXT, concepto TEXT,
-        valor INTEGER, cuotas INTEGER, start INTEGER);
+        valor INTEGER, cuotas INTEGER, start INTEGER, abonado INTEGER DEFAULT 0);
     ''')
     # Índices: gym_sets/abonos/payment_checks crecen indefinidamente con el uso;
     # estos evitan que las consultas se vuelvan lentas cuando haya mucho historial.
@@ -499,6 +500,21 @@ def init_db():
             pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('routine_scheduled_v1','1')")
         con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='abono_parcial_v1'").fetchone():
+        for tabla in ('compras', 'extra_debts'):
+            try:
+                con.execute(f"ALTER TABLE {tabla} ADD COLUMN abonado INTEGER DEFAULT 0")
+            except Exception:
+                pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('abono_parcial_v1','1')")
+        con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='detalle_start_v1'").fetchone():
+        try:
+            con.execute("ALTER TABLE detalle_items ADD COLUMN start_month INTEGER DEFAULT -1")
+        except Exception:
+            pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('detalle_start_v1','1')")
+        con.commit()
     if not con.execute("SELECT 1 FROM config WHERE key='detalle_v1'").fetchone():
         with open(os.path.join(BASE, 'seed_data.json'), encoding='utf-8') as f:
             _sd = json.load(f)
@@ -566,7 +582,8 @@ DETALLE = _SEED.get('detalle', {})
 
 
 def _detalle_actual(d):
-    """Reconstruye el desglose desde la tabla editable, con el formato [nombre,cuota,pagadas,total,fijo,id,abonado_fijo]."""
+    """Reconstruye el desglose desde la tabla editable, con el formato
+    [nombre,cuota,pagadas,total,fijo,id,abonado_fijo,start_month]."""
     out = {}
     rows = d.execute('SELECT * FROM detalle_items ORDER BY orden, id').fetchall()
     for r in rows:
@@ -575,7 +592,8 @@ def _detalle_actual(d):
             [r['nombre'], r['cuota'],
              r['pagadas'] if r['total'] else None,
              r['total'] if r['total'] else None,
-             r['fijo'], r['id'], r.get('abonado_fijo', 0) or 0])
+             r['fijo'], r['id'], r.get('abonado_fijo', 0) or 0,
+             r.get('start_month', -1) if r.get('start_month') is not None else -1])
     return out
 
 
@@ -829,6 +847,53 @@ def abono_del(aid):
     db().execute('DELETE FROM abonos WHERE id=?', (aid,))
     db().commit()
     return jsonify(ok=True)
+
+
+@app.post('/api/card/pay')
+def card_pay():
+    """Pago realista a una tarjeta (tipo banco): un solo monto que se reparte.
+    Primero liquida las compras a cuotas más antiguas de esa tarjeta (sube su 'abonado'),
+    y lo que sobre se abona a la deuda base del jefe (tabla abonos). Así el pago se ve
+    reflejado en TODO: panel de tarjetas, jefe, desglose y libertad."""
+    j = request.json or {}
+    boss = j.get('boss')            # nombre del jefe (ej. 'Codensa')
+    creditor = j.get('creditor')    # nombre del creditor para compras (ej. 'Codensa')
+    monto = to_int(j.get('monto'))
+    if monto <= 0:
+        return jsonify(error='Enter an amount greater than 0'), 400
+    d = db().execute('SELECT * FROM debts WHERE name=?', (boss,)).fetchone()
+    if not d:
+        return jsonify(error='Card not found'), 404
+    d = dict(d)
+    restante = monto
+    # 1) liquidar compras a cuotas de esta tarjeta, de la más antigua a la más nueva
+    compras = [dict(r) for r in db().execute(
+        'SELECT * FROM compras WHERE creditor=? ORDER BY id ASC', (creditor,)).fetchall()]
+    for c in compras:
+        if restante <= 0:
+            break
+        saldo_c = max((c['valor'] or 0) - (c.get('abonado') or 0), 0)
+        if saldo_c <= 0:
+            continue
+        aplica = min(restante, saldo_c)
+        nuevo = (c.get('abonado') or 0) + aplica
+        if nuevo >= (c['valor'] or 0):
+            db().execute('DELETE FROM compras WHERE id=?', (c['id'],))   # compra saldada
+        else:
+            db().execute('UPDATE compras SET abonado=? WHERE id=?', (nuevo, c['id']))
+        restante -= aplica
+    # 2) lo que sobre baja la deuda base del jefe (registrada como abono)
+    if restante > 0:
+        row = db().execute('SELECT COALESCE(SUM(valor),0) AS s FROM abonos WHERE debt_id=?', (d['id'],)).fetchone()
+        ya_abonado = dict(row)['s'] if row else 0
+        base_saldo = max((d['initial'] or 0) - ya_abonado, 0)
+        aplica = min(restante, base_saldo)
+        if aplica > 0:
+            db().execute('INSERT INTO abonos (fecha, debt_id, valor) VALUES (?,?,?)',
+                         (date.today().isoformat(), d['id'], aplica))
+            restante -= aplica
+    db().commit()
+    return jsonify(ok=True, aplicado=monto - restante, sobrante=restante)
 
 
 @app.post('/api/habit')
@@ -1397,44 +1462,58 @@ def compra():
 @app.post('/api/detalle/redefer')
 def detalle_redefer():
     """Redifiere una compra del desglose original: toma el saldo restante y lo
-    reparte en N cuotas nuevas. id = id del detalle_items."""
+    reparte en N cuotas nuevas, empezando en el mes 'start' que elija el usuario.
+    id = id del detalle_items."""
     j = request.json
     iid = int(j['id'])
     nuevas = int(j['cuotas'])
+    start = int(j.get('start', -1))
     if nuevas < 1:
         return jsonify(error='cuotas inválidas'), 400
     row = db().execute('SELECT * FROM detalle_items WHERE id=?', (iid,)).fetchone()
     if not row:
         return jsonify(error='no encontrado'), 404
     it = dict(row)
-    # saldo restante = cuota * (total - pagadas); o el monto correcto si lo mandan
     monto = int(j.get('monto') or 0)
     restantes = max((it['total'] or 0) - (it['pagadas'] or 0), 0)
     saldo = monto if monto > 0 else (it['cuota'] or 0) * restantes
     nueva_cuota = round(saldo / nuevas)
-    # reiniciar: nuevas cuotas, 0 pagadas
-    db().execute('UPDATE detalle_items SET cuota=?, pagadas=0, total=? WHERE id=?',
-                 (nueva_cuota, nuevas, iid))
+    # reiniciar: nuevas cuotas, 0 pagadas, y desde el mes elegido
+    db().execute('UPDATE detalle_items SET cuota=?, pagadas=0, total=?, start_month=? WHERE id=?',
+                 (nueva_cuota, nuevas, start, iid))
     db().commit()
     return jsonify(ok=True, cuota=nueva_cuota, saldo=saldo)
 
 
 @app.post('/api/detalle/abonar')
 def detalle_abonar():
-    """Abona (paga por adelantado) N cuotas de una línea fija del desglose:
-    sube 'pagadas' (las cuotas pagadas), de modo que esas cuotas desaparecen."""
+    """Abona un MONTO en pesos a una línea de cuotas del desglose. El abono se acumula
+    en 'abonado_fijo' (reutilizada como capital abonado) y reduce el saldo como un banco:
+    baja el saldo total y acorta las cuotas que faltan. (Compat: acepta 'cuotas_pagadas'.)"""
     j = request.json
     iid = int(j['id'])
-    n = max(1, int(j.get('cuotas_pagadas', 1)))
     row = db().execute('SELECT * FROM detalle_items WHERE id=?', (iid,)).fetchone()
     if not row:
         return jsonify(error='no encontrado'), 404
     it = dict(row)
     total = it['total'] or 0
-    nuevas_pagadas = min((it['pagadas'] or 0) + n, total)
-    db().execute('UPDATE detalle_items SET pagadas=? WHERE id=?', (nuevas_pagadas, iid))
+    cuota = it['cuota'] or 0
+    saldoTotal = cuota * total
+    yaAbonado = it.get('abonado_fijo') or 0
+    if 'monto' in j:
+        monto = to_int(j.get('monto'))
+    else:
+        monto = cuota * max(1, int(j.get('cuotas_pagadas', 1)))
+    if monto <= 0:
+        return jsonify(error='Enter an amount greater than 0'), 400
+    nuevoAbonado = min(yaAbonado + monto, saldoTotal)
+    if nuevoAbonado >= saldoTotal:
+        # saldado del todo: marcar todas las cuotas como pagadas (desaparece del desglose)
+        db().execute('UPDATE detalle_items SET pagadas=?, abonado_fijo=? WHERE id=?', (total, nuevoAbonado, iid))
+    else:
+        db().execute('UPDATE detalle_items SET abonado_fijo=? WHERE id=?', (nuevoAbonado, iid))
     db().commit()
-    return jsonify(ok=True)
+    return jsonify(ok=True, saldo=max(saldoTotal - nuevoAbonado, 0))
 
 
 @app.delete('/api/detalle/<int:i>')
@@ -1478,23 +1557,29 @@ def detalle_abonar_fijo():
 
 @app.post('/api/extra_debt/abonar')
 def extra_debt_abonar():
-    """Abona N cuotas de una deuda registrada: baja cuotas y total. Si llega a 0, la borra."""
+    """Abona un MONTO en pesos a una deuda registrada: baja el total. Si llega a 0, la borra.
+    (Compatibilidad: si llega 'cuotas_pagadas' en vez de 'monto', lo convierte a monto = cuota * n.)"""
     j = request.json
     did = int(j['id'])
-    n = max(1, int(j.get('cuotas_pagadas', 1)))
     d = db().execute('SELECT * FROM extra_debts WHERE id=?', (did,)).fetchone()
     if not d:
         return jsonify(error='no encontrado'), 404
     d = dict(d)
-    cuota = d['cuota'] or (round(d['total'] / d['cuotas']) if d['cuotas'] else 0)
-    nuevas = (d['cuotas'] or 0) - n
-    if nuevas <= 0:
+    saldo = max((d['total'] or 0) - (d.get('abonado') or 0), 0)
+    if 'monto' in j:
+        monto = min(to_int(j.get('monto')), saldo)
+    else:
+        cuota = d['cuota'] or (round(d['total'] / d['cuotas']) if d['cuotas'] else 0)
+        monto = min(cuota * max(1, int(j.get('cuotas_pagadas', 1))), saldo)
+    if monto <= 0:
+        return jsonify(error='Enter an amount greater than 0'), 400
+    nuevo_abonado = (d.get('abonado') or 0) + monto
+    if nuevo_abonado >= (d['total'] or 0):
         db().execute('DELETE FROM extra_debts WHERE id=?', (did,))
     else:
-        nuevo_total = max((d['total'] or 0) - cuota * n, 0)
-        db().execute('UPDATE extra_debts SET cuotas=?, total=? WHERE id=?', (nuevas, nuevo_total, did))
+        db().execute('UPDATE extra_debts SET abonado=? WHERE id=?', (nuevo_abonado, did))
     db().commit()
-    return jsonify(ok=True)
+    return jsonify(ok=True, saldo=max((d['total'] or 0) - nuevo_abonado, 0))
 
 
 @app.post('/api/creditor/redefer')
@@ -1593,24 +1678,30 @@ def compra_del(i):
 
 @app.post('/api/compra/abonar')
 def compra_abonar():
-    """Abona (paga por adelantado) N cuotas de una compra: baja el número de cuotas
-    y el valor en N cuotas. Si quedan 0, borra la compra. Reduce la deuda del boss."""
+    """Abona un MONTO en pesos a una compra a cuotas: registra el abono. Cuando el abono
+    cubre el valor, borra la compra. Reduce la deuda del boss (compradoEn resta 'abonado').
+    (Compat: si llega 'cuotas_pagadas', lo traduce a monto = cuota * n.)"""
     j = request.json
     cid = int(j['id'])
-    n = max(1, int(j.get('cuotas_pagadas', 1)))
     c = db().execute('SELECT * FROM compras WHERE id=?', (cid,)).fetchone()
     if not c:
         return jsonify(error='no encontrado'), 404
     c = dict(c)
-    cuota = round(c['valor'] / c['cuotas']) if c['cuotas'] else 0
-    nuevas = c['cuotas'] - n
-    if nuevas <= 0:
+    saldo = max((c['valor'] or 0) - (c.get('abonado') or 0), 0)
+    if 'monto' in j:
+        monto = min(to_int(j.get('monto')), saldo)
+    else:
+        cuota = round(c['valor'] / c['cuotas']) if c['cuotas'] else 0
+        monto = min(cuota * max(1, int(j.get('cuotas_pagadas', 1))), saldo)
+    if monto <= 0:
+        return jsonify(error='Enter an amount greater than 0'), 400
+    nuevo_abonado = (c.get('abonado') or 0) + monto
+    if nuevo_abonado >= (c['valor'] or 0):
         db().execute('DELETE FROM compras WHERE id=?', (cid,))   # pagada por completo
     else:
-        nuevo_valor = max(c['valor'] - cuota * n, 0)
-        db().execute('UPDATE compras SET cuotas=?, valor=? WHERE id=?', (nuevas, nuevo_valor, cid))
+        db().execute('UPDATE compras SET abonado=? WHERE id=?', (nuevo_abonado, cid))
     db().commit()
-    return jsonify(ok=True)
+    return jsonify(ok=True, saldo=max((c['valor'] or 0) - nuevo_abonado, 0))
 
 
 @app.delete('/api/dream/<int:i>')
