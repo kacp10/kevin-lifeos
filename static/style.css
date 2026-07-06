@@ -307,6 +307,7 @@ tr.pending td:first-child { box-shadow: inset 3px 0 0 var(--mut); }
   background: linear-gradient(160deg, #221c40, var(--panel));
   border: 1px solid var(--line); border-radius: 18px; padding: 26px;
   width: min(440px, 90vw); box-shadow: 0 30px 80px rgba(0,0,0,.5);
+  max-height: 90vh; overflow-y: auto;   /* modales altos (ej. medidas) hacen scroll y no tapan los botones */
   transform: translateY(20px) scale(.96); opacity: 0;
   transition: transform .3s cubic-bezier(.22,1,.36,1), opacity .3s ease;
 }
@@ -1199,3 +1200,25 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
   background: var(--gold, #ffd15c); color: #2a1e05; border-radius: 9px;
   font-size: .72rem; font-weight: 800; vertical-align: middle;
 }
+
+/* gráfica de progreso del gym: contenedor de altura fija (evita que crezca descontrolada) */
+.gym-chart-wrap { position: relative; height: 240px; width: 100%; }
+.gym-chart-wrap canvas { width: 100% !important; height: 100% !important; }
+
+/* etiqueta de abono adelantado en el desglose */
+.prepaid { color: var(--ok, #34d399); font-weight: 700; margin-left: 4px; }
+
+/* botón de pago en cada tarjeta del panel */
+.card-pay-btn {
+  width: 100%; margin-top: 10px; background: var(--ok, #34d399); color: #062a22;
+  border: none; border-radius: 10px; padding: 9px; font-weight: 800; cursor: pointer; font-size: .85rem;
+}
+.card-pay-btn:hover { filter: brightness(1.08); }
+.card-clear { margin-top: 10px; text-align: center; color: var(--ok, #34d399); font-weight: 700; font-size: .85rem; }
+
+/* desglose y tarjetas: cuota del mes ya pagada (por el check de Debt payments) */
+.paid-month { font-size: .7rem; background: var(--ok, #34d399); color: #062a22; padding: 1px 7px; border-radius: 7px; font-weight: 800; margin-left: 6px; }
+.paid-chip { color: var(--ok, #34d399); font-weight: 800; font-size: .82rem; }
+.row-paid { opacity: .6; }
+.row-paid td:first-child { text-decoration: line-through; text-decoration-color: rgba(255,255,255,.3); }
+details.grp-paid > summary { color: var(--ok, #34d399); }

@@ -86,14 +86,37 @@ const CRED_TO_GRUPO = { 'Joseph (cuota)': 'Joseph' };
 const cuotaDe = (c) => Math.round(c.valor / c.cuotas);
 const compraActiva = (c, i) => i >= c.start && i < c.start + c.cuotas;
 const extraCuota = (cred, i) => S.compras
-  .filter(c => c.creditor === cred && compraActiva(c, i))
-  .reduce((s, c) => s + cuotaDe(c), 0);
+  .filter(c => c.creditor === cred)
+  .reduce((s, c) => {
+    const cuotaBase = cuotaDe(c);
+    const cuotasQuedan = cuotaBase > 0 ? Math.ceil(Math.max(c.valor - (c.abonado || 0), 0) / cuotaBase) : 0;
+    // ¿el mes i cae dentro de las cuotas que aún se deben?
+    return (i >= c.start && (i - c.start) < cuotasQuedan) ? s + cuotaBase : s;
+  }, 0);
 const extraDebtCuota = (i) => (S.extra_debts || [])
   .filter(d => d.cuotas >= 1 && i >= d.start && i < d.start + d.cuotas)
   .reduce((s, d) => s + d.cuota, 0);
 const compradoEn = (debtName) => S.compras
   .filter(c => (CRED_TO_DEBT[c.creditor] || c.creditor) === debtName)
-  .reduce((s, c) => s + c.valor, 0);
+  .reduce((s, c) => s + c.valor - (c.abonado || 0), 0);
+
+// Suma de abonos hechos a líneas del DESGLOSE ORIGINAL (detalle_items) cuyo grupo es un jefe.
+// Estas líneas ya están dentro del 'initial' del jefe, así que su abono = daño a ese jefe.
+function abonoDetalleDeUnJefe(debtName) {
+  let s = 0;
+  for (const [g, items] of Object.entries(S.detalle || {})) {
+    const jefe = CRED_TO_GRUPO[g] || g;
+    if (jefe !== debtName && g !== debtName) continue;
+    for (const it of items) {
+      // formato: [nombre,cuota,pagadas,total,fijo,id,abonado_fijo,start_month]
+      s += (it[6] || 0);
+    }
+  }
+  return s;
+}
+function abonoDetalleDeJefes() {
+  return S.debts.reduce((s, d) => s + abonoDetalleDeUnJefe(d.name), 0);
+}
 
 const monthKey = (i) => {                     // índice del plan -> 'AAAA-MM'
   const t = 6 + i;                            // mes 0 del plan = julio 2026
@@ -208,7 +231,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 75;
+const FRONT_V = 79;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -870,8 +893,13 @@ function renderGym() {
      <div class="gym-goal-row"><span>💪 Physical goal</span><b>${g.goal ? esc(g.goal) : 'Lower body fat · abs back · athletic, defined look'}</b></div>
      ${g.baseline ? `<div class="gym-goal-row"><span>📍 Starting point (fixed)</span><b>${MEASURES.map(m => g.baseline[m.key] != null ? `${g.baseline[m.key]}${m.unit}` : null).filter(Boolean).join(' · ')} <button class="link-like" id="gymBaselineEdit">✎</button></b></div>` : ''}`;
 
-  // gráfica
-  renderGymChart(entries);
+  // gráfica: el baseline (punto de partida fijo) va como primer punto de la línea,
+  // así con UNA sola medida ya se ve la tendencia desde el inicio.
+  let serie = entries.slice();
+  if (g.baseline && g.baseline.date && !serie.some(e => e.date === g.baseline.date)) {
+    serie = [g.baseline, ...serie].sort((a, b) => (a.date < b.date ? -1 : 1));
+  }
+  renderGymChart(serie);
 
   // medidas última vs inicio (el inicio SIEMPRE es el baseline fijo, nunca se sobreescribe)
   const mBox = document.getElementById('gymMeasures');
@@ -2187,9 +2215,10 @@ function renderMyCards() {
   cont.innerHTML = MIS_TARJETAS.map(t => {
     const bd = (S.debts || []).find(d => d.name === t.boss);
     const comprado = bd ? compradoEn(bd.name) : 0;
-    let totalCard = bd ? bd.initial + comprado : 0;       // deuda total histórica
-    let pagado = bd ? bd.abonado : 0;
-    let saldo = Math.max(totalCard - pagado, 0);
+    const abonDet = bd ? abonoDetalleDeUnJefe(bd.name) : 0;   // abonos hechos en el desglose original
+    let totalCard = bd ? bd.initial + comprado : 0;          // deuda total histórica
+    let pagado = bd ? bd.abonado + abonDet : 0;              // pagado = abono al jefe + abonos del desglose
+    let saldo = Math.max(totalCard - (bd ? bd.abonado : 0) - abonDet, 0);
     if (t.key === 'Tarjeta DV') {                          // Davivienda: capital real amortizado
       const st = amortState();
       totalCard = st.A.capital; saldo = st.saldoCapital; pagado = Math.max(totalCard - saldo, 0);
@@ -2199,6 +2228,10 @@ function renderMyCards() {
     const usoPct = cupo ? Math.min((saldo / cupo) * 100, 100) : 0;
     const pagoPct = totalCard ? Math.min((pagado / totalCard) * 100, 100) : 0;
     const pagoMes = cuotaPlanMes(t.creditor, MES) + extraCuota(t.creditor, MES);
+    // ¿la cuota de este mes ya está marcada como pagada en "Debt payments"?
+    const mkCard = monthKey(MES);
+    const checksSet = new Set(S.checks || []);
+    const cuotaPagadaMes = checksSet.has(`${t.boss}|${mkCard}`) || checksSet.has(`${t.creditor}|${mkCard}`);
     return `<div class="card-box">
       <div class="row-between">
         <span class="card-name">${t.label}
@@ -2209,8 +2242,9 @@ function renderMyCards() {
         <div><label>You owe now</label><b class="owe">${fmt(saldo)}</b></div>
         <div><label>Available</label><b class="avail">${cupo ? fmt(disponible) : '—'}</b></div>
         <div><label>Paid so far</label><b class="paid">${fmt(pagado)}</b></div>
-        <div><label>${nombreMes || 'This month'}</label><b>${pagoMes ? fmt(pagoMes) : '—'}</b></div>
+        <div><label>${nombreMes || 'This month'}</label><b>${cuotaPagadaMes ? '<span class="paid-chip">✓ paid</span>' : (pagoMes ? fmt(pagoMes) : '—')}</b></div>
       </div>
+      ${saldo > 0 ? `<button class="card-pay-btn" data-boss="${esc(t.boss)}" data-creditor="${esc(t.creditor)}" data-saldo="${saldo}">💵 Pay this card</button>` : '<div class="card-clear">✅ Fully paid</div>'}
       ${cupo
         ? `<div class="card-bar"><i style="width:${usoPct}%"></i></div><small>${Math.round(usoPct)}% of your limit used</small>`
         : `<div class="card-bar paid"><i style="width:${pagoPct}%"></i></div><small>${Math.round(pagoPct)}% paid off · set your limit to see available room</small>`}
@@ -2218,15 +2252,29 @@ function renderMyCards() {
   }).join('');
 }
 function renderBoss(animate) {
-  const init = S.debts.reduce((s, d) => s + d.initial + compradoEn(d.name), 0)
-    + (S.extra_debts || []).reduce((s, d) => s + d.total, 0);
+  // init = deuda BRUTA original (sin restar abonos). Suma: base de cada jefe + compras brutas + extra brutos.
+  const comprasBrutas = (S.compras || []).reduce((s, c) => {
+    const dn = CRED_TO_DEBT[c.creditor] || c.creditor;
+    return S.debts.some(d => d.name === dn) ? s + (c.valor || 0) : s;   // solo compras atadas a un jefe
+  }, 0);
+  const init = S.debts.reduce((s, d) => s + d.initial, 0)
+    + comprasBrutas
+    + (S.extra_debts || []).reduce((s, d) => s + (d.total || 0), 0);
+  // dmg = TODO lo pagado: abono directo al jefe + abonos a compras + abonos a extra_debts
+  //       + abonos hechos a líneas del DESGLOSE ORIGINAL (detalle_items) que pertenecen a un jefe.
+  const abonoCompras = (S.compras || []).reduce((s, c) => {
+    const dn = CRED_TO_DEBT[c.creditor] || c.creditor;
+    return S.debts.some(d => d.name === dn) ? s + (c.abonado || 0) : s;
+  }, 0);
+  const abonoDetalle = abonoDetalleDeJefes();     // abonos a líneas del desglose atadas a un jefe
   const dmg = S.debts.reduce((s, d) => s + d.abonado, 0)
+    + abonoCompras + abonoDetalle
     + (S.extra_debts || []).reduce((s, d) => s + (d.abonado || 0), 0);
-  const rest = init - dmg;
+  const rest = Math.max(init - dmg, 0);
   animateNumber($('#bossInit'), init);
   animateNumber($('#bossDmg'), dmg);
   animateNumber($('#bossRest'), rest);
-  animateWidth($('#bossHp'), (rest / init) * 100);
+  animateWidth($('#bossHp'), init ? (rest / init) * 100 : 0);
 
   const sel = $('#abonoDebt');
   const optsCore = S.debts
@@ -2422,6 +2470,30 @@ document.addEventListener('click', async (e) => {
   load();
 });
 
+// 💵 Pagar/abonar a una tarjeta (reparte: primero compras, luego deuda base — como un banco)
+document.addEventListener('click', async (e) => {
+  const pb = e.target.closest('.card-pay-btn');
+  if (!pb) return;
+  const boss = pb.dataset.boss, creditor = pb.dataset.creditor, saldo = +pb.dataset.saldo || 0;
+  if (boss === 'Tarjeta DV — Jefe Final') {
+    toast('For Davivienda use the payoff tracker below (it uses real amortization).');
+    return;
+  }
+  const r = await modal({ icon: '💵', title: 'Pay this card',
+    text: `<b>${esc(boss)}</b> · balance ${fmt(saldo)}.<br><br>How much are you paying? It goes to your oldest installments first, then to the card's base debt — and shows up everywhere (card, boss, breakdown).`,
+    fields: [{ type: 'money', placeholder: `Amount (max ${fmt(saldo)})`, value: '' }],
+    okText: 'Pay it', extraBtn: `Pay full ${fmt(saldo)}` });
+  if (r === null) return;
+  let monto;
+  if (r === 'EXTRA') monto = saldo;
+  else monto = +String(r[0] || '').replace(/[^0-9]/g, '') || 0;
+  if (monto <= 0) { toast('Enter an amount greater than 0, or use “Pay full”.'); return; }
+  monto = Math.min(monto, saldo);
+  await api('/api/card/pay', { body: { boss, creditor, monto } });
+  toast(monto >= saldo ? `✅ ${esc(boss)} fully paid!` : `💵 Paid ${fmt(monto)} to ${esc(boss)} — balance is now ${fmt(saldo - monto)}.`);
+  load();
+});
+
 // ===== Botones del tracker de Davivienda =====
 document.addEventListener('click', async (e) => {
   if (e.target.id === 'amortExtra') {
@@ -2469,26 +2541,51 @@ document.addEventListener('click', async (e) => {
 
 /* ---------- DESGLOSE ---------- */
 function calcItem(it, i) {
-  const [nombre, cuota, pagadas, total, fijo, detId, abonadoFijo] = it;
+  const [nombre, cuota, pagadas, total, fijo, detId, abonadoFijo, startMonth] = it;
   if (total == null) {                       // cargo fijo o saldo libre
     const ab = abonadoFijo || 0;
     const saldo = Math.max((fijo || 0) - ab, 0);
-    // done cuando ya se abonó todo (solo aplica a líneas con saldo real > 0 originalmente)
     const done = (fijo || 0) > 0 && saldo <= 0;
     return { label: nombre, cuota, saldo, done,
              fijoPay: (fijo || 0) > 0 && detId ? { id: detId, saldo } : null };
   }
-  const num = pagadas + i + 1;               // cuota que se paga en el mes elegido
+  // mes de inicio: si se redefinió para empezar en un mes futuro, aún no corre
+  const sm = (startMonth != null && startMonth >= 0) ? startMonth : null;
+  if (sm != null && i < sm) {
+    return { label: `${nombre} · starts ${(S.plan && S.plan.months && S.plan.months[sm]) || 'later'}`, cuota: 0,
+             saldo: cuota * total, done: false,
+             redefer: detId ? { type: 'detalle', id: detId, cuotas: total } : null };
+  }
+  // la cuota que se paga en el mes elegido: si hay start_month, se cuenta desde ahí
+  const num = (sm != null) ? (i - sm + 1) : (pagadas + i + 1);
   if (num > total) {
     return { label: nombre, cuota: 0, saldo: 0, done: true };
   }
-  return { label: `${nombre} · installment ${num}/${total}`, cuota,
-           saldo: cuota * (total - num), done: false,
+  // abono parcial (en pesos) guardado en abonadoFijo: reduce el saldo como un banco
+  const abon = abonadoFijo || 0;
+  const transcurridas = Math.max(num - 1, 0);
+  const saldoBruto = cuota * (total - transcurridas);
+  const saldo = Math.max(saldoBruto - abon, 0);
+  if (saldo <= 0) return { label: nombre, cuota: 0, saldo: 0, done: true };
+  return { label: `${nombre} · installment ${num}/${total}`
+             + (abon > 0 ? ` <small class="prepaid">💵 −${fmt(abon)}</small>` : ''),
+           cuota: Math.min(cuota, saldo), saldo, done: false,
            redefer: detId ? { type: 'detalle', id: detId, cuotas: total } : null };
 }
 
 function renderDesglose() {
   const i = MES;
+  const mkActual = monthKey(i);
+  const checksMes = new Set(S.checks || []);
+  const grupoPagadoEsteMes = (g) => {
+    for (const key of checksMes) {
+      const [item, mm] = key.split('|');
+      if (mm !== mkActual) continue;
+      if (item === g || g.includes(item) || item.includes(g) ||
+          (CRED_TO_GRUPO[item] || item) === g) return true;
+    }
+    return false;
+  };
   const filas = {};
   for (const [g, items] of Object.entries(S.detalle)) {
     filas[g] = items.map(it => calcItem(it, i));
@@ -2511,14 +2608,18 @@ function renderDesglose() {
     const g = '☠ ' + d.name;
     if (d.cuotas >= 1) {
       const num = i - d.start + 1;
-      const pagadas = Math.min(Math.max(num, 0), d.cuotas);
-      const activa = num >= 1 && num <= d.cuotas;
+      const abon = d.abonado || 0;
+      const transcurridas = Math.max(num - 1, 0);
+      const saldoBruto = Math.max(d.total - d.cuota * transcurridas, 0);
+      const saldo = Math.max(saldoBruto - abon, 0);
+      const activa = num >= 1 && saldo > 0;
       filas[g] = [{
-        label: activa ? `Cuota ${num}/${d.cuotas}` : `${d.cuotas} cuotas desde ${S.plan.months[d.start] || '—'}`,
-        cuota: activa ? d.cuota : 0,
-        saldo: Math.max(d.total - d.cuota * pagadas, 0),
-        done: num > d.cuotas,
-        redefer: num <= d.cuotas ? { type: 'extra_debt', id: d.id, cuotas: d.cuotas } : null
+        label: (activa ? `Cuota ${num}/${d.cuotas}` : `${d.cuotas} cuotas desde ${S.plan.months[d.start] || '—'}`)
+          + (abon > 0 ? ` <small class="prepaid">💵 −${fmt(abon)}</small>` : ''),
+        cuota: activa ? Math.min(d.cuota, saldo) : 0,
+        saldo,
+        done: saldo <= 0,
+        redefer: saldo > 0 ? { type: 'extra_debt', id: d.id, cuotas: d.cuotas } : null
       }];
     } else {
       const restante = Math.max(d.total - (d.abonado || 0), 0);
@@ -2527,15 +2628,25 @@ function renderDesglose() {
   }
   for (const c of S.compras) {
     const g = CRED_TO_GRUPO[c.creditor] || c.creditor;
-    const num = i - c.start + 1;             // cuota de la compra en el mes elegido
-    const pagadas = Math.min(Math.max(num, 0), c.cuotas);
-    const activa = num >= 1 && num <= c.cuotas;
+    const cuotaBase = cuotaDe(c);                              // cuota mensual original
+    const abonado = c.abonado || 0;
+    const num = i - c.start + 1;                              // qué cuota toca en el mes elegido
+    // cuotas de plan ya transcurridas hasta este mes (lo normal que ya se habría pagado)
+    const transcurridas = Math.min(Math.max(num - 1, 0), c.cuotas);
+    // saldo pendiente HOY = valor − abono − cuotas ya transcurridas
+    const saldo = Math.max(c.valor - abonado - cuotaBase * transcurridas, 0);
+    if (saldo <= 0) continue;                                 // saldado: no aparece
+    // como un banco: el abono acorta el nº de cuotas que faltan (mantiene la cuota)
+    const cuotasQuedan = cuotaBase > 0 ? Math.ceil(saldo / cuotaBase) : 0;
+    const totalQuedan = transcurridas + cuotasQuedan;         // para etiqueta "x/total"
+    const activa = num >= 1 && num <= totalQuedan;
     (filas[g] = filas[g] || []).push({
-      label: `💳 ${c.concepto}` + (activa ? ` · installment ${num}/${c.cuotas}` : ` (${c.cuotas} cuotas desde ${S.plan.months[c.start]})`),
-      cuota: activa ? cuotaDe(c) : 0,
-      saldo: Math.max(c.valor - cuotaDe(c) * pagadas, 0),
-      done: num > c.cuotas,
-      redefer: num <= c.cuotas ? { type: 'compra', id: c.id, cuotas: c.cuotas } : null
+      label: `💳 ${c.concepto}` + (activa ? ` · installment ${num}/${totalQuedan}` : ` (${cuotasQuedan} cuotas desde ${S.plan.months[c.start]})`)
+        + (abonado > 0 ? ` <small class="prepaid">💵 −${fmt(abonado)}</small>` : ''),
+      cuota: activa ? Math.min(cuotaBase, saldo) : 0,
+      saldo,
+      done: num > totalQuedan,
+      redefer: num <= totalQuedan ? { type: 'compra', id: c.id, cuotas: c.cuotas } : null
     });
   }
   let total = 0;
@@ -2546,12 +2657,17 @@ function renderDesglose() {
     const saldo = vivos.reduce((s, it) => s + it.saldo, 0);
     if (vivos.length === 0) return '';            // grupo completamente derrotado -> fuera
     if (!grupo.startsWith('Nómina')) total += saldo;
-    return `<details><summary><span>${grupo}</span>
+    // El check de "Debt payments" SOLO marca visualmente que la cuota del mes ya se pagó.
+    // NO descuenta del saldo (el desglose ya avanza solo / el abono lo hace bajar).
+    const pagadoEsteMes = grupoPagadoEsteMes(grupo);
+    const paidTag = pagadoEsteMes ? ' <span class="paid-month">✓ paid this month</span>' : '';
+    return `<details${pagadoEsteMes ? ' class="grp-paid"' : ''}><summary><span>${grupo}${paidTag}</span>
       <span class="sum-val">${saldo ? fmt(saldo) : 'cargos fijos'}</span></summary>
       <table class="table">
       <tr><th>Item</th><th>This month</th><th>Balance after paying</th></tr>` +
-      vivos.map(it =>
-        `<tr><td>${it.label}${it.redefer
+      vivos.map(it => {
+        const filaPagada = pagadoEsteMes && it.cuota > 0;   // cuota del mes ya pagada (visual)
+        return `<tr class="${filaPagada ? 'row-paid' : ''}"><td>${it.label}${it.redefer
             ? ` <button class="redefer-btn mini" data-type="${it.redefer.type}" data-id="${it.redefer.id}" data-cuotas="${it.redefer.cuotas}" title="Reschedule">🔄</button>`
               + ` <button class="cuota-btn" data-act="abonar" data-rtype="${it.redefer.type}" data-id="${it.redefer.id}" title="Pay installments in advance">💵</button>`
               + ` <button class="del-x" data-type="${it.redefer.type === 'extra_debt' ? 'debt_extra' : it.redefer.type}" data-id="${it.redefer.id}" title="Remove this line">✕</button>`
@@ -2559,8 +2675,9 @@ function renderDesglose() {
               ? ` <button class="fijo-pay-btn" data-id="${it.fijoPay.id}" data-saldo="${it.fijoPay.saldo}" title="Pay this loan (full or partial)">💵 Pay</button>`
                 + ` <button class="del-x" data-type="detalle" data-id="${it.fijoPay.id}" title="Remove this line">✕</button>`
               : '')}</td>
-           <td class="num">${it.cuota ? fmt(it.cuota) : '—'}</td>
-           <td class="num">${it.saldo ? fmt(it.saldo) : '—'}</td></tr>`).join('') +
+           <td class="num">${filaPagada ? '<span class="paid-chip">✓ paid</span>' : (it.cuota ? fmt(it.cuota) : '—')}</td>
+           <td class="num">${it.saldo ? fmt(it.saldo) : '—'}</td></tr>`;
+      }).join('') +
       '</table>' +
       (grupoRedefer[grupo] && grupoRedefer[grupo].type === 'creditor'
         ? `<button class="btn-ghost redefer-btn" data-type="creditor" data-name="${grupoRedefer[grupo].name}" style="margin:8px 0">🔄 Reschedule the whole ${grupo}</button>`
@@ -3738,28 +3855,34 @@ document.addEventListener('click', async (e) => {
   const ab = e.target.closest('.cuota-btn[data-act="abonar"]');
   if (ab) {
     const rtype = ab.dataset.rtype, id = +ab.dataset.id;
-    let nombre, maxN, cuota, endpoint;
+    let nombre, saldo, endpoint;
     if (rtype === 'compra') {
       const c = (S.compras || []).find(x => x.id === id); if (!c) return;
-      nombre = c.concepto; maxN = c.cuotas; cuota = Math.round(c.valor / c.cuotas); endpoint = '/api/compra/abonar';
+      const cuota = Math.round(c.valor / c.cuotas);
+      nombre = c.concepto; saldo = cuota * c.cuotas - (c.abonado || 0); endpoint = '/api/compra/abonar';
     } else if (rtype === 'extra_debt') {
       const d = (S.extra_debts || []).find(x => x.id === id); if (!d) return;
-      nombre = d.name; maxN = d.cuotas; cuota = d.cuota; endpoint = '/api/extra_debt/abonar';
+      nombre = d.name; saldo = (d.total || 0) - (d.abonado || 0); endpoint = '/api/extra_debt/abonar';
     } else if (rtype === 'detalle') {
       let found = null;
       for (const items of Object.values(S.detalle || {})) { const m = items.find(it => it[5] === id); if (m) { found = m; break; } }
       if (!found) return;
-      nombre = found[0]; cuota = found[1]; maxN = (found[3] || 0) - (found[2] || 0); endpoint = '/api/detalle/abonar';
+      const cuota = found[1], restantes = (found[3] || 0) - (found[2] || 0);
+      nombre = found[0]; saldo = cuota * restantes; endpoint = '/api/detalle/abonar';
     } else return;
-    if (!(maxN >= 1)) { toast('This line has no installments left to pay down.'); return; }
-    const r = await modal({ icon: '💵', title: 'Pay installments in advance',
-      text: `<b>${esc(nombre)}</b> · ${maxN} installment(s) left of ${fmt(cuota)}.<br><br>How many do you want to pay off now? Each one removes a future installment — like a bank prepayment.`,
-      fields: [{ type: 'number', placeholder: 'How many', value: 1, min: 1, max: maxN }],
-      okText: 'Pay it down' });
-    if (!r || !r[0]) return;
-    const n = Math.max(1, Math.min(maxN, +r[0]));
-    await api(endpoint, { body: { id, cuotas_pagadas: n } });
-    toast(n >= maxN ? '✅ Fully paid — those installments are gone.' : `💵 Paid ${n} installment(s) — debt reduced.`);
+    if (!(saldo > 0)) { toast('This line is already paid off.'); return; }
+    const r = await modal({ icon: '💵', title: 'Pay down this debt',
+      text: `<b>${esc(nombre)}</b> · balance ${fmt(saldo)}.<br><br>How much do you want to pay now? It lowers the balance by that amount — like a bank prepayment. Type the full balance to clear it.`,
+      fields: [{ type: 'money', placeholder: `Amount (max ${fmt(saldo)})`, value: '' }],
+      okText: 'Pay it down', extraBtn: `Pay full ${fmt(saldo)}` });
+    if (r === null) return;
+    let monto;
+    if (r === 'EXTRA') monto = saldo;
+    else { monto = +String(r[0] || '').replace(/[^0-9]/g, '') || 0; }
+    if (monto <= 0) { toast('Enter an amount greater than 0, or use “Pay full”.'); return; }
+    monto = Math.min(monto, saldo);
+    await api(endpoint, { body: { id, monto } });
+    toast(monto >= saldo ? '✅ Fully paid — this debt is gone.' : `💵 Paid ${fmt(monto)} — balance is now ${fmt(saldo - monto)}.`);
     load();
     return;
   }
@@ -3824,7 +3947,7 @@ document.addEventListener('click', async (e) => {
     body = { id: +btn.dataset.id, cuotas: nuevas, start, pagadas, monto };
   } else if (tipo === 'detalle') {
     endpoint = '/api/detalle/redefer';
-    body = { id: +btn.dataset.id, cuotas: nuevas, monto };
+    body = { id: +btn.dataset.id, cuotas: nuevas, start, monto };
   } else {
     endpoint = '/api/creditor/redefer';
     body = { name: btn.dataset.name, cuotas: nuevas, start, monto };
