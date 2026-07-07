@@ -231,7 +231,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 85;
+const FRONT_V = 86;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -2564,10 +2564,12 @@ function calcItem(it, i, opts = {}) {
   }
   // ── CUÁNTAS CUOTAS YA "PASARON" ──
   // Nómina: avanza SOLA con el mes (se descuenta del sueldo sí o sí).
-  // Todo lo demás: avanza SOLO por lo que pagaste con check (no por ver otro mes).
+  // Todo lo demás: parte del progreso original (pagadas del seed) + lo que pagues con check.
+  //                NO avanza solo por ver otro mes.
+  const pagadasBase = pagadas || 0;            // cuotas que ya venían pagadas (punto de partida)
   const transcurridas = esNomina
-    ? Math.max((sm != null ? (i - sm + 1) : (pagadas + i + 1)) - 1, 0)
-    : Math.min(pagados, total);
+    ? Math.max((sm != null ? (i - sm + 1) : (pagadasBase + i + 1)) - 1, 0)
+    : Math.min(pagadasBase + pagados, total);
   const num = transcurridas + 1;             // la cuota "actual" a pagar
   if (transcurridas >= total) {
     return { label: nombre, cuota: 0, saldo: 0, done: true };
