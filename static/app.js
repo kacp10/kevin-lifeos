@@ -231,7 +231,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 79;
+const FRONT_V = 85;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1486,7 +1486,7 @@ function renderInicio() {
     .map(([n, arr]) => [n, cuotaPlanMes(n, i) + extraCuota(n, i), extraCuota(n, i)])
     .filter(d => d[1] > 0);
   (S.extra_debts || []).filter(d => d.cuotas >= 1 && i >= d.start && i < d.start + d.cuotas)
-    .forEach(d => deudas.push([d.name + ' (registrada)', d.cuota, 0]));
+    .forEach(d => deudas.push([d.name + ' (registrada)', d.cuota, 0, 'extra:' + d.id]));
   // deudas libres con fecha de pago prometida que caen en el mes seleccionado
   const mesSel = p.months[i];
   (S.extra_debts || []).filter(d => !(d.cuotas >= 1) && d.due_date)
@@ -2070,6 +2070,10 @@ document.addEventListener('click', async (e) => {
   const vivasAntes = snapshotDeudasVivas();
   await api('/api/check', { body });
   await load();
+  // feedback claro cuando el check de una deuda (jefe o registrada) abona de verdad
+  if (!estabaMarcado && (c.dataset.debt || c.dataset.extra) && (body.valor > 0)) {
+    toast(`💥 ${fmt(body.valor)} paid — debt reduced.`);
+  }
   // si marcó una deuda (principal o prometida) y la derrotó, animar
   if ((c.dataset.debt || c.dataset.extra) && !estabaMarcado) {
     const dn = CRED_TO_DEBT[c.dataset.item] || c.dataset.item.replace(' (promised)', '').replace(' (registrada)', '');
@@ -2540,8 +2544,10 @@ document.addEventListener('click', async (e) => {
 });
 
 /* ---------- DESGLOSE ---------- */
-function calcItem(it, i) {
+function calcItem(it, i, opts = {}) {
   const [nombre, cuota, pagadas, total, fijo, detId, abonadoFijo, startMonth] = it;
+  const esNomina = !!opts.esNomina;
+  const pagados = opts.pagados || 0;   // cuántas cuotas de este grupo se han pagado con check
   if (total == null) {                       // cargo fijo o saldo libre
     const ab = abonadoFijo || 0;
     const saldo = Math.max((fijo || 0) - ab, 0);
@@ -2556,14 +2562,18 @@ function calcItem(it, i) {
              saldo: cuota * total, done: false,
              redefer: detId ? { type: 'detalle', id: detId, cuotas: total } : null };
   }
-  // la cuota que se paga en el mes elegido: si hay start_month, se cuenta desde ahí
-  const num = (sm != null) ? (i - sm + 1) : (pagadas + i + 1);
-  if (num > total) {
+  // ── CUÁNTAS CUOTAS YA "PASARON" ──
+  // Nómina: avanza SOLA con el mes (se descuenta del sueldo sí o sí).
+  // Todo lo demás: avanza SOLO por lo que pagaste con check (no por ver otro mes).
+  const transcurridas = esNomina
+    ? Math.max((sm != null ? (i - sm + 1) : (pagadas + i + 1)) - 1, 0)
+    : Math.min(pagados, total);
+  const num = transcurridas + 1;             // la cuota "actual" a pagar
+  if (transcurridas >= total) {
     return { label: nombre, cuota: 0, saldo: 0, done: true };
   }
   // abono parcial (en pesos) guardado en abonadoFijo: reduce el saldo como un banco
   const abon = abonadoFijo || 0;
-  const transcurridas = Math.max(num - 1, 0);
   const saldoBruto = cuota * (total - transcurridas);
   const saldo = Math.max(saldoBruto - abon, 0);
   if (saldo <= 0) return { label: nombre, cuota: 0, saldo: 0, done: true };
@@ -2577,18 +2587,41 @@ function renderDesglose() {
   const i = MES;
   const mkActual = monthKey(i);
   const checksMes = new Set(S.checks || []);
+  // Grupos que SÍ pueden marcarse "paid this month": solo cuotas reales
+  // (tarjetas, créditos del plan, y deudas registradas CON cuotas). Nunca deudas sin cuotas.
+  const gruposConCuota = new Set();
+  Object.keys((S.plan && S.plan.creditors) || {}).forEach(cn => gruposConCuota.add(cn));
+  (S.extra_debts || []).forEach(d => { if (d.cuotas >= 1) gruposConCuota.add('☠ ' + d.name); gruposConCuota.add(d.name); });
   const grupoPagadoEsteMes = (g) => {
+    // el grupo debe ser de cuotas, y su check del mes debe existir
     for (const key of checksMes) {
       const [item, mm] = key.split('|');
       if (mm !== mkActual) continue;
-      if (item === g || g.includes(item) || item.includes(g) ||
-          (CRED_TO_GRUPO[item] || item) === g) return true;
+      const itemBase = item.replace(' (registrada)', '').replace(' (promised)', '');
+      // coincidencia estricta: el check corresponde a este grupo de cuotas
+      const coincide = (item === g) || (itemBase === g) ||
+                       ((CRED_TO_GRUPO[itemBase] || itemBase) === g) ||
+                       (g === '☠ ' + itemBase);
+      if (coincide && (gruposConCuota.has(g) || gruposConCuota.has(itemBase))) return true;
     }
     return false;
   };
   const filas = {};
+  // ¿cuántas cuotas de este grupo se han PAGADO con check? (cuenta todos los meses marcados)
+  // El desglose avanza por PAGOS, no por el mes que se ve — salvo Nómina, que baja sola.
+  const checksPagadosDeGrupo = (g) => {
+    let n = 0;
+    for (const key of (S.checks || [])) {
+      const [item] = key.split('|');
+      const itemBase = item.replace(' (registrada)', '').replace(' (promised)', '');
+      if (item === g || itemBase === g || (CRED_TO_GRUPO[itemBase] || itemBase) === g || g === '☠ ' + itemBase) n++;
+    }
+    return n;
+  };
   for (const [g, items] of Object.entries(S.detalle)) {
-    filas[g] = items.map(it => calcItem(it, i));
+    const esNomina = g.startsWith('Nómina') || g.startsWith('Nomina');
+    const pagados = checksPagadosDeGrupo(g);
+    filas[g] = items.map(it => calcItem(it, i, { esNomina, pagados }));
   }
   if (filas['Tarjeta DV']) filas['Tarjeta DV'] = amortRowsMes(i);   // Davivienda = amortización (avanza sola)
   const grupoRedefer = {};   // grupo -> {type, id/name} para el botón de rediferir
@@ -2607,12 +2640,13 @@ function renderDesglose() {
   for (const d of (S.extra_debts || [])) {
     const g = '☠ ' + d.name;
     if (d.cuotas >= 1) {
-      const num = i - d.start + 1;
       const abon = d.abonado || 0;
-      const transcurridas = Math.max(num - 1, 0);
-      const saldoBruto = Math.max(d.total - d.cuota * transcurridas, 0);
-      const saldo = Math.max(saldoBruto - abon, 0);
-      const activa = num >= 1 && saldo > 0;
+      // avanza SOLO por lo pagado (abonado), NO por el mes que se ve.
+      // cuotas ya cubiertas = cuánto se ha abonado / valor de la cuota
+      const cuotasPagadas = d.cuota > 0 ? Math.floor(abon / d.cuota) : 0;
+      const num = Math.min(cuotasPagadas + 1, d.cuotas);   // la cuota actual a pagar
+      const saldo = Math.max(d.total - abon, 0);
+      const activa = saldo > 0;
       filas[g] = [{
         label: (activa ? `Cuota ${num}/${d.cuotas}` : `${d.cuotas} cuotas desde ${S.plan.months[d.start] || '—'}`)
           + (abon > 0 ? ` <small class="prepaid">💵 −${fmt(abon)}</small>` : ''),
