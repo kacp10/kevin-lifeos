@@ -15,7 +15,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 86  # debe coincidir con FRONT_V en static/app.js
+VERSION = 96  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -85,6 +85,137 @@ def close_db(_=None):
     d = g.pop('db', None)
     if d is not None:
         d.close()
+
+
+def _consolidar_v2(con):
+    """Traduce las 5 fuentes viejas de deuda al modelo único (debts_v2 + payments),
+    preservando exactamente los valores actuales. Idempotente: borra y reconstruye
+    debts_v2/payments en cada arranque desde las tablas viejas (fuente durante Fase 1-2).
+
+    PRINCIPIO ANTI-DOBLE-CONTEO (clave):
+      El 'detalle_items' es la VISTA CANÓNICA de la deuda. Cada línea del detalle = 1 deuda v2.
+      Un jefe (tabla debts) cuyo initial YA está descompuesto en su detalle NO entra como deuda
+      propia (se contaría doble). El jefe solo aporta sus ABONOS directos (pagos).
+      - Jefe con grupo de detalle homónimo (o vía CRED_TO_DEBT)  -> NO crea deuda base
+      - Préstamo individual que también es línea de 'Préstamos personales' -> NO crea deuda base
+      - Jefe SIN representación en el detalle -> sí entra con su initial
+    """
+    CRED_TO_DEBT = {'Tarjeta DV': 'Tarjeta DV — Jefe Final', 'Joseph (cuota)': 'Joseph'}
+    # inverso: nombre de jefe -> grupo de detalle que lo representa
+    DEBT_TO_GRUPO = {v: k for k, v in CRED_TO_DEBT.items()}
+
+    con.execute('DELETE FROM payments')
+    con.execute('DELETE FROM debts_v2')
+
+    def nueva_deuda(nombre, grupo, tipo, valor_total, num_cuotas, cuota,
+                    mes_inicio=-1, nomina=0, origen='', origen_id=0):
+        con.execute(
+            '''INSERT INTO debts_v2 (nombre, grupo, tipo, valor_total, num_cuotas, cuota,
+               mes_inicio, nomina, activa, origen, origen_id)
+               VALUES (?,?,?,?,?,?,?,?,1,?,?)''',
+            (nombre, grupo, tipo, valor_total, num_cuotas, cuota, mes_inicio, nomina, origen, origen_id))
+        row = con.execute('SELECT id FROM debts_v2 WHERE origen=? AND origen_id=? ORDER BY id DESC',
+                          (origen, origen_id)).fetchone()
+        return dict(row)['id']
+
+    def pago(debt_id, monto, mes='', tipo='cuota', fecha='', nota=''):
+        if monto and monto > 0:
+            con.execute('INSERT INTO payments (debt_id, mes, monto, tipo, fecha, nota) VALUES (?,?,?,?,?,?)',
+                        (debt_id, mes, int(monto), tipo, fecha or date.today().isoformat(), nota))
+
+    # ── Conjuntos para decidir qué jefes NO deben entrar como deuda propia ──
+    grupos_detalle = set(
+        dict(r)['grupo'] for r in con.execute('SELECT DISTINCT grupo FROM detalle_items').fetchall())
+    # nombres de líneas dentro de "Préstamos personales" (para no duplicar los jefes-préstamo sueltos)
+    lineas_prestamos = set()
+    for it in con.execute("SELECT nombre FROM detalle_items WHERE grupo='Préstamos personales'").fetchall():
+        nom = dict(it)['nombre']
+        # normalizar: "Estiven 1 (con interés...)" -> "Estiven", "Angie (interés..)" -> "Angie"
+        base = nom.split('(')[0].strip()
+        base = ''.join(ch for ch in base if not ch.isdigit()).strip()
+        lineas_prestamos.add(base)
+
+    def jefe_esta_en_detalle(nombre):
+        # ¿este jefe ya está representado en el detalle (directo, por mapeo, o como préstamo)?
+        if nombre in grupos_detalle:
+            return True
+        if DEBT_TO_GRUPO.get(nombre) in grupos_detalle:   # ej. 'Tarjeta DV — Jefe Final' -> 'Tarjeta DV'
+            return True
+        base = ''.join(ch for ch in nombre if not ch.isdigit()).strip()
+        if base in lineas_prestamos or nombre in lineas_prestamos:
+            return True
+        return False
+
+    # 1) DEBTS (jefes): entran con su initial SOLO si NO están representados en el detalle.
+    #    Si el jefe YA vive en el detalle, TODOS sus pagos (abonos directos, abonos de check,
+    #    abonos con nota detalle:ID) ya están reflejados en 'pagadas'/'abonado_fijo' de sus líneas.
+    #    Por eso NO creamos ninguna deuda "(abonos)" para él: contarla otra vez inflaba el pago
+    #    y producía saldos negativos. Solo los jefes SIN detalle entran con su initial + abonos.
+    for d in con.execute('SELECT * FROM debts').fetchall():
+        d = dict(d)
+        en_detalle = jefe_esta_en_detalle(d['name'])
+        if en_detalle:
+            continue   # su deuda y sus pagos ya viven completos en el detalle
+        did = nueva_deuda(d['name'], d['name'], 'libre', d['initial'] or 0, 0, 0,
+                          origen='debts', origen_id=d['id'])
+        for ab in con.execute('SELECT * FROM abonos WHERE debt_id=?', (d['id'],)).fetchall():
+            ab = dict(ab)
+            pago(did, ab['valor'], mes=(ab.get('fecha') or '')[:7], tipo='capital',
+                 fecha=ab.get('fecha') or '', nota=ab.get('nota') or 'abono')
+
+    # 2) DETALLE_ITEMS (VISTA CANÓNICA): una deuda v2 por línea
+    for it in con.execute('SELECT * FROM detalle_items ORDER BY orden, id').fetchall():
+        it = dict(it)
+        grupo = it['grupo']
+        es_nomina = 1 if (grupo or '').lower().startswith('nómina') or (grupo or '').lower().startswith('nomina') else 0
+        total = it['total'] or 0
+        cuota = it['cuota'] or 0
+        fijo = it['fijo'] or 0
+        if total > 0 and cuota > 0:
+            valor_total = cuota * total
+            did = nueva_deuda(it['nombre'], grupo, 'cuotas', valor_total, total, cuota,
+                              mes_inicio=(it.get('start_month') if it.get('start_month') is not None else -1),
+                              nomina=es_nomina, origen='detalle', origen_id=it['id'])
+            for _k in range(it['pagadas'] or 0):
+                pago(did, cuota, tipo='cuota', nota='seed:pagada')
+            if it.get('abonado_fijo'):
+                pago(did, it['abonado_fijo'], tipo='capital', nota='abono')
+        else:
+            valor_total = fijo or 0
+            did = nueva_deuda(it['nombre'], grupo, 'fijo', valor_total, 0, 0,
+                              nomina=es_nomina, origen='detalle', origen_id=it['id'])
+            if it.get('abonado_fijo'):
+                pago(did, it['abonado_fijo'], tipo='capital', nota='abono')
+
+    # 3) EXTRA_DEBTS (deudas registradas por Kevin) — nunca están en el detalle, entran siempre
+    for d in con.execute('SELECT * FROM extra_debts').fetchall():
+        d = dict(d)
+        tipo = 'cuotas' if (d['cuotas'] or 0) >= 1 else 'libre'
+        did = nueva_deuda(d['name'], '☠ ' + d['name'], tipo, d['total'] or 0,
+                          d['cuotas'] or 0, d['cuota'] or 0,
+                          mes_inicio=(d.get('start') if d.get('start') is not None else -1),
+                          origen='extra', origen_id=d['id'])
+        if d.get('abonado'):
+            pago(did, d['abonado'], tipo='capital', nota='abono')
+        for ab in con.execute(
+                "SELECT * FROM abonos WHERE nota=? OR nota LIKE ?",
+                (f"extra:{d['id']}", f"extracheck:{d['id']}:%")).fetchall():
+            ab = dict(ab)
+            pago(did, ab['valor'], mes=(ab.get('fecha') or '')[:7], tipo='cuota',
+                 fecha=ab.get('fecha') or '', nota='check')
+
+    # 4) COMPRAS (compras a cuotas nuevas): son deuda ADICIONAL a la tarjeta (no están en el detalle)
+    for cmp in con.execute('SELECT * FROM compras ORDER BY id').fetchall():
+        cmp = dict(cmp)
+        grupo = CRED_TO_DEBT.get(cmp['creditor'], cmp['creditor'])
+        cuotas = cmp['cuotas'] or 0
+        valor = cmp['valor'] or 0
+        cuota = round(valor / cuotas) if cuotas else 0
+        did = nueva_deuda(cmp['concepto'], grupo, 'cuotas', valor, cuotas, cuota,
+                          mes_inicio=(cmp.get('start') if cmp.get('start') is not None else -1),
+                          origen='compra', origen_id=cmp['id'])
+        if cmp.get('abonado'):
+            pago(did, cmp['abonado'], tipo='capital', nota='abono')
 
 
 def init_db():
@@ -515,6 +646,56 @@ def init_db():
             pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('detalle_start_v1','1')")
         con.commit()
+    # ── FIX abonos viejos "atrapados": cuando abonado_fijo cubre cuotas completas pero
+    #    'pagadas' no avanzó (bug anterior). Convierte esos abonos en cuotas pagadas y crea
+    #    el abono al jefe, para que salgan pagados y le peguen al boss. Idempotente por clave. ──
+    if not con.execute("SELECT 1 FROM config WHERE key='detalle_abono_migra_v1'").fetchone():
+        GRUPO_TO_DEBT = {'Tarjeta DV': 'Tarjeta DV — Jefe Final'}
+        for it in con.execute("SELECT * FROM detalle_items WHERE abonado_fijo>0 AND total>0 AND cuota>0").fetchall():
+            it = dict(it)
+            cuota = it['cuota']; total = it['total']; pagadas = it['pagadas'] or 0
+            abon = it['abonado_fijo'] or 0
+            if cuota <= 0:
+                continue
+            cuotasCubiertas = min(abon // cuota, total - pagadas)
+            if cuotasCubiertas >= 1:
+                sobrante = abon - cuotasCubiertas * cuota
+                nuevasPagadas = pagadas + cuotasCubiertas
+                if nuevasPagadas >= total:
+                    con.execute("UPDATE detalle_items SET pagadas=?, abonado_fijo=0 WHERE id=?", (total, it['id']))
+                else:
+                    con.execute("UPDATE detalle_items SET pagadas=?, abonado_fijo=? WHERE id=?",
+                                (nuevasPagadas, sobrante, it['id']))
+                # abono al jefe por lo que cubrió cuotas (para el boss/historial), si no existía ya
+                jefe_name = GRUPO_TO_DEBT.get(it['grupo'], it['grupo'])
+                jefe = con.execute("SELECT id FROM debts WHERE name=?", (jefe_name,)).fetchone()
+                if jefe:
+                    jid = dict(jefe)['id']
+                    ya = con.execute("SELECT 1 FROM abonos WHERE nota=?", (f"detalle:{it['id']}",)).fetchone()
+                    if not ya:
+                        con.execute("INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)",
+                                    (jid, date.today().isoformat(), cuotasCubiertas * cuota, f"detalle:{it['id']}"))
+        con.execute("INSERT OR IGNORE INTO config VALUES ('detalle_abono_migra_v1','1')")
+        con.commit()
+        print('  + abonos parciales viejos convertidos a cuotas pagadas')
+    # ════════════════════════════════════════════════════════════════
+    # ARQUITECTURA v2: Single Source of Truth (debts_v2 + payments)
+    # Estas tablas conviven con las viejas durante la transición (Fase 1).
+    # NO se borra nada viejo aquí: solo se CONSTRUYE el modelo nuevo en paralelo.
+    # ════════════════════════════════════════════════════════════════
+    con.execute('''CREATE TABLE IF NOT EXISTS debts_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT, grupo TEXT, tipo TEXT DEFAULT 'cuotas',
+        valor_total INTEGER DEFAULT 0, num_cuotas INTEGER DEFAULT 0,
+        cuota INTEGER DEFAULT 0, mes_inicio INTEGER DEFAULT -1,
+        nomina INTEGER DEFAULT 0, activa INTEGER DEFAULT 1,
+        origen TEXT DEFAULT '', origen_id INTEGER DEFAULT 0)''')
+    con.execute('''CREATE TABLE IF NOT EXISTS payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        debt_id INTEGER, mes TEXT DEFAULT '', monto INTEGER DEFAULT 0,
+        tipo TEXT DEFAULT 'cuota', fecha TEXT DEFAULT '', nota TEXT DEFAULT '',
+        FOREIGN KEY(debt_id) REFERENCES debts_v2(id))''')
+    con.commit()
     if not con.execute("SELECT 1 FROM config WHERE key='detalle_v1'").fetchone():
         with open(os.path.join(BASE, 'seed_data.json'), encoding='utf-8') as f:
             _sd = json.load(f)
@@ -568,6 +749,12 @@ def init_db():
         con.execute("INSERT OR IGNORE INTO config VALUES ('services_v1','1')")
         con.commit()
         print('  + servicios editables activados')
+    # ── CONSOLIDACIÓN v2 (al final: todas las tablas viejas ya están pobladas) ──
+    # Reconstruye debts_v2 + payments desde las 5 fuentes viejas, preservando exacto.
+    # Idempotente: se re-ejecuta cada arranque durante la transición (Fase 1-2).
+    _consolidar_v2(con)
+    con.commit()
+    print('  + modelo financiero v2 consolidado (Single Source of Truth)')
     # Postgres: resincronizar contadores SERIAL para que los INSERT nuevos no choquen
     if db_layer.IS_PG and hasattr(con, 'fix_sequences'):
         con.fix_sequences()
@@ -739,6 +926,129 @@ def _aplicar_aportes_fondo(d):
         except Exception:
             pass
 
+@app.get('/api/v2check')
+def v2check():
+    """DIAGNÓSTICO (no cambia nada visible): compara el motor VIEJO vs el motor v2
+    sobre la base de datos REAL, para validar equivalencia antes de conmutar.
+    Devuelve HTML legible en el navegador: /api/v2check"""
+    d = db()
+    CRED_TO_DEBT = {'Tarjeta DV': 'Tarjeta DV — Jefe Final', 'Joseph (cuota)': 'Joseph'}
+
+    # ── SALDO VIEJO por grupo (como lo calcula renderDesglose en app.js) ──
+    def saldo_viejo_grupo(grupo):
+        s = 0
+        for it in d.execute("SELECT * FROM detalle_items WHERE grupo=?", (grupo,)).fetchall():
+            it = dict(it)
+            if (it['total'] or 0) > 0 and (it['cuota'] or 0) > 0:
+                trans = it['pagadas'] or 0
+                s += max(it['cuota'] * (it['total'] - trans) - (it['abonado_fijo'] or 0), 0)
+            else:
+                s += max((it['fijo'] or 0) - (it['abonado_fijo'] or 0), 0)
+        return s
+
+    # ── SALDO V2 por grupo (Σ por deuda de max(valor_total - pagos, 0)) ──
+    def saldo_v2_grupo(grupo):
+        s = 0
+        for db2 in d.execute("SELECT * FROM debts_v2 WHERE grupo=?", (grupo,)).fetchall():
+            db2 = dict(db2)
+            r = d.execute("SELECT COALESCE(SUM(monto),0) s FROM payments WHERE debt_id=?", (db2['id'],)).fetchone()
+            s += max(db2['valor_total'] - dict(r)['s'], 0)   # una deuda nunca resta por debajo de 0
+        return s
+
+    grupos = sorted(set(dict(r)['grupo'] for r in d.execute("SELECT DISTINCT grupo FROM detalle_items").fetchall()))
+    filas = []
+    tot_v = tot_2 = 0
+    for g in grupos:
+        sv = saldo_viejo_grupo(g); s2 = saldo_v2_grupo(g)
+        tot_v += sv; tot_2 += s2
+        ok = '✅' if sv == s2 else f'❌ dif {s2 - sv:,}'
+        filas.append(f"<tr><td>{g}</td><td style='text-align:right'>${sv:,}</td>"
+                     f"<td style='text-align:right'>${s2:,}</td><td>{ok}</td></tr>")
+
+    # extra_debts (deudas registradas) — no están en detalle, se listan aparte
+    extra_rows = []
+    for ed in d.execute("SELECT * FROM extra_debts").fetchall():
+        ed = dict(ed)
+        pgv = d.execute("SELECT COALESCE(SUM(valor),0) s FROM abonos WHERE nota=? OR nota LIKE ?",
+                        (f"extra:{ed['id']}", f"extracheck:{ed['id']}:%")).fetchone()
+        pagado = dict(pgv)['s'] + (ed.get('abonado') or 0)
+        saldo_v = max((ed['total'] or 0) - pagado, 0)
+        db2 = d.execute("SELECT id FROM debts_v2 WHERE origen='extra' AND origen_id=?", (ed['id'],)).fetchone()
+        s2 = 0
+        if db2:
+            db2 = dict(db2)
+            r = d.execute("SELECT COALESCE(SUM(monto),0) s FROM payments WHERE debt_id=?", (db2['id'],)).fetchone()
+            vt = d.execute("SELECT valor_total FROM debts_v2 WHERE id=?", (db2['id'],)).fetchone()
+            s2 = max(dict(vt)['valor_total'] - dict(r)['s'], 0)
+        tot_v += saldo_v; tot_2 += s2
+        ok = '✅' if saldo_v == s2 else f'❌ dif {s2 - saldo_v:,}'
+        extra_rows.append(f"<tr><td>☠ {ed['name']}</td><td style='text-align:right'>${saldo_v:,}</td>"
+                          f"<td style='text-align:right'>${s2:,}</td><td>{ok}</td></tr>")
+
+    total_ok = '✅ CUADRAN' if tot_v == tot_2 else f'❌ diferencia ${tot_2 - tot_v:,}'
+    n_deudas_v2 = dict(d.execute("SELECT COUNT(*) c FROM debts_v2").fetchone())['c']
+    n_pagos_v2 = dict(d.execute("SELECT COUNT(*) c FROM payments").fetchone())['c']
+
+    # ── DRILL-DOWN: para cada grupo con ❌, mostrar sus líneas viejas y sus deudas v2 con pagos ──
+    grupos_mal = [g for g in grupos if saldo_viejo_grupo(g) != saldo_v2_grupo(g)]
+    drill = ''
+    for g in grupos_mal:
+        drill += f"<h2>🔎 {g}</h2>"
+        # lado viejo: líneas del detalle
+        drill += "<b style='color:#9aa;font-size:.85rem'>Detalle viejo (línea: cuota×restantes − abonado_fijo)</b><table>"
+        for it in d.execute("SELECT * FROM detalle_items WHERE grupo=? ORDER BY orden,id", (g,)).fetchall():
+            it = dict(it)
+            if (it['total'] or 0) > 0 and (it['cuota'] or 0) > 0:
+                trans = it['pagadas'] or 0
+                sv_l = max(it['cuota'] * (it['total'] - trans) - (it['abonado_fijo'] or 0), 0)
+                desc = f"cuota ${it['cuota']:,} × ({it['total']}−{trans} pagadas) − abonado ${it['abonado_fijo'] or 0:,}"
+            else:
+                sv_l = max((it['fijo'] or 0) - (it['abonado_fijo'] or 0), 0)
+                desc = f"fijo ${it['fijo'] or 0:,} − abonado ${it['abonado_fijo'] or 0:,}"
+            drill += f"<tr><td>{it['nombre']}</td><td style='color:#9aa;font-size:.8rem'>{desc}</td><td style='text-align:right'>${sv_l:,}</td></tr>"
+        drill += "</table>"
+        # lado v2: deudas y sus pagos
+        drill += "<b style='color:#9aa;font-size:.85rem'>Deudas v2 (valor_total − Σpagos)</b><table>"
+        for db2 in d.execute("SELECT * FROM debts_v2 WHERE grupo=? ORDER BY id", (g,)).fetchall():
+            db2 = dict(db2)
+            pagos = [dict(p) for p in d.execute("SELECT monto,tipo,nota FROM payments WHERE debt_id=?", (db2['id'],)).fetchall()]
+            sp = sum(p['monto'] for p in pagos)
+            sv_l = db2['valor_total'] - sp
+            pgtxt = ' + '.join(f"${p['monto']:,}({p['tipo']}/{p['nota']})" for p in pagos) or '—'
+            drill += (f"<tr><td>{db2['nombre']}<br><span style='color:#9aa;font-size:.75rem'>{db2['origen']} · pagos: {pgtxt}</span></td>"
+                      f"<td style='text-align:right'>${sv_l:,}</td></tr>")
+        drill += "</table>"
+
+    html = f"""<!doctype html><html><head><meta charset=utf-8>
+    <title>v2 check</title><style>
+    body{{font-family:system-ui;background:#0f1115;color:#e6e6e6;padding:24px;max-width:820px;margin:auto}}
+    table{{width:100%;border-collapse:collapse;margin:10px 0}}
+    td,th{{padding:7px 9px;border-bottom:1px solid #262a33;vertical-align:top}}
+    th{{text-align:left;color:#9aa}}
+    h1{{font-size:1.3rem}} h2{{font-size:1rem;color:#cbd;margin-top:22px}}
+    .big{{font-size:1.15rem;font-weight:800}} .ok{{color:#34d399}} .bad{{color:#f87171}}
+    code{{background:#1a1d24;padding:2px 6px;border-radius:5px}}
+    </style></head><body>
+    <h1>🔍 Diagnóstico motor v2 vs viejo</h1>
+    <p>Comparación sobre <b>tu base de datos real</b>. Si todo sale ✅, el motor nuevo
+    deriva exactamente los mismos saldos que ves hoy.</p>
+    <p>Modelo v2: <code>{n_deudas_v2}</code> deudas · <code>{n_pagos_v2}</code> pagos registrados.</p>
+    <h2>Saldo por grupo (desglose)</h2>
+    <table><tr><th>Grupo</th><th style='text-align:right'>Viejo</th>
+    <th style='text-align:right'>v2</th><th>¿Igual?</th></tr>
+    {''.join(filas)}
+    {('<tr><td colspan=4 style="color:#9aa;padding-top:14px">Deudas registradas</td></tr>' + ''.join(extra_rows)) if extra_rows else ''}
+    </table>
+    <h2>Total</h2>
+    <p class=big>Viejo: <b>${tot_v:,}</b> &nbsp;·&nbsp; v2: <b>${tot_2:,}</b></p>
+    <p class="big {'ok' if tot_v==tot_2 else 'bad'}">{total_ok}</p>
+    {('<hr style="border-color:#262a33;margin:24px 0"><h1>Detalle de los grupos que NO cuadran</h1>' + drill) if drill else ''}
+    <p style='color:#9aa;font-size:.85rem;margin-top:20px'>Este endpoint es solo lectura y no modifica nada.
+    El sistema que usas sigue siendo el viejo; v2 corre en paralelo.</p>
+    </body></html>"""
+    return html
+
+
 @app.get('/api/state')
 def state():
     d = db()
@@ -760,18 +1070,23 @@ def state():
         '''SELECT a.id, a.fecha, a.valor, a.nota FROM abonos a
            WHERE a.debt_id IS NULL AND a.nota != '' ORDER BY a.id DESC LIMIT 30''').fetchall():
         r = dict(r)
-        # extraer el id de la deuda registrada de la nota
+        # extraer el nombre según el tipo de nota
         nota = r['nota'] or ''
-        ed_id = None
-        if nota.startswith('extra:'):
-            ed_id = nota.split(':')[1]
-        elif nota.startswith('extracheck:'):
-            ed_id = nota.split(':')[1]
         nombre = '?'
-        if ed_id:
-            row = d.execute('SELECT name FROM extra_debts WHERE id=?', (int(ed_id),)).fetchone()
-            if row:
-                nombre = dict(row)['name']
+        if nota.startswith('compra:'):
+            # nota = compra:ID:Concepto  -> ataque a una compra a cuotas (ej. Internet)
+            partes = nota.split(':', 2)
+            nombre = partes[2] if len(partes) > 2 else 'Compra'
+        else:
+            ed_id = None
+            if nota.startswith('extra:'):
+                ed_id = nota.split(':')[1]
+            elif nota.startswith('extracheck:'):
+                ed_id = nota.split(':')[1]
+            if ed_id:
+                row = d.execute('SELECT name FROM extra_debts WHERE id=?', (int(ed_id),)).fetchone()
+                if row:
+                    nombre = dict(row)['name']
         abonos_extra.append({'id': r['id'], 'fecha': r['fecha'], 'valor': r['valor'], 'name': nombre})
     abonos = sorted(abonos_core + abonos_extra, key=lambda a: a['id'], reverse=True)[:30]
     habits = [dict(r) for r in d.execute('SELECT * FROM habits')]
@@ -1502,9 +1817,12 @@ def detalle_redefer():
 
 @app.post('/api/detalle/abonar')
 def detalle_abonar():
-    """Abona un MONTO en pesos a una línea de cuotas del desglose. El abono se acumula
-    en 'abonado_fijo' (reutilizada como capital abonado) y reduce el saldo como un banco:
-    baja el saldo total y acorta las cuotas que faltan. (Compat: acepta 'cuotas_pagadas'.)"""
+    """Abona un MONTO en pesos a una línea de cuotas del desglose.
+    Regla (como banco / como dar check en Home):
+      - cada vez que el abono cubre el valor de una cuota, se marca 1 cuota como pagada
+        (pagadas += 1) → la cuota sale 'paid', baja del total del mes y le pega al jefe.
+      - el sobrante que no completa otra cuota se guarda como capital (abonado_fijo) y
+        acorta el plazo. (Compat: acepta 'cuotas_pagadas'.)"""
     j = request.json
     iid = int(j['id'])
     row = db().execute('SELECT * FROM detalle_items WHERE id=?', (iid,)).fetchone()
@@ -1513,22 +1831,50 @@ def detalle_abonar():
     it = dict(row)
     total = it['total'] or 0
     cuota = it['cuota'] or 0
-    saldoTotal = cuota * total
+    pagadas = it['pagadas'] or 0
     yaAbonado = it.get('abonado_fijo') or 0
+    saldoTotal = cuota * total
     if 'monto' in j:
         monto = to_int(j.get('monto'))
     else:
         monto = cuota * max(1, int(j.get('cuotas_pagadas', 1)))
     if monto <= 0:
         return jsonify(error='Enter an amount greater than 0'), 400
-    nuevoAbonado = min(yaAbonado + monto, saldoTotal)
-    if nuevoAbonado >= saldoTotal:
-        # saldado del todo: marcar todas las cuotas como pagadas (desaparece del desglose)
-        db().execute('UPDATE detalle_items SET pagadas=?, abonado_fijo=? WHERE id=?', (total, nuevoAbonado, iid))
+
+    # cuánto queda pendiente hoy (cuotas por pagar + capital ya abonado)
+    saldoActual = max(saldoTotal - cuota * pagadas - yaAbonado, 0)
+    aplicar = min(monto, saldoActual)     # no se puede abonar más de lo que se debe
+
+    # 1) el abono cubre cuotas completas -> avanzan como si fueran checks
+    cuotasNuevas = 0
+    sobrante = aplicar
+    if cuota > 0:
+        # capital ya guardado + este abono, ¿cuántas cuotas completas suma?
+        disponible = yaAbonado + aplicar
+        cuotasNuevas = min(disponible // cuota, total - pagadas)
+        sobrante = disponible - cuotasNuevas * cuota     # capital que queda tras cubrir cuotas
+    nuevasPagadas = pagadas + cuotasNuevas
+    nuevoAbonado = sobrante if cuota > 0 else (yaAbonado + aplicar)
+
+    if nuevasPagadas >= total:
+        # saldada del todo: desaparece del desglose
+        db().execute('UPDATE detalle_items SET pagadas=?, abonado_fijo=? WHERE id=?', (total, 0, iid))
     else:
-        db().execute('UPDATE detalle_items SET abonado_fijo=? WHERE id=?', (nuevoAbonado, iid))
+        db().execute('UPDATE detalle_items SET pagadas=?, abonado_fijo=? WHERE id=?',
+                     (nuevasPagadas, nuevoAbonado, iid))
+
+    # 2) el abono le pega al JEFE de esta tarjeta (para que baje el Boss y salga en historial)
+    #    grupo del detalle -> jefe en tabla debts (directo o por mapeo)
+    GRUPO_TO_DEBT = {'Tarjeta DV': 'Tarjeta DV — Jefe Final'}
+    jefe_name = GRUPO_TO_DEBT.get(it['grupo'], it['grupo'])
+    jefe = db().execute('SELECT id FROM debts WHERE name=?', (jefe_name,)).fetchone()
+    if jefe:
+        jid = dict(jefe)['id']
+        db().execute('INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
+                     (jid, date.today().isoformat(), aplicar, f'detalle:{iid}'))
     db().commit()
-    return jsonify(ok=True, saldo=max(saldoTotal - nuevoAbonado, 0))
+    nuevoSaldo = max(saldoTotal - cuota * nuevasPagadas - nuevoAbonado, 0)
+    return jsonify(ok=True, saldo=nuevoSaldo, cuotas_pagadas=cuotasNuevas)
 
 
 @app.delete('/api/detalle/<int:i>')
@@ -1693,30 +2039,42 @@ def compra_del(i):
 
 @app.post('/api/compra/abonar')
 def compra_abonar():
-    """Abona un MONTO en pesos a una compra a cuotas: registra el abono. Cuando el abono
-    cubre el valor, borra la compra. Reduce la deuda del boss (compradoEn resta 'abonado').
-    (Compat: si llega 'cuotas_pagadas', lo traduce a monto = cuota * n.)"""
+    """Abona un MONTO en pesos a una compra a cuotas.
+    Regla (como pediste): si el abono cubre el valor de una cuota, esa cuota cuenta como
+    pagada (baja del saldo y del mes); el sobrante va a capital. El abono le pega al Boss
+    (compradoEn resta 'abonado') y NO toca el check (ese sigue manual en Home).
+    Devuelve cuotas_pagadas para que la UI muestre 'installment paid'."""
     j = request.json
     cid = int(j['id'])
     c = db().execute('SELECT * FROM compras WHERE id=?', (cid,)).fetchone()
     if not c:
         return jsonify(error='no encontrado'), 404
     c = dict(c)
-    saldo = max((c['valor'] or 0) - (c.get('abonado') or 0), 0)
+    valor = c['valor'] or 0
+    cuotas = c['cuotas'] or 1
+    cuota = round(valor / cuotas) if cuotas else 0
+    yaAbonado = c.get('abonado') or 0
+    saldo = max(valor - yaAbonado, 0)
     if 'monto' in j:
         monto = min(to_int(j.get('monto')), saldo)
     else:
-        cuota = round(c['valor'] / c['cuotas']) if c['cuotas'] else 0
         monto = min(cuota * max(1, int(j.get('cuotas_pagadas', 1))), saldo)
     if monto <= 0:
         return jsonify(error='Enter an amount greater than 0'), 400
-    nuevo_abonado = (c.get('abonado') or 0) + monto
-    if nuevo_abonado >= (c['valor'] or 0):
+    nuevo_abonado = yaAbonado + monto
+    # ¿cuántas cuotas completas cubre este abono (para el mensaje/UI)?
+    cuotas_nuevas = 0
+    if cuota > 0:
+        cuotas_nuevas = (nuevo_abonado // cuota) - (yaAbonado // cuota)
+    if nuevo_abonado >= valor:
         db().execute('DELETE FROM compras WHERE id=?', (cid,))   # pagada por completo
     else:
         db().execute('UPDATE compras SET abonado=? WHERE id=?', (nuevo_abonado, cid))
+    # registrar el ataque en el HISTORIAL (debt_id=None: el boss ya lo cuenta vía 'abonado')
+    db().execute('INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
+                 (None, date.today().isoformat(), monto, f'compra:{cid}:{c["concepto"]}'))
     db().commit()
-    return jsonify(ok=True, saldo=max((c['valor'] or 0) - nuevo_abonado, 0))
+    return jsonify(ok=True, saldo=max(valor - nuevo_abonado, 0), cuotas_pagadas=int(cuotas_nuevas))
 
 
 @app.delete('/api/dream/<int:i>')
