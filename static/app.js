@@ -89,9 +89,17 @@ const extraCuota = (cred, i) => S.compras
   .filter(c => c.creditor === cred)
   .reduce((s, c) => {
     const cuotaBase = cuotaDe(c);
-    const cuotasQuedan = cuotaBase > 0 ? Math.ceil(Math.max(c.valor - (c.abonado || 0), 0) / cuotaBase) : 0;
-    // ¿el mes i cae dentro de las cuotas que aún se deben?
-    return (i >= c.start && (i - c.start) < cuotasQuedan) ? s + cuotaBase : s;
+    if (cuotaBase <= 0) return s;
+    const num = i - c.start + 1;                       // qué cuota corresponde al mes i
+    if (num < 1 || num > c.cuotas) return s;           // fuera del plan
+    const abonado = c.abonado || 0;
+    const cubiertas = Math.floor(abonado / cuotaBase); // cuotas YA pagadas con abonos (las primeras)
+    if (num <= cubiertas) return s;                    // esta cuota ya la pagaste -> no cobra este mes
+    if (num === cubiertas + 1) {                       // cuota parcialmente abonada -> cobra solo el resto
+      const parcial = abonado - cubiertas * cuotaBase;
+      return s + Math.max(cuotaBase - parcial, 0);
+    }
+    return s + cuotaBase;
   }, 0);
 const extraDebtCuota = (i) => (S.extra_debts || [])
   .filter(d => d.cuotas >= 1 && i >= d.start && i < d.start + d.cuotas)
@@ -231,7 +239,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 86;
+const FRONT_V = 96;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -2667,22 +2675,22 @@ function renderDesglose() {
     const cuotaBase = cuotaDe(c);                              // cuota mensual original
     const abonado = c.abonado || 0;
     const num = i - c.start + 1;                              // qué cuota toca en el mes elegido
-    // cuotas de plan ya transcurridas hasta este mes (lo normal que ya se habría pagado)
     const transcurridas = Math.min(Math.max(num - 1, 0), c.cuotas);
-    // saldo pendiente HOY = valor − abono − cuotas ya transcurridas
+    // cuotas cubiertas por el ABONO (pagos que hiciste), aparte de las del mes
+    const cuotasAbonadas = cuotaBase > 0 ? Math.floor(abonado / cuotaBase) : 0;
     const saldo = Math.max(c.valor - abonado - cuotaBase * transcurridas, 0);
     if (saldo <= 0) continue;                                 // saldado: no aparece
-    // como un banco: el abono acorta el nº de cuotas que faltan (mantiene la cuota)
     const cuotasQuedan = cuotaBase > 0 ? Math.ceil(saldo / cuotaBase) : 0;
-    const totalQuedan = transcurridas + cuotasQuedan;         // para etiqueta "x/total"
-    const activa = num >= 1 && num <= totalQuedan;
+    const pagadasTotal = transcurridas + cuotasAbonadas;      // cuotas ya cubiertas en total
+    const totalOrig = c.cuotas;
+    const activa = saldo > 0;
     (filas[g] = filas[g] || []).push({
-      label: `💳 ${c.concepto}` + (activa ? ` · installment ${num}/${totalQuedan}` : ` (${cuotasQuedan} cuotas desde ${S.plan.months[c.start]})`)
-        + (abonado > 0 ? ` <small class="prepaid">💵 −${fmt(abonado)}</small>` : ''),
+      label: `💳 ${c.concepto}` + (activa ? ` · installment ${Math.min(pagadasTotal + 1, totalOrig)}/${totalOrig}` : '')
+        + (cuotasAbonadas > 0 ? ` <small class="prepaid">✓ ${cuotasAbonadas} paid</small>` : ''),
       cuota: activa ? Math.min(cuotaBase, saldo) : 0,
       saldo,
-      done: num > totalQuedan,
-      redefer: num <= totalQuedan ? { type: 'compra', id: c.id, cuotas: c.cuotas } : null
+      done: saldo <= 0,
+      redefer: saldo > 0 ? { type: 'compra', id: c.id, cuotas: c.cuotas } : null
     });
   }
   let total = 0;
@@ -3904,21 +3912,31 @@ document.addEventListener('click', async (e) => {
       for (const items of Object.values(S.detalle || {})) { const m = items.find(it => it[5] === id); if (m) { found = m; break; } }
       if (!found) return;
       const cuota = found[1], restantes = (found[3] || 0) - (found[2] || 0);
-      nombre = found[0]; saldo = cuota * restantes; endpoint = '/api/detalle/abonar';
+      const abonadoFijo = found[6] || 0;               // capital ya abonado (no se ignora)
+      nombre = found[0]; saldo = Math.max(cuota * restantes - abonadoFijo, 0); endpoint = '/api/detalle/abonar';
     } else return;
     if (!(saldo > 0)) { toast('This line is already paid off.'); return; }
-    const r = await modal({ icon: '💵', title: 'Pay down this debt',
-      text: `<b>${esc(nombre)}</b> · balance ${fmt(saldo)}.<br><br>How much do you want to pay now? It lowers the balance by that amount — like a bank prepayment. Type the full balance to clear it.`,
+    // valor de UNA cuota (para el botón "Pagar cuota actual")
+    let cuotaActual = 0;
+    if (rtype === 'detalle') { const f = found; cuotaActual = Math.min(f[1] || 0, saldo); }
+    else if (rtype === 'compra') { const cc = (S.compras||[]).find(x=>x.id===id); cuotaActual = cc ? Math.min(Math.round(cc.valor/cc.cuotas), saldo) : 0; }
+    else if (rtype === 'extra_debt') { const dd = (S.extra_debts||[]).find(x=>x.id===id); cuotaActual = dd ? Math.min(dd.cuota||0, saldo) : 0; }
+    const r = await modal({ icon: '💵', title: 'Pay this installment',
+      text: `<b>${esc(nombre)}</b> · balance ${fmt(saldo)}.<br><br>Pay the current installment (${fmt(cuotaActual)}) to lower the balance, hit the boss and log it — or type another amount for a bigger prepayment. (The monthly check in Home stays manual.)`,
       fields: [{ type: 'money', placeholder: `Amount (max ${fmt(saldo)})`, value: '' }],
-      okText: 'Pay it down', extraBtn: `Pay full ${fmt(saldo)}` });
+      okText: 'Pay amount typed',
+      extraBtn: cuotaActual > 0 ? `Pay current installment ${fmt(cuotaActual)}` : `Pay full ${fmt(saldo)}` });
     if (r === null) return;
     let monto;
-    if (r === 'EXTRA') monto = saldo;
+    if (r === 'EXTRA') monto = cuotaActual > 0 ? cuotaActual : saldo;   // botón = pagar cuota actual
     else { monto = +String(r[0] || '').replace(/[^0-9]/g, '') || 0; }
-    if (monto <= 0) { toast('Enter an amount greater than 0, or use “Pay full”.'); return; }
+    if (monto <= 0) { toast('Enter an amount greater than 0, or tap “Pay current installment”.'); return; }
     monto = Math.min(monto, saldo);
-    await api(endpoint, { body: { id, monto } });
-    toast(monto >= saldo ? '✅ Fully paid — this debt is gone.' : `💵 Paid ${fmt(monto)} — balance is now ${fmt(saldo - monto)}.`);
+    const resp = await api(endpoint, { body: { id, monto } });
+    const cuotasPag = (resp && resp.cuotas_pagadas) || 0;
+    if (monto >= saldo) toast('✅ Fully paid — this debt is gone.');
+    else if (cuotasPag >= 1) toast(`✓ Installment paid! ${fmt(monto)} hit the boss. Balance now ${fmt(saldo - monto)}.`);
+    else toast(`💵 Paid ${fmt(monto)} to capital — balance now ${fmt(saldo - monto)}.`);
     load();
     return;
   }
