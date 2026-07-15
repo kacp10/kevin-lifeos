@@ -38,6 +38,7 @@
     <h1>🏠 Your month in numbers</h1>
     <div style="display:flex;gap:8px;align-items:center">
       <button class="btn-ghost" id="openShoppingBtn" title="Shopping & to-buy list">🛒 Shopping</button>
+      <button class="btn-ghost" id="openTodoBtn" title="To-do list — quick notes so you don't forget">📝 To-do</button>
       <select id="monthSel" class="month-select"></select>
     </div>
   </div>
@@ -136,6 +137,18 @@
     </form>
     <div id="shoppingList"></div>
     <div id="shoppingHistory"></div>
+  </div>
+  <div class="panel shopping-panel" id="todoPanel" style="display:none">
+    <div class="row-between">
+      <h2>📝 To-do list</h2>
+      <button class="btn-ghost" id="todoClearBtn" title="Remove checked items">Clear done</button>
+    </div>
+    <p class="hint">Your notepad for activities and things not to forget. Tap to cross out.</p>
+    <form id="todoNew" class="shop-form">
+      <input id="tdText" placeholder="What do you need to do? (e.g. Call the bank)" required>
+      <button class="btn-gold" type="submit">+ Add</button>
+    </form>
+    <div id="todoList"></div>
   </div>
 </section>
 
