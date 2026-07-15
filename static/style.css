@@ -1222,3 +1222,8 @@ select.a-edit { width: 100%; font-size: .74rem; padding: 4px 2px; }
 .row-paid { opacity: .6; }
 .row-paid td:first-child { text-decoration: line-through; text-decoration-color: rgba(255,255,255,.3); }
 details.grp-paid > summary { color: var(--ok, #34d399); }
+
+/* backdrop del panel To-do (mismo look que el de shopping) */
+#todoBackdrop { position: fixed; inset: 0; background: rgba(5,7,12,.66); backdrop-filter: blur(2px); z-index: 98; }
+#todoPanel.as-modal { position: fixed; top: 8vh; left: 50%; transform: translateX(-50%); width: min(560px, 92vw); max-height: 80vh; overflow: auto; z-index: 99; }
+.todo-check { background: none; border: none; font-size: 1.05rem; cursor: pointer; padding: 2px 6px; }

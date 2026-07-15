@@ -83,6 +83,11 @@ const planIndex = (d) => (d.getFullYear() - 2026) * 12 + d.getMonth() - 6;  // j
 const TARJETAS_CREDITO = ['Tarjeta DV — Jefe Final', 'ADDI', 'Crédito Nicole', 'Codensa', 'Banco de Bogotá', 'Tarjeta Nicole'];
 const CRED_TO_DEBT = { 'Tarjeta DV': 'Tarjeta DV — Jefe Final', 'Joseph (cuota)': 'Joseph' };
 const CRED_TO_GRUPO = { 'Joseph (cuota)': 'Joseph' };
+// Opciones "¿en qué mes empieza la primera cuota?" para los modales de compra a cuotas.
+// Evita que una compra de HOY se sume al mes que ya pagaste: tú eliges si arranca este mes o después.
+const mesInicioOpts = () => (S.plan.months || [])
+  .map((m, ix) => ({ v: String(ix), t: ix === MES ? `${m} (this month)` : m }))
+  .slice(MES, MES + 12);
 const cuotaDe = (c) => Math.round(c.valor / c.cuotas);
 const compraActiva = (c, i) => i >= c.start && i < c.start + c.cuotas;
 const extraCuota = (cred, i) => S.compras
@@ -239,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 96;
+const FRONT_V = 97;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1165,6 +1170,7 @@ async function load(animate) {
   renderFreedom();
   renderInicio();
   renderShopping();
+  renderTodos();
   renderBoss(animate);
   renderHabitos();
   renderSuenos();
@@ -1301,6 +1307,88 @@ function closeShoppingModal() {
 }
 document.getElementById('openShoppingBtn')?.addEventListener('click', openShoppingModal);
 
+/* ====== TO-DO LIST (bloc de notas de actividades) ====== */
+function openTodoModal() {
+  const panel = document.getElementById('todoPanel');
+  if (!panel) return;
+  if (!document.getElementById('todoBackdrop')) {
+    const bd = document.createElement('div');
+    bd.id = 'todoBackdrop';
+    bd.className = 'shop-backdrop-like';
+    bd.onclick = closeTodoModal;
+    document.body.appendChild(bd);
+  }
+  panel.classList.add('as-modal');
+  panel.style.display = 'block';
+  if (!panel.querySelector('.shop-modal-close')) {
+    const x = document.createElement('button');
+    x.className = 'shop-modal-close'; x.innerHTML = '✕'; x.title = 'Close';
+    x.onclick = closeTodoModal;
+    panel.prepend(x);
+  }
+}
+function closeTodoModal() {
+  const panel = document.getElementById('todoPanel');
+  const bd = document.getElementById('todoBackdrop');
+  if (panel) { panel.classList.remove('as-modal'); panel.style.display = 'none'; }
+  if (bd) bd.remove();
+}
+document.getElementById('openTodoBtn')?.addEventListener('click', openTodoModal);
+
+function renderTodos() {
+  const cont = document.getElementById('todoList');
+  const todos = S.todos || [];
+  const pendientes = todos.filter(t => !t.done);
+  // botón del header: se ilumina con el nº de pendientes (igual que Shopping)
+  const btn = document.getElementById('openTodoBtn');
+  if (btn) btn.innerHTML = '📝 To-do' + (pendientes.length ? ` <span class="shop-count">${pendientes.length}</span>` : '');
+  if (!cont) return;
+  if (!todos.length) {
+    cont.innerHTML = '<p class="hint">Nothing pending. Write down anything you don\'t want to forget. 📝</p>';
+    return;
+  }
+  cont.innerHTML = todos.map(t => `
+    <div class="shop-item ${t.done ? 'shop-done' : ''}">
+      <button class="todo-check" data-id="${t.id}" title="${t.done ? 'Mark as pending' : 'Mark as done'}">${t.done ? '✅' : '⬜'}</button>
+      <span class="shop-name">${esc(t.texto)}</span>
+      <button class="del-x" data-todo="${t.id}" title="Delete">✕</button>
+    </div>`).join('');
+}
+
+document.getElementById('todoNew')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const inp = document.getElementById('tdText');
+  const texto = (inp.value || '').trim();
+  if (!texto) return;
+  await api('/api/todo/new', { body: { texto } });
+  inp.value = '';
+  toast('📝 Added to your to-do list');
+  load();
+});
+
+document.getElementById('todoClearBtn')?.addEventListener('click', async () => {
+  const hechos = (S.todos || []).filter(t => t.done);
+  for (const t of hechos) await api('/api/todo/' + t.id, { method: 'DELETE' });
+  if (hechos.length) toast('🧹 Done items cleared');
+  load();
+});
+
+document.addEventListener('click', async (e) => {
+  const tchk = e.target.closest('.todo-check');
+  if (tchk) {
+    await api('/api/todo/toggle', { body: { id: +tchk.dataset.id } });
+    load();
+    return;
+  }
+  const tdel = e.target.closest('[data-todo]');
+  if (tdel && tdel.classList.contains('del-x')) {
+    await api('/api/todo/' + tdel.dataset.todo, { method: 'DELETE' });
+    toast('✕ Removed');
+    load();
+    return;
+  }
+});
+
 document.addEventListener('click', async (e) => {
   const chk = e.target.closest('.shop-check');
   if (chk) {
@@ -1330,13 +1418,17 @@ document.addEventListener('click', async (e) => {
     // 2) si pagó con tarjeta de crédito: MISMO flujo financiero que Services/Used a Card
     if (amount > 0 && m.card) {
       const rc = await modal({ icon: m.logo, title: 'Paid with ' + m.id,
-        text: `<b>${esc(it.name)}</b> will be charged to <b>${m.id}</b>. In how many installments? It adds to ${m.id}'s debt automatically.`,
-        fields: [{ type: 'number', placeholder: '# installments (1 = single)', min: 1, value: '1' }],
+        text: `<b>${esc(it.name)}</b> will be charged to <b>${m.id}</b>. How many installments, and which month does the FIRST one start? (Card purchases usually bill next month.)`,
+        fields: [
+          { type: 'number', placeholder: '# installments (1 = single)', min: 1, value: '1' },
+          { type: 'select', label: 'First installment', options: mesInicioOpts() }
+        ],
         okText: 'Add to card' });
       const cuotas = rc ? Math.max(1, +rc[0] || 1) : 1;
-      await api('/api/compra', { body: { creditor: method, concepto: it.name, valor: amount, cuotas, start: MES } });
+      const startM = rc && rc[1] != null && rc[1] !== '' ? +rc[1] : MES;
+      await api('/api/compra', { body: { creditor: method, concepto: it.name, valor: amount, cuotas, start: startM } });
       await api('/api/expense/new', { body: { name: it.name, amount, method, kind: 'once', month: S.plan.months[MES] } });
-      toast(`💳 ${esc(it.name)} → ${m.id} (${cuotas} ${cuotas === 1 ? 'installment' : 'installments'})`);
+      toast(`💳 ${esc(it.name)} → ${m.id} (${cuotas} ${cuotas === 1 ? 'installment' : 'installments'} from ${S.plan.months[startM]})`);
     } else if (amount > 0) {
       // efectivo/débito: solo gasto del mes, sin cuotas (igual que hoy)
       await api('/api/expense/new', { body: { name: it.name, amount, method, kind: 'once', month: S.plan.months[MES] } });
@@ -1799,19 +1891,22 @@ $('#expenseNew').addEventListener('submit', async (e) => {
   const mesKey = S.plan.months[MES];
   const m = payMethod(method);
 
-  // Si es tarjeta de crédito: preguntar a cuántas cuotas y crear la "compra a cuotas"
+  // Si es tarjeta de crédito: preguntar a cuántas cuotas, y en qué mes empieza la primera
   if (m.card) {
     const r = await modal({ icon: m.logo, title: 'Paid with ' + m.id,
-      text: `This is a credit-card payment. In how many installments? It will add to <b>${m.id}</b>'s debt automatically.`,
-      fields: [{ type: 'number', placeholder: '# installments (1 = single)', min: 1, value: '1' }],
+      text: `This is a credit-card payment. How many installments, and which month does the FIRST one start? (Card purchases usually bill next month.)`,
+      fields: [
+        { type: 'number', placeholder: '# installments (1 = single)', min: 1, value: '1' },
+        { type: 'select', label: 'First installment', options: mesInicioOpts() }
+      ],
       okText: 'Add to card' });
     if (!r) return;
     const cuotas = Math.max(1, +r[0] || 1);
-    // crear la compra a cuotas (reusa la lógica existente). start = mes actual MES.
-    await api('/api/compra', { body: { creditor: method, concepto: name, valor: amount, cuotas, start: MES } });
+    const startM = r[1] != null && r[1] !== '' ? +r[1] : MES;
+    await api('/api/compra', { body: { creditor: method, concepto: name, valor: amount, cuotas, start: startM } });
     // y registrar el gasto también (para el historial del mes)
     await api('/api/expense/new', { body: { name, amount, method, kind, month: kind === 'monthly' ? '' : mesKey } });
-    toast(`💳 ${fmt(amount)} added to ${m.id} (${cuotas} ${cuotas === 1 ? 'installment' : 'installments'})`);
+    toast(`💳 ${fmt(amount)} added to ${m.id} (${cuotas} ${cuotas === 1 ? 'installment' : 'installments'} from ${S.plan.months[startM]})`);
   } else {
     await api('/api/expense/new', { body: { name, amount, method, kind, month: kind === 'monthly' ? '' : mesKey } });
     toast(`${m.logo} Expense logged: ${fmt(amount)}`);
@@ -2034,13 +2129,17 @@ document.addEventListener('click', async (e) => {
       const mNew = payMethod(newMethod);
       if (mNew.card) {
         const rc = await modal({ icon: mNew.logo, title: 'Paid with ' + mNew.id,
-          text: `<b>${esc(r[0])}</b> will be charged to <b>${mNew.id}</b>. In how many installments? It will add to ${mNew.id}'s debt automatically.`,
-          fields: [{ type: 'number', placeholder: '# installments (1 = single)', min: 1, value: '1' }],
+          text: `<b>${esc(r[0])}</b> will be charged to <b>${mNew.id}</b>. How many installments, and which month does the FIRST one start?`,
+          fields: [
+            { type: 'number', placeholder: '# installments (1 = single)', min: 1, value: '1' },
+            { type: 'select', label: 'First installment', options: mesInicioOpts() }
+          ],
           okText: 'Add to card' });
         if (rc) {
           const cuotas = Math.max(1, +rc[0] || 1);
-          await api('/api/compra', { body: { creditor: newMethod, concepto: r[0] || s.name, valor: +r[1] || s.amount, cuotas, start: MES } });
-          toast(`💳 ${esc(r[0])} linked to ${mNew.id} (${cuotas} ${cuotas === 1 ? 'installment' : 'installments'})`);
+          const startM = rc[1] != null && rc[1] !== '' ? +rc[1] : MES;
+          await api('/api/compra', { body: { creditor: newMethod, concepto: r[0] || s.name, valor: +r[1] || s.amount, cuotas, start: startM } });
+          toast(`💳 ${esc(r[0])} linked to ${mNew.id} (${cuotas} ${cuotas === 1 ? 'installment' : 'installments'} from ${S.plan.months[startM]})`);
         }
       }
     }
