@@ -15,7 +15,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 96  # debe coincidir con FRONT_V en static/app.js
+VERSION = 97  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 
@@ -323,6 +323,9 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, slots INTEGER DEFAULT 1,
          done INTEGER DEFAULT 0, created TEXT DEFAULT '',
          bought_at TEXT DEFAULT '', cost INTEGER DEFAULT 0, method TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS todos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, texto TEXT,
+        done INTEGER DEFAULT 0, created TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS detalle_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT, grupo TEXT, nombre TEXT,
         cuota INTEGER DEFAULT 0, pagadas INTEGER DEFAULT 0, total INTEGER DEFAULT 0,
@@ -1122,6 +1125,7 @@ def state():
     piggy = [dict(r) for r in d.execute('SELECT * FROM piggy ORDER BY id')]
     piggy_moves = [dict(r) for r in d.execute('SELECT * FROM piggy_moves ORDER BY id DESC')]
     shopping = [dict(r) for r in d.execute('SELECT * FROM shopping ORDER BY done, id')]
+    todos = [dict(r) for r in d.execute('SELECT * FROM todos ORDER BY done, id DESC')]
     extra_debts = [dict(r) for r in d.execute('SELECT * FROM extra_debts')]
     # 'abonado' de una deuda registrada = abono guardado en su columna (checks nuevos + abonos parciales)
     #  MÁS abonos históricos registrados en la tabla 'abonos' (compatibilidad con datos viejos).
@@ -1135,7 +1139,7 @@ def state():
     return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
                         marks=marks, history=history, dreams=dreams,
                         animes=animes, books=books, gym_sets=gym_sets,
-                        servicios=services, fund=fund, piggy=piggy, piggy_moves=piggy_moves, shopping=shopping, detalle=_detalle_actual(d),
+                        servicios=services, fund=fund, piggy=piggy, piggy_moves=piggy_moves, shopping=shopping, todos=todos, detalle=_detalle_actual(d),
                         checks=[f"{r['item']}|{r['month']}" for r in d.execute(
                             'SELECT item, month FROM payment_checks')],
                         today=date.today().isoformat()))
@@ -1495,6 +1499,37 @@ def shopping_new():
     j = request.json
     db().execute('INSERT INTO shopping (name, slots, done, created) VALUES (?,?,?,?)',
                  (j['name'].strip(), int(j.get('slots') or 1), 0, date.today().isoformat()))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/todo/new')
+def todo_new():
+    j = request.json or {}
+    texto = (j.get('texto') or '').strip()
+    if not texto:
+        return jsonify(error='Write something first'), 400
+    db().execute('INSERT INTO todos (texto, done, created) VALUES (?,?,?)',
+                 (texto, 0, date.today().isoformat()))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/todo/toggle')
+def todo_toggle():
+    j = request.json or {}
+    tid = int(j['id'])
+    row = db().execute('SELECT done FROM todos WHERE id=?', (tid,)).fetchone()
+    if not row:
+        return jsonify(error='no encontrado'), 404
+    db().execute('UPDATE todos SET done=? WHERE id=?', (0 if dict(row)['done'] else 1, tid))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete('/api/todo/<int:i>')
+def todo_del(i):
+    db().execute('DELETE FROM todos WHERE id=?', (i,))
     db().commit()
     return jsonify(ok=True)
 
