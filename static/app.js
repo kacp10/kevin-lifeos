@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 97;
+const FRONT_V = 98;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1197,12 +1197,20 @@ function diaDePayday(txt) {
 // Días que faltan desde hoy hasta el próximo día N del mes
 function diasHastaDia(diaObjetivo) {
   const hoy = new Date();
-  const d = hoy.getDate();
-  const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
-  const objetivo = Math.min(diaObjetivo, finMes);
-  if (objetivo >= d) return objetivo - d;
-  // ya pasó este mes -> cuenta para el mes siguiente
-  return (finMes - d) + objetivo;
+  hoy.setHours(0, 0, 0, 0);
+  const diaSeguro = Math.max(1, Math.min(31, Number(diaObjetivo) || 1));
+
+  // Intentar primero en el mes actual. Si el mes no tiene ese día (ej. 31 en
+  // febrero), se usa su último día real.
+  const finActual = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
+  let objetivo = new Date(hoy.getFullYear(), hoy.getMonth(), Math.min(diaSeguro, finActual));
+
+  // Si ya pasó, calcularlo con la duración REAL del mes siguiente.
+  if (objetivo < hoy) {
+    const finSiguiente = new Date(hoy.getFullYear(), hoy.getMonth() + 2, 0).getDate();
+    objetivo = new Date(hoy.getFullYear(), hoy.getMonth() + 1, Math.min(diaSeguro, finSiguiente));
+  }
+  return Math.round((objetivo - hoy) / 86400000);
 }
 // Aviso de pagos próximos al abrir la app
 function avisarPagosProximos() {
@@ -1248,14 +1256,12 @@ function avisosInteligentes() {
   // 0. AVISO DE PAGOS PRÓXIMOS (servicios + deudas prometidas en los próximos 5 días)
   avisarPagosProximos();
 
-  // 1. Fin de mes: recordar cerrar el mes
+  // 1. Fin de mes: recordar cerrar el mes, pero no insistir si ya fue cerrado.
   if (hoy.getDate() >= diasEnMes - 1) {
-    const ymActual = hoyLocal().slice(0, 7);
-    const yaCerrado = (S.history || []).some(h => {
-      // label tipo "June 2026" no coincide directo con ym; chequeo laxo por mes/año
-      return false;
-    });
-    toast('📅 Month is ending — close it in Habits to lock your Haki.');
+    const currentLabel = hoy.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const yaCerrado = (S.history || []).some(h =>
+      String(h.label || '').trim().toLowerCase() === currentLabel.toLowerCase());
+    if (!yaCerrado) toast('📅 Month is ending — close it in Habits to lock your Haki.');
   }
   // 2. Sueños ya comprables (ahorro >= valor y no marcados como comprados)
   const comprable = (S.dreams || []).find(d => d.value > 0 && d.saved >= d.value && !d.bought);
@@ -1512,7 +1518,9 @@ function renderFreedom() {
   if (!panel) return;
   const init = (S.debts || []).reduce((s, d) => s + d.initial + compradoEn(d.name), 0)
     + (S.extra_debts || []).reduce((s, d) => s + d.total, 0);
-  const dmg = (S.debts || []).reduce((s, d) => s + d.abonado, 0);
+  const dmgPlan = (S.debts || []).reduce((s, d) => s + (d.abonado || 0), 0);
+  const dmgExtras = (S.extra_debts || []).reduce((s, d) => s + Math.min(d.abonado || 0, d.total || 0), 0);
+  const dmg = dmgPlan + dmgExtras;
   const pct = init ? Math.min((dmg / init) * 100, 100) : 0;
   const rest = Math.max(init - dmg, 0);
 
@@ -1530,8 +1538,10 @@ function renderFreedom() {
     }
   }
 
-  const enemigosVivos = (S.debts || []).filter(d => (d.initial + compradoEn(d.name) - d.abonado) > 0).length
-    + (S.extra_debts || []).length;
+  const enemigosVivos = (S.debts || []).filter(d =>
+    (d.initial + compradoEn(d.name) - (d.abonado || 0)) > 0).length
+    + (S.extra_debts || []).filter(d =>
+      ((d.total || 0) - (d.abonado || 0)) > 0).length;
   panel.innerHTML = `
     <div class="freedom-top">
       <div>
