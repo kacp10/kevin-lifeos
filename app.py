@@ -17,7 +17,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 99  # debe coincidir con FRONT_V en static/app.js
+VERSION = 100  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 # Logging útil tanto en local como en Render. No imprime contraseñas ni cuerpos JSON.
@@ -329,7 +329,8 @@ def init_db():
         v_ovas INTEGER DEFAULT 0, v_especiales INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS books (
         id INTEGER PRIMARY KEY, title TEXT, status TEXT DEFAULT 'Por comprar',
-        pages INTEGER DEFAULT 0, current INTEGER DEFAULT 0);
+        pages INTEGER DEFAULT 0, current INTEGER DEFAULT 0,
+        read_year INTEGER DEFAULT 0);
     CREATE TABLE IF NOT EXISTS payment_checks (
         item TEXT, month TEXT, PRIMARY KEY (item, month));
     CREATE TABLE IF NOT EXISTS week_shifts (
@@ -707,6 +708,15 @@ def init_db():
             pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('detalle_start_v1','1')")
         con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='books_read_year_v1'").fetchone():
+        try:
+            con.execute("ALTER TABLE books ADD COLUMN read_year INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('books_read_year_v1','1')")
+        con.commit()
+        print('  + seguimiento anual de libros activado')
+
     # ── FIX abonos viejos "atrapados": cuando abonado_fijo cubre cuotas completas pero
     #    'pagadas' no avanzó (bug anterior). Convierte esos abonos en cuotas pagadas y crea
     #    el abono al jefe, para que salgan pagados y le peguen al boss. Idempotente por clave. ──
@@ -2262,7 +2272,55 @@ def anime():
 
 @app.post('/api/book')
 def book():
-    return safe_field_update('books', ('status', 'pages', 'current'), (), request.json or {})
+    j = request.json or {}
+    try:
+        book_id = int(j.get('id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Libro inválido'), 400
+
+    field = j.get('field')
+    if field not in ('status', 'pages', 'current', 'read_year'):
+        return jsonify(error='Campo no permitido'), 400
+
+    row = db().execute('SELECT * FROM books WHERE id=?', (book_id,)).fetchone()
+    if not row:
+        return jsonify(error='Libro no encontrado'), 404
+    current_book = dict(row)
+
+    value = j.get('value')
+    if field in ('pages', 'current'):
+        try:
+            value = max(0, int(value or 0))
+        except (TypeError, ValueError):
+            return jsonify(error='Número de páginas inválido'), 400
+    elif field == 'read_year':
+        try:
+            value = int(value or 0)
+        except (TypeError, ValueError):
+            return jsonify(error='Año inválido'), 400
+        current_year = date.today().year
+        if value and not (1900 <= value <= current_year):
+            return jsonify(error=f'El año debe estar entre 1900 y {current_year}'), 400
+    elif field == 'status':
+        allowed = ('Por comprar', 'Por leer', 'Leyendo', 'Terminado')
+        if value not in allowed:
+            return jsonify(error='Estado no permitido'), 400
+
+    db().execute(f'UPDATE books SET {field}=? WHERE id=?', (value, book_id))
+
+    # Al terminar un libro por estado o por páginas, registra el año actual
+    # únicamente cuando todavía no se ha asignado uno manualmente.
+    should_finish = field == 'status' and value == 'Terminado'
+    if field in ('pages', 'current'):
+        pages = value if field == 'pages' else int(current_book.get('pages') or 0)
+        current = value if field == 'current' else int(current_book.get('current') or 0)
+        should_finish = pages > 0 and current >= pages
+    if should_finish and not int(current_book.get('read_year') or 0):
+        db().execute('UPDATE books SET read_year=? WHERE id=?', (date.today().year, book_id))
+
+    db().commit()
+    updated = db().execute('SELECT * FROM books WHERE id=?', (book_id,)).fetchone()
+    return jsonify(ok=True, book=dict(updated) if updated else None)
 
 
 # Inicializar BD al importar (gunicorn en Render no usa __main__)
