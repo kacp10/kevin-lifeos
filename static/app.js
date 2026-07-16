@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 100;
+const FRONT_V = 101;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -301,15 +301,25 @@ function hoyLocal() { return localISO(new Date()); }   // debe coincidir con VER
 
 async function api(path, opts) {
   let r;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
   try {
     r = await fetch(path, opts ? {
       method: opts.method || 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: opts.body ? JSON.stringify(opts.body) : undefined
-    } : undefined);
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      signal: opts.signal || controller.signal
+    } : { signal: controller.signal });
   } catch (err) {
-    if (!opts || !opts.quiet) toast('⚠ Could not reach the server. Check your connection and try again.', 'err');
+    if (!opts || !opts.quiet) {
+      const msg = err && err.name === 'AbortError'
+        ? '⚠ The server took too long to respond. Nothing was confirmed; try again.'
+        : '⚠ Could not reach the server. Check your connection and try again.';
+      toast(msg, 'err');
+    }
     throw err;
+  } finally {
+    clearTimeout(timeout);
   }
   if (!r.ok) {
     // Mensaje amigable en TODA la app (no solo gym): intenta usar el {error:'...'} que el
@@ -326,17 +336,22 @@ async function api(path, opts) {
 }
 
 // Evita envíos duplicados por doble clic mientras una operación sigue en curso.
-async function withBusy(el, work) {
+async function withBusy(el, work, busyText = '') {
   if (!el || el.dataset.busy === '1') return;
   el.dataset.busy = '1';
   const wasDisabled = !!el.disabled;
+  const oldText = el.matches('button') ? el.innerHTML : '';
   el.disabled = true;
+  el.classList.add('is-busy');
   el.setAttribute('aria-busy', 'true');
+  if (busyText && el.matches('button')) el.textContent = busyText;
   try {
     return await work();
   } finally {
     el.disabled = wasDisabled;
+    el.classList.remove('is-busy');
     el.removeAttribute('aria-busy');
+    if (busyText && el.matches('button')) el.innerHTML = oldText;
     delete el.dataset.busy;
   }
 }
@@ -344,9 +359,16 @@ async function withBusy(el, work) {
 /* ====== MODALES Y TOASTS BONITOS ====== */
 function toast(msg, tipo) {
   let wrap = document.getElementById('toastWrap');
-  if (!wrap) { wrap = document.createElement('div'); wrap.id = 'toastWrap'; document.body.appendChild(wrap); }
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.id = 'toastWrap';
+    wrap.setAttribute('aria-live', 'polite');
+    wrap.setAttribute('aria-atomic', 'false');
+    document.body.appendChild(wrap);
+  }
   const t = document.createElement('div');
-  t.className = 'toast' + (tipo === 'err' ? ' err' : '');
+  t.className = 'toast' + (tipo === 'err' ? ' err' : tipo === 'warn' ? ' warn' : ' ok');
+  t.setAttribute('role', tipo === 'err' ? 'alert' : 'status');
   t.innerHTML = msg;
   wrap.appendChild(t);
   setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 350); }, 2600);
@@ -391,6 +413,29 @@ function flashDerrota(nombre) {
   setTimeout(() => { f.classList.add('out'); setTimeout(() => f.remove(), 400); }, 1100);
 }
 
+function activateDialog(back, close) {
+  const previousFocus = document.activeElement;
+  back.setAttribute('role', 'dialog');
+  back.setAttribute('aria-modal', 'true');
+  document.body.classList.add('modal-open');
+  const onKey = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); close(null); return; }
+    if (e.key !== 'Tab') return;
+    const focusable = [...back.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')]
+      .filter(el => !el.disabled && el.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
+  document.addEventListener('keydown', onKey);
+  return () => {
+    document.removeEventListener('keydown', onKey);
+    if (!document.querySelector('.modal-back.show')) document.body.classList.remove('modal-open');
+    if (previousFocus && previousFocus.focus) setTimeout(() => previousFocus.focus(), 0);
+  };
+}
+
 function celebrate({ icon = '🎉', title = '', text = '', confettiOn = true }) {
   if (confettiOn) confetti();
   if (typeof petCelebrate === 'function') petCelebrate();   // la mascota también festeja
@@ -402,8 +447,17 @@ function celebrate({ icon = '🎉', title = '', text = '', confettiOn = true }) 
     <div class="modal-btns"><button class="m-ok">¡Sigamos! / Let's go!</button></div>
   </div>`;
   document.body.appendChild(back);
-  requestAnimationFrame(() => back.classList.add('show'));
-  const close = () => { back.classList.remove('show'); setTimeout(() => back.remove(), 300); };
+  let deactivate = () => {};
+  const close = () => {
+    back.classList.remove('show');
+    deactivate();
+    setTimeout(() => back.remove(), 300);
+  };
+  deactivate = activateDialog(back, close);
+  requestAnimationFrame(() => {
+    back.classList.add('show');
+    back.querySelector('.m-ok')?.focus();
+  });
   back.querySelector('.m-ok').onclick = close;
   back.onclick = (e) => { if (e.target === back) close(); };
 }
@@ -446,8 +500,15 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
         <button class="m-ok ${danger ? 'danger' : ''}">${okText}</button>
       </div></div>`;
     document.body.appendChild(back);
+    let deactivate = () => {};
+    const close = (val) => {
+      back.classList.remove('show');
+      deactivate();
+      setTimeout(() => back.remove(), 280);
+      resolve(val);
+    };
+    deactivate = activateDialog(back, close);
     requestAnimationFrame(() => back.classList.add('show'));
-    const close = (val) => { back.classList.remove('show'); setTimeout(() => back.remove(), 280); resolve(val); };
     back.querySelector('.m-ok').onclick = () => {
       if (fields.length) {
         const vals = [...back.querySelectorAll('[data-i]')].map(el =>
@@ -2601,6 +2662,8 @@ document.addEventListener('click', async (e) => {
 
 $('#abonoForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const submitBtn = e.submitter || e.target.querySelector('button[type="submit"]');
+  await withBusy(submitBtn, async () => {
   const valor = numVal('#abonoValor');
   const vivasAntes = snapshotDeudasVivas();
   const rawVal = $('#abonoDebt').value;
@@ -2629,6 +2692,7 @@ $('#abonoForm').addEventListener('submit', async (e) => {
   } else if (vivasAhora.size === 0 && vivasAntes.size > 0) {
     celebrate({ icon: '👑', title: 'YOU ARE FREE', text: 'Every debt defeated. You won the war, Kevin.' });
   }
+  }, 'Attacking...');
 });
 
 $('#abonoList').addEventListener('click', async (e) => {
@@ -4386,7 +4450,8 @@ function renderLibros() {
     lista.map(b => {
       const p = b.pages ? Math.min((b.status === 'Terminado' ? b.pages : b.current) / b.pages, 1) : 0;
       const year = Number(b.read_year || 0);
-      return `<tr><td>${esc(b.title)}</td>
+      const missingYear = b.status === 'Terminado' && !year;
+      return `<tr class="${missingYear ? 'book-year-missing' : ''}"><td>${esc(b.title)}${missingYear ? '<span class="book-year-badge" title="Add the year you finished it">Year needed</span>' : ''}</td>
         <td><select class="book-status" data-id="${b.id}">
           ${BOOK_STATES.map(([v, t]) => `<option value="${v}" ${v === b.status ? 'selected' : ''}>${t}</option>`).join('')}
         </select></td>
@@ -4454,24 +4519,28 @@ document.addEventListener('click', (e) => {
 $('#bookHistoryBtn').addEventListener('click', showBookHistory);
 $('#bookChartBtn').addEventListener('click', showBookChart);
 $('#bookTable').addEventListener('change', async (e) => {
-  const id = +e.target.dataset.id;
-  if (e.target.classList.contains('book-status')) {
-    await api('/api/book', { body: { id, field: 'status', value: e.target.value } });
-  } else if (e.target.classList.contains('pg-input')) {
-    const f = e.target.dataset.f, val = +e.target.value || 0;
-    await api('/api/book', { body: { id, field: f, value: val } });
-    if (f !== 'read_year') {
-      // ESTADO AUTOMÁTICO por páginas: si llegas al total -> Terminado; si avanzas -> Leyendo
-      const b = (S.books || []).find(x => x.id === id) || {};
-      const pages = f === 'pages' ? val : (b.pages || 0);
-      const current = f === 'current' ? val : (b.current || 0);
-      if (pages > 0 && current >= pages)
-        await api('/api/book', { body: { id, field: 'status', value: 'Terminado' } });
-      else if (current > 0 && b.status !== 'Terminado' && b.status !== 'Leyendo')
-        await api('/api/book', { body: { id, field: 'status', value: 'Leyendo' } });
+  const control = e.target;
+  const id = +control.dataset.id;
+  await withBusy(control, async () => {
+    if (control.classList.contains('book-status')) {
+      await api('/api/book', { body: { id, field: 'status', value: control.value } });
+    } else if (control.classList.contains('pg-input')) {
+      const f = control.dataset.f, val = +control.value || 0;
+      await api('/api/book', { body: { id, field: f, value: val } });
+      if (f !== 'read_year') {
+        // ESTADO AUTOMÁTICO por páginas: si llegas al total -> Terminado; si avanzas -> Leyendo
+        const b = (S.books || []).find(x => x.id === id) || {};
+        const pages = f === 'pages' ? val : (b.pages || 0);
+        const current = f === 'current' ? val : (b.current || 0);
+        if (pages > 0 && current >= pages)
+          await api('/api/book', { body: { id, field: 'status', value: 'Terminado' } });
+        else if (current > 0 && b.status !== 'Terminado' && b.status !== 'Leyendo')
+          await api('/api/book', { body: { id, field: 'status', value: 'Leyendo' } });
+      }
     }
-  }
-  load();
+    await load();
+    toast('✓ Book updated');
+  });
 });
 
 /* ---------- BORRAR (nivel superior) ---------- */
@@ -4670,6 +4739,8 @@ const PET_LINES = {
 };
 
 let _petMoodTimer = null;
+let _petLastMood = '';
+let _petLastAt = 0;
 function petMood() {
   // deriva el "humor" de tu situación real (misma fuente de verdad: S)
   try {
@@ -4703,7 +4774,11 @@ function renderPet(forceMood) {
 
 function petSay(mood, ms = 3200) {
   const bubble = document.getElementById('petBubble');
-  if (!bubble) return;
+  if (!bubble || document.body.classList.contains('modal-open')) return;
+  const now = Date.now();
+  if (_petLastMood === mood && now - _petLastAt < 4500) return;
+  _petLastMood = mood;
+  _petLastAt = now;
   const lines = PET_LINES[mood] || PET_LINES.idle;
   bubble.textContent = lines[Math.floor(Math.random() * lines.length)];
   bubble.classList.add('show');
