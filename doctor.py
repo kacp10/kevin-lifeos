@@ -1,74 +1,162 @@
 # -*- coding: utf-8 -*-
+"""Diagnóstico local de Kevin Life OS.
+
+Ejecutar desde la raíz del proyecto:
+    python doctor.py
+
+No modifica datos ni requiere que el servidor esté encendido.
 """
-DOCTOR del Life OS — revisa tu instalación y te dice qué está mal.
-Ponlo DENTRO de la carpeta lifeos_web y corre:  python doctor.py
-"""
-import os
+from __future__ import annotations
+
 import json
+import re
+import sys
+import urllib.error
 import urllib.request
+from pathlib import Path
 
-BASE = os.path.dirname(os.path.abspath(__file__))
-OK, BAD = '  [OK] ', '  [X]  '
-problemas = []
+BASE = Path(__file__).resolve().parent
+OK, WARN, BAD = "  [OK] ", "  [!]  ", "  [X]  "
+problemas: list[str] = []
+advertencias: list[str] = []
 
 
-def revisar(ruta, marcadores, nombre):
-    p = os.path.join(BASE, ruta)
-    if not os.path.exists(p):
-        print(BAD + f'{ruta} NO EXISTE en esa carpeta.')
-        problemas.append(f'Falta {ruta}: el archivo nuevo "{nombre}" debe ir exactamente en {ruta}')
-        return
-    with open(p, encoding='utf-8', errors='ignore') as f:
-        contenido = f.read()
-    viejos = [m for m in marcadores if m not in contenido]
-    if viejos:
-        print(BAD + f'{ruta} existe pero es la VERSIÓN VIEJA (no tiene: {", ".join(viejos)}).')
-        problemas.append(f'Reemplaza {ruta} por el archivo nuevo que te dio Claude')
+def leer(ruta: str) -> str | None:
+    archivo = BASE / ruta
+    if not archivo.is_file():
+        print(BAD + f"{ruta} no existe.")
+        problemas.append(f"Falta el archivo requerido: {ruta}")
+        return None
+    return archivo.read_text(encoding="utf-8", errors="ignore")
+
+
+def comprobar_archivo(ruta: str, marcadores: tuple[str, ...]) -> str | None:
+    contenido = leer(ruta)
+    if contenido is None:
+        return None
+    faltantes = [m for m in marcadores if m not in contenido]
+    if faltantes:
+        print(BAD + f"{ruta} está incompleto; faltan: {', '.join(faltantes)}")
+        problemas.append(f"Revisa {ruta}: faltan marcadores esperados del proyecto")
     else:
-        print(OK + f'{ruta} es la versión nueva ✔')
+        print(OK + ruta)
+    return contenido
 
 
-print('\n========= DOCTOR LIFE OS =========\n')
-print('1) Revisando archivos y sus carpetas...\n')
-revisar('app.py', ["'/api/debt/new'", 'VERSION = 15'], 'app.py')
-revisar('templates/index.html', ['debtNew', 'checkServicios', 'app.js?v=15'], 'index.html')
-revisar('static/app.js', ['debtNew', 'monthKey', 'FRONT_V = 15'], 'app.js')
-revisar('static/style.css', ['check-item', 'desglose'], 'style.css')
-revisar('seed_data.json', ['servicios', 'detalle'], 'seed_data.json')
+def extraer_version(contenido: str | None, patron: str, archivo: str) -> int | None:
+    if contenido is None:
+        return None
+    coincidencia = re.search(patron, contenido, re.MULTILINE)
+    if not coincidencia:
+        print(BAD + f"No pude leer la versión declarada en {archivo}.")
+        problemas.append(f"Declara correctamente la versión en {archivo}")
+        return None
+    return int(coincidencia.group(1))
 
-# trampas comunes: archivos sueltos en la raíz que deberían estar en subcarpetas
-print('\n2) Buscando archivos en el lugar equivocado...\n')
-trampas = False
-for nombre, debe in [('index.html', 'templates'), ('app.js', 'static'), ('style.css', 'static')]:
-    if os.path.exists(os.path.join(BASE, nombre)):
-        print(BAD + f'Hay un "{nombre}" suelto en la raíz: Flask lo IGNORA. Muévelo a la carpeta {debe}/')
-        problemas.append(f'Mueve {nombre} de la raíz a la carpeta {debe}/')
-        trampas = True
-if not trampas:
-    print(OK + 'Ningún archivo perdido en la raíz ✔')
 
-print('\n3) Revisando el servidor...\n')
-try:
-    r = urllib.request.urlopen('http://localhost:5000/api/ping', timeout=3)
-    v = json.load(r).get('version')
-    if v == 15:
-        print(OK + 'El servidor está corriendo Y es la versión nueva (v15) ✔')
+def revisar_estructura() -> tuple[int | None, int | None]:
+    print("1) Revisando archivos y estructura...\n")
+    backend = comprobar_archivo("app.py", ("@app.get('/api/ping')", "def init_db", "VERSION ="))
+    frontend = comprobar_archivo("static/app.js", ("const FRONT_V =", "async function api", "function render"))
+    template = comprobar_archivo("templates/index.html", ('id="tab-inicio"', "/static/app.js?v={{ version }}"))
+    comprobar_archivo("static/style.css", (".panel", ".modal"))
+    comprobar_archivo("db_layer.py", ("def connect", "DATABASE_URL"))
+    comprobar_archivo("requirements.txt", ("Flask==", "gunicorn==", "psycopg2-binary=="))
+    comprobar_archivo("render.yaml", ("gunicorn app:app", "DATABASE_URL"))
+
+    backend_v = extraer_version(backend, r"^VERSION\s*=\s*(\d+)", "app.py")
+    frontend_v = extraer_version(frontend, r"^const\s+FRONT_V\s*=\s*(\d+)", "static/app.js")
+
+    if backend_v is not None and frontend_v is not None:
+        if backend_v == frontend_v:
+            print(OK + f"Versiones sincronizadas: backend v{backend_v} / frontend v{frontend_v}")
+        else:
+            print(BAD + f"Versiones desincronizadas: backend v{backend_v} / frontend v{frontend_v}")
+            problemas.append("Iguala VERSION en app.py con FRONT_V en static/app.js")
+
+    if template is not None and "{{ version }}" not in template:
+        print(BAD + "templates/index.html no usa la versión del backend para invalidar caché.")
+        problemas.append("Usa ?v={{ version }} al cargar static/app.js")
+
+    archivos_raiz_ignorados = [n for n in ("index.html", "app.js", "style.css") if (BASE / n).exists()]
+    if archivos_raiz_ignorados:
+        nombres = ", ".join(archivos_raiz_ignorados)
+        print(WARN + f"Archivos web ignorados por Flask en la raíz: {nombres}")
+        advertencias.append(f"Elimina o mueve los archivos web duplicados de la raíz: {nombres}")
     else:
-        print(BAD + f'El servidor responde pero con versión {v}.')
-        problemas.append('Reinicia el servidor: Ctrl+C en la terminal y de nuevo: python app.py')
-except urllib.error.HTTPError:
-    print(BAD + 'El servidor corre pero con el app.py VIEJO (no conoce /api/ping).')
-    problemas.append('Reinicia el servidor: Ctrl+C y de nuevo: python app.py (con el app.py nuevo ya en la carpeta)')
-except Exception:
-    print(BAD + 'El servidor NO está corriendo en http://localhost:5000.')
-    problemas.append('Arranca el servidor: abre la terminal en esta carpeta y corre: python app.py')
+        print(OK + "No hay copias web ambiguas en la raíz")
 
-print('\n========= DIAGNÓSTICO =========\n')
-if not problemas:
-    print('  ✦ TODO PERFECTO. Si el navegador aún se porta raro: Ctrl+F5.')
-    print('  ✦ Y entra siempre por http://localhost:5000 (no abras el index.html con doble clic).\n')
-else:
-    print('  Haz esto, en orden:\n')
-    for i, p in enumerate(dict.fromkeys(problemas), 1):
-        print(f'  {i}. {p}')
-    print('\n  Cuando termines, corre otra vez: python doctor.py\n')
+    return backend_v, frontend_v
+
+
+def revisar_sintaxis() -> None:
+    print("\n2) Revisando sintaxis Python...\n")
+    import py_compile
+
+    for ruta in ("app.py", "db_layer.py", "doctor.py", "migrar_a_nube.py"):
+        archivo = BASE / ruta
+        if not archivo.is_file():
+            continue
+        try:
+            py_compile.compile(str(archivo), doraise=True)
+            print(OK + ruta)
+        except py_compile.PyCompileError as exc:
+            print(BAD + f"{ruta}: {exc.msg}")
+            problemas.append(f"Corrige el error de sintaxis en {ruta}")
+
+
+def revisar_servidor(version_esperada: int | None) -> None:
+    print("\n3) Revisando el servidor local (opcional)...\n")
+    try:
+        with urllib.request.urlopen("http://localhost:5000/api/ping", timeout=3) as respuesta:
+            payload = json.load(respuesta)
+        version_servidor = payload.get("version")
+        if version_esperada is None or version_servidor == version_esperada:
+            print(OK + f"Servidor activo; API reporta versión {version_servidor}")
+        else:
+            print(WARN + f"Servidor activo en v{version_servidor}, archivos locales en v{version_esperada}")
+            advertencias.append("Reinicia el servidor para cargar la versión local actual")
+    except urllib.error.HTTPError as exc:
+        print(BAD + f"El servidor respondió HTTP {exc.code} en /api/ping.")
+        problemas.append("Revisa los logs del servidor local")
+    except (urllib.error.URLError, TimeoutError, OSError):
+        print(WARN + "Servidor local apagado o no accesible; se omite esta prueba.")
+        advertencias.append("Arranca con 'python app.py' para validar /api/ping")
+    except (ValueError, json.JSONDecodeError):
+        print(BAD + "La respuesta de /api/ping no es JSON válido.")
+        problemas.append("Corrige la respuesta del endpoint /api/ping")
+
+
+def terminar() -> int:
+    print("\n========= DIAGNÓSTICO =========\n")
+    if problemas:
+        print(f"  Se encontraron {len(problemas)} problema(s):\n")
+        for i, problema in enumerate(dict.fromkeys(problemas), 1):
+            print(f"  {i}. {problema}")
+        if advertencias:
+            print("\n  Advertencias adicionales:")
+            for advertencia in dict.fromkeys(advertencias):
+                print(f"  - {advertencia}")
+        print()
+        return 1
+
+    print("  ✦ Estructura y versiones correctas.")
+    if advertencias:
+        for advertencia in dict.fromkeys(advertencias):
+            print(f"  - {advertencia}")
+    else:
+        print("  ✦ Todas las comprobaciones pasaron.")
+    print()
+    return 0
+
+
+def main() -> int:
+    print("\n========= DOCTOR KEVIN LIFE OS =========\n")
+    backend_v, _ = revisar_estructura()
+    revisar_sintaxis()
+    revisar_servidor(backend_v)
+    return terminar()
+
+
+if __name__ == "__main__":
+    sys.exit(main())
