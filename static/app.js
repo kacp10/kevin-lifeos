@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 101;
+const FRONT_V = 100;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -301,25 +301,15 @@ function hoyLocal() { return localISO(new Date()); }   // debe coincidir con VER
 
 async function api(path, opts) {
   let r;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20000);
   try {
     r = await fetch(path, opts ? {
       method: opts.method || 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
-      signal: opts.signal || controller.signal
-    } : { signal: controller.signal });
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    } : undefined);
   } catch (err) {
-    if (!opts || !opts.quiet) {
-      const msg = err && err.name === 'AbortError'
-        ? '⚠ The server took too long to respond. Nothing was confirmed; try again.'
-        : '⚠ Could not reach the server. Check your connection and try again.';
-      toast(msg, 'err');
-    }
+    if (!opts || !opts.quiet) toast('⚠ Could not reach the server. Check your connection and try again.', 'err');
     throw err;
-  } finally {
-    clearTimeout(timeout);
   }
   if (!r.ok) {
     // Mensaje amigable en TODA la app (no solo gym): intenta usar el {error:'...'} que el
@@ -2611,8 +2601,6 @@ document.addEventListener('click', async (e) => {
 
 $('#abonoForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const submitBtn = e.submitter || e.target.querySelector('button[type="submit"]');
-  await withBusy(submitBtn, async () => {
   const valor = numVal('#abonoValor');
   const vivasAntes = snapshotDeudasVivas();
   const rawVal = $('#abonoDebt').value;
@@ -2641,7 +2629,6 @@ $('#abonoForm').addEventListener('submit', async (e) => {
   } else if (vivasAhora.size === 0 && vivasAntes.size > 0) {
     celebrate({ icon: '👑', title: 'YOU ARE FREE', text: 'Every debt defeated. You won the war, Kevin.' });
   }
-  });
 });
 
 $('#abonoList').addEventListener('click', async (e) => {
@@ -4467,28 +4454,24 @@ document.addEventListener('click', (e) => {
 $('#bookHistoryBtn').addEventListener('click', showBookHistory);
 $('#bookChartBtn').addEventListener('click', showBookChart);
 $('#bookTable').addEventListener('change', async (e) => {
-  const control = e.target;
-  const id = +control.dataset.id;
-  await withBusy(control, async () => {
-    if (control.classList.contains('book-status')) {
-      await api('/api/book', { body: { id, field: 'status', value: control.value } });
-    } else if (control.classList.contains('pg-input')) {
-      const f = control.dataset.f, val = +control.value || 0;
-      await api('/api/book', { body: { id, field: f, value: val } });
-      if (f !== 'read_year') {
-        // ESTADO AUTOMÁTICO por páginas: si llegas al total -> Terminado; si avanzas -> Leyendo
-        const b = (S.books || []).find(x => x.id === id) || {};
-        const pages = f === 'pages' ? val : (b.pages || 0);
-        const current = f === 'current' ? val : (b.current || 0);
-        if (pages > 0 && current >= pages)
-          await api('/api/book', { body: { id, field: 'status', value: 'Terminado' } });
-        else if (current > 0 && b.status !== 'Terminado' && b.status !== 'Leyendo')
-          await api('/api/book', { body: { id, field: 'status', value: 'Leyendo' } });
-      }
+  const id = +e.target.dataset.id;
+  if (e.target.classList.contains('book-status')) {
+    await api('/api/book', { body: { id, field: 'status', value: e.target.value } });
+  } else if (e.target.classList.contains('pg-input')) {
+    const f = e.target.dataset.f, val = +e.target.value || 0;
+    await api('/api/book', { body: { id, field: f, value: val } });
+    if (f !== 'read_year') {
+      // ESTADO AUTOMÁTICO por páginas: si llegas al total -> Terminado; si avanzas -> Leyendo
+      const b = (S.books || []).find(x => x.id === id) || {};
+      const pages = f === 'pages' ? val : (b.pages || 0);
+      const current = f === 'current' ? val : (b.current || 0);
+      if (pages > 0 && current >= pages)
+        await api('/api/book', { body: { id, field: 'status', value: 'Terminado' } });
+      else if (current > 0 && b.status !== 'Terminado' && b.status !== 'Leyendo')
+        await api('/api/book', { body: { id, field: 'status', value: 'Leyendo' } });
     }
-    await load();
-    toast('✓ Book updated');
-  });
+  }
+  load();
 });
 
 /* ---------- BORRAR (nivel superior) ---------- */
