@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 99;
+const FRONT_V = 100;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -4366,22 +4366,82 @@ const BOOK_STATES = [
   ['Por comprar', 'To buy'], ['Por leer', 'To read'],
   ['Leyendo', 'Reading'], ['Terminado', 'Finished']
 ];
+function finishedBooksByYear() {
+  const grouped = new Map();
+  (S.books || []).forEach(b => {
+    if (b.status !== 'Terminado') return;
+    const year = Number(b.read_year || 0);
+    if (!Number.isInteger(year) || year < 1900) return;
+    if (!grouped.has(year)) grouped.set(year, []);
+    grouped.get(year).push(b);
+  });
+  return [...grouped.entries()].sort((a, b) => a[0] - b[0]);
+}
 function renderLibros() {
   const pasa = (b) => BOOK_FILTRO === 'all' || (b.status || 'Por leer') === BOOK_FILTRO;
-  const lista = S.books.filter(pasa);
+  const lista = (S.books || []).filter(pasa);
+  const currentYear = new Date().getFullYear();
   $('#bookTable').innerHTML =
-    '<tr><th>Title</th><th>Status</th><th>Pages</th><th>On page</th><th>Progress</th><th></th></tr>' +
+    '<tr><th>Title</th><th>Status</th><th>Year read</th><th>Pages</th><th>On page</th><th>Progress</th><th></th></tr>' +
     lista.map(b => {
       const p = b.pages ? Math.min((b.status === 'Terminado' ? b.pages : b.current) / b.pages, 1) : 0;
+      const year = Number(b.read_year || 0);
       return `<tr><td>${esc(b.title)}</td>
         <td><select class="book-status" data-id="${b.id}">
           ${BOOK_STATES.map(([v, t]) => `<option value="${v}" ${v === b.status ? 'selected' : ''}>${t}</option>`).join('')}
         </select></td>
+        <td><input class="book-year pg-input" type="number" min="1900" max="${currentYear}" placeholder="year" value="${year || ''}" data-id="${b.id}" data-f="read_year" title="Year this book was finished"></td>
         <td><input class="pg-input" type="number" min="0" placeholder="total" value="${b.pages || ''}" data-id="${b.id}" data-f="pages"></td>
         <td><input class="pg-input" type="number" min="0" placeholder="page" value="${b.current || ''}" data-id="${b.id}" data-f="current"></td>
         <td><div class="mini-bar green" style="width:90px"><i style="width:${p * 100}%"></i></div></td>
         <td><button class="del-x" data-type="book" data-id="${b.id}">✕</button></td></tr>`;
     }).join('');
+}
+function showBookHistory() {
+  const groups = finishedBooksByYear().slice().reverse();
+  const finished = (S.books || []).filter(b => b.status === 'Terminado');
+  const unassigned = finished.filter(b => !Number(b.read_year || 0)).length;
+  const total = groups.reduce((sum, [, books]) => sum + books.length, 0);
+  const best = groups.length ? groups.reduce((a, b) => b[1].length > a[1].length ? b : a) : null;
+  const rows = groups.length ? groups.map(([year, books]) => `
+    <div style="padding:10px 0;border-bottom:1px solid rgba(128,128,128,.22);text-align:left">
+      <div style="display:flex;justify-content:space-between;gap:12px"><b>${year}</b><span>${books.length} book${books.length === 1 ? '' : 's'}</span></div>
+      <div style="opacity:.75;margin-top:4px;font-size:.92em">${books.map(b => esc(b.title)).join(' · ')}</div>
+    </div>`).join('') : '<div style="padding:16px 0;opacity:.7">No finished books have a year assigned yet.</div>';
+  modal({ icon: '📚', title: 'Books read by year', okText: 'Close', text: `
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0 12px">
+      <div style="padding:10px;border:1px solid rgba(128,128,128,.22);border-radius:10px"><b>${total}</b><br><span style="opacity:.7">with year</span></div>
+      <div style="padding:10px;border:1px solid rgba(128,128,128,.22);border-radius:10px"><b>${best ? best[0] : '—'}</b><br><span style="opacity:.7">best year${best ? ` · ${best[1].length}` : ''}</span></div>
+    </div>${unassigned ? `<div style="margin:8px 0;padding:8px;border-radius:8px;background:rgba(255,180,0,.12)">⚠ ${unassigned} finished book${unassigned === 1 ? '' : 's'} still need${unassigned === 1 ? 's' : ''} a year.</div>` : ''}${rows}` });
+}
+function showBookChart() {
+  const groups = finishedBooksByYear();
+  if (!groups.length) {
+    modal({ icon: '📈', title: 'Reading curve', text: 'Assign a year to at least one finished book to build the chart.', okText: 'Close' });
+    return;
+  }
+  const minYear = groups[0][0], maxYear = groups[groups.length - 1][0];
+  const counts = new Map(groups.map(([year, books]) => [year, books.length]));
+  const data = [];
+  for (let year = minYear; year <= maxYear; year++) data.push([year, counts.get(year) || 0]);
+  const W = 620, H = 280, left = 46, right = 18, top = 24, bottom = 42;
+  const maxCount = Math.max(1, ...data.map(d => d[1]));
+  const x = (i) => data.length === 1 ? (left + W - right) / 2 : left + i * (W - left - right) / (data.length - 1);
+  const y = (v) => H - bottom - v * (H - top - bottom) / maxCount;
+  const points = data.map((d, i) => `${x(i)},${y(d[1])}`).join(' ');
+  const area = `${left},${H-bottom} ${points} ${x(data.length - 1)},${H-bottom}`;
+  const labels = data.map((d, i) => `<text x="${x(i)}" y="${H-16}" text-anchor="middle" font-size="12" fill="currentColor" opacity=".7">${d[0]}</text>`).join('');
+  const dots = data.map((d, i) => `<g><circle cx="${x(i)}" cy="${y(d[1])}" r="5" fill="var(--accent,#d7a84b)"/><text x="${x(i)}" y="${y(d[1])-10}" text-anchor="middle" font-size="12" fill="currentColor">${d[1]}</text></g>`).join('');
+  const grid = Array.from({length:maxCount+1}, (_, v) => {
+    const yy = y(v);
+    return `<line x1="${left}" y1="${yy}" x2="${W-right}" y2="${yy}" stroke="currentColor" opacity=".1"/><text x="${left-10}" y="${yy+4}" text-anchor="end" font-size="11" fill="currentColor" opacity=".6">${v}</text>`;
+  }).join('');
+  const peak = groups.reduce((a, b) => b[1].length > a[1].length ? b : a);
+  modal({ icon: '📈', title: 'Reading curve', okText: 'Close', text: `
+    <div style="text-align:left;margin-bottom:8px">Peak: <b>${peak[0]}</b> with <b>${peak[1].length}</b> book${peak[1].length === 1 ? '' : 's'}.</div>
+    <div style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Books read per year" style="width:100%;min-width:420px;height:auto;color:inherit">
+      ${grid}<polygon points="${area}" fill="var(--accent,#d7a84b)" opacity=".10"/><polyline points="${points}" fill="none" stroke="var(--accent,#d7a84b)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>${dots}${labels}
+    </svg></div>` });
 }
 document.addEventListener('click', (e) => {
   const b = e.target.closest('#bookFilter button');
@@ -4391,6 +4451,8 @@ document.addEventListener('click', (e) => {
   b.classList.add('active');
   renderLibros();
 });
+$('#bookHistoryBtn').addEventListener('click', showBookHistory);
+$('#bookChartBtn').addEventListener('click', showBookChart);
 $('#bookTable').addEventListener('change', async (e) => {
   const id = +e.target.dataset.id;
   if (e.target.classList.contains('book-status')) {
@@ -4398,14 +4460,16 @@ $('#bookTable').addEventListener('change', async (e) => {
   } else if (e.target.classList.contains('pg-input')) {
     const f = e.target.dataset.f, val = +e.target.value || 0;
     await api('/api/book', { body: { id, field: f, value: val } });
-    // ESTADO AUTOMÁTICO por páginas: si llegas al total -> Terminado; si avanzas -> Leyendo
-    const b = (S.books || []).find(x => x.id === id) || {};
-    const pages = f === 'pages' ? val : (b.pages || 0);
-    const current = f === 'current' ? val : (b.current || 0);
-    if (pages > 0 && current >= pages)
-      await api('/api/book', { body: { id, field: 'status', value: 'Terminado' } });
-    else if (current > 0 && b.status !== 'Terminado' && b.status !== 'Leyendo')
-      await api('/api/book', { body: { id, field: 'status', value: 'Leyendo' } });
+    if (f !== 'read_year') {
+      // ESTADO AUTOMÁTICO por páginas: si llegas al total -> Terminado; si avanzas -> Leyendo
+      const b = (S.books || []).find(x => x.id === id) || {};
+      const pages = f === 'pages' ? val : (b.pages || 0);
+      const current = f === 'current' ? val : (b.current || 0);
+      if (pages > 0 && current >= pages)
+        await api('/api/book', { body: { id, field: 'status', value: 'Terminado' } });
+      else if (current > 0 && b.status !== 'Terminado' && b.status !== 'Leyendo')
+        await api('/api/book', { body: { id, field: 'status', value: 'Leyendo' } });
+    }
   }
   load();
 });
