@@ -17,7 +17,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 100  # debe coincidir con FRONT_V en static/app.js
+VERSION = 101  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 # Logging útil tanto en local como en Render. No imprime contraseñas ni cuerpos JSON.
