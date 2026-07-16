@@ -36,13 +36,24 @@
   <div class="freedom-panel" id="freedomPanel"></div>
   <div class="row-between">
     <h1>🏠 Your month in numbers</h1>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="btn-ghost" id="openShoppingBtn" title="Shopping & to-buy list">🛒 Shopping</button>
-      <button class="btn-ghost" id="openTodoBtn" title="To-do list — quick notes so you don't forget">📝 To-do</button>
-      <select id="monthSel" class="month-select"></select>
-    </div>
+    <select id="monthSel" class="month-select"></select>
   </div>
-  <div class="cards cards-5" id="kpis"></div>
+  <div class="cards" id="kpis"></div>
+
+  <div class="panel shopping-panel">
+    <div class="row-between">
+      <h2>🛒 Shopping & to-buy</h2>
+      <button class="btn-ghost" id="clearDoneBtn" title="Remove checked items">Clear done</button>
+    </div>
+    <p class="hint">Quick list so you don't forget. Tap to cross out. Checked items clear at the end of the day.</p>
+    <form id="shopNew" class="shop-form">
+      <input id="shName" placeholder="What to buy / do? (e.g. Eye drops)" required>
+      <input id="shSlots" type="number" min="1" max="9" value="1" title="How many sub-tasks?" style="width:70px">
+      <button class="btn-gold" type="submit">+ Add</button>
+    </form>
+    <div id="shoppingList"></div>
+    <div id="shoppingHistory"></div>
+  </div>
 
   <div class="panel">
     <div class="row-between">
@@ -65,6 +76,22 @@
     </form>
     <div id="expenseSummary"></div>
     <div id="expenseList"></div>
+    <div class="fund-box">
+      <div class="row-between">
+        <h3 class="mini-title">🏦 Company fund — your growing savings</h3>
+        <button class="btn-ghost" id="addFundBtn">+ Add concept</button>
+      </div>
+      <p class="hint">Your permanent savings & social contributions. The deposit is made on the 30th, so the "last deposit" shows the previous month until this month's lands. This one updates by itself every month.</p>
+      <div id="fundTable"></div>
+    </div>
+    <div class="piggy-box">
+      <div class="row-between">
+        <h3 class="mini-title">🐖 My piggy banks</h3>
+        <button class="btn-ghost" id="addPiggyBtn">+ New piggy bank</button>
+      </div>
+      <p class="hint">Your own savings goals (NU pockets, cash jars, whatever). You add money whenever you want — these don't update on their own.</p>
+      <div id="piggyList"></div>
+    </div>
   </div>
 
   <div class="panel">
@@ -85,70 +112,17 @@
     </div>
   </div>
 
-  <div class="panel chart-wide">
-    <h2>Where the money goes</h2>
-    <div class="chart-wrap"><canvas id="pieChart" height="260"></canvas></div>
-  </div>
-
   <div class="grid-2">
+    <div class="panel">
+      <h2>Where the money goes</h2>
+      <canvas id="pieChart" height="240"></canvas>
+      <div id="regla502030" class="rule-box"></div>
+    </div>
     <div class="panel">
       <h2>This month's payments</h2>
       <table class="table" id="pagosTable"></table>
       <p class="diag" id="diagnostico"></p>
     </div>
-    <div class="panel">
-      <h2>50 / 30 / 20 check</h2>
-      <div id="regla502030" class="rule-box"></div>
-    </div>
-  </div>
-
-  <!-- 💰 AHORROS: todo lo de savings baja al final -->
-  <div class="panel savings-panel">
-    <h2>💰 Savings</h2>
-    <div class="fund-box">
-      <div class="row-between">
-        <h3 class="mini-title">🏦 Company fund — your growing savings</h3>
-        <button class="btn-ghost" id="addFundBtn">+ Add concept</button>
-      </div>
-      <p class="hint">Your permanent savings & social contributions. The deposit is made on the 30th, so the "last deposit" shows the previous month until this month's lands. This one updates by itself every month.</p>
-      <div id="fundTable"></div>
-    </div>
-    <div class="piggy-box">
-      <div class="row-between">
-        <h3 class="mini-title">🐖 My piggy banks</h3>
-        <button class="btn-ghost" id="addPiggyBtn">+ New piggy bank</button>
-      </div>
-      <p class="hint">Your own savings goals (NU pockets, cash jars, whatever). You add money whenever you want — these don't update on their own.</p>
-      <div id="piggyList"></div>
-    </div>
-  </div>
-
-  <!-- 🛒 SHOPPING: oculto por defecto, se abre desde el botón de arriba como modal -->
-  <div class="panel shopping-panel" id="shoppingPanel" style="display:none">
-    <div class="row-between">
-      <h2>🛒 Shopping & to-buy</h2>
-      <button class="btn-ghost" id="clearDoneBtn" title="Remove checked items">Clear done</button>
-    </div>
-    <p class="hint">Quick list so you don't forget. Tap to cross out. Checked items clear at the end of the day.</p>
-    <form id="shopNew" class="shop-form">
-      <input id="shName" placeholder="What to buy / do? (e.g. Eye drops)" required>
-      <input id="shSlots" type="number" min="1" max="9" value="1" title="How many sub-tasks?" style="width:70px">
-      <button class="btn-gold" type="submit">+ Add</button>
-    </form>
-    <div id="shoppingList"></div>
-    <div id="shoppingHistory"></div>
-  </div>
-  <div class="panel shopping-panel" id="todoPanel" style="display:none">
-    <div class="row-between">
-      <h2>📝 To-do list</h2>
-      <button class="btn-ghost" id="todoClearBtn" title="Remove checked items">Clear done</button>
-    </div>
-    <p class="hint">Your notepad for activities and things not to forget. Tap to cross out.</p>
-    <form id="todoNew" class="shop-form">
-      <input id="tdText" placeholder="What do you need to do? (e.g. Call the bank)" required>
-      <button class="btn-gold" type="submit">+ Add</button>
-    </form>
-    <div id="todoList"></div>
   </div>
 </section>
 
@@ -286,9 +260,7 @@
     </div>
     <div id="routineDay"></div>
     <button class="btn-gold" id="addRoutineBtn" style="margin-top:10px">+ Add activity to this day</button>
-    <button class="btn-gold" id="scheduleApptBtn" style="margin-top:10px">📅 Schedule an appointment / course</button>
     <p class="hint" id="freeTimeHint" style="margin-top:8px"></p>
-    <div id="apptList"></div>
   </div>
 
   <div class="panel">
@@ -330,7 +302,7 @@
   </div>
   <div class="panel">
     <h2>📉 Progress over time</h2>
-    <div class="gym-chart-wrap"><canvas id="gymChart"></canvas></div>
+    <canvas id="gymChart" height="220"></canvas>
     <p class="hint" id="gymChartHint" style="margin-top:8px"></p>
   </div>
   <div class="panel">
@@ -397,6 +369,10 @@
     <button data-f="Por leer">To read</button>
     <button data-f="Leyendo">Reading</button>
     <button data-f="Terminado">Finished</button>
+  </div>
+  <div class="abono-form" style="margin:0 0 14px">
+    <button class="btn-gold" type="button" id="bookHistoryBtn">📚 History by year</button>
+    <button type="button" id="bookChartBtn">📈 Reading curve</button>
   </div>
   <div class="panel scroll-x"><table class="table" id="bookTable"></table></div>
 </section>
