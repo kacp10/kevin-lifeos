@@ -75,7 +75,7 @@ function engancharMiles(el) {
     el.value = limpio ? Number(limpio).toLocaleString('es-CO') : '';
   });
 }
-const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const pct = (n) => (n * 100).toFixed(1) + '%';
 /* --- compras a cuotas --- */
 const planIndex = (d) => (d.getFullYear() - 2026) * 12 + d.getMonth() - 6;  // julio 2026 = 0
@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 101;
+const FRONT_V = 102;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -299,38 +299,35 @@ function localISO(d = new Date()) {
 }
 function hoyLocal() { return localISO(new Date()); }   // debe coincidir con VERSION en app.py
 
-async function api(path, opts) {
-  let r;
+async function api(path, opts = null) {
+  const cfg = opts || {};
   const controller = new AbortController();
-  const timeoutMs = (opts && opts.timeoutMs) || 20000;
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutMs = cfg.timeout || 20000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let r;
   try {
     r = await fetch(path, opts ? {
-      method: opts.method || 'POST',
+      method: cfg.method || 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      body: cfg.body ? JSON.stringify(cfg.body) : undefined,
       signal: controller.signal
     } : { signal: controller.signal });
   } catch (err) {
-    if (!opts || !opts.quiet) {
-      const msg = err && err.name === 'AbortError'
-        ? '⚠ The server took too long to respond. Nothing was confirmed; please try again.'
-        : '⚠ Could not reach the server. Check your connection and try again.';
-      toast(msg, 'err');
-    }
+    const timedOut = err && err.name === 'AbortError';
+    if (!cfg.quiet) toast(timedOut
+      ? '⚠ The server took too long and did not confirm the operation. Try again.'
+      : '⚠ Could not reach the server. Check your connection and try again.', 'err');
     throw err;
   } finally {
-    clearTimeout(timeoutId);
+    clearTimeout(timer);
   }
   if (!r.ok) {
-    // Mensaje amigable en TODA la app (no solo gym): intenta usar el {error:'...'} que el
-    // backend ya devuelve; si no hay uno claro, cae en un mensaje genérico sin jerga técnica.
     let friendly = 'Something went wrong saving that. Please try again in a moment.';
     try {
       const body = await r.clone().json();
-      if (body && body.error) friendly = body.error;
-    } catch { /* la respuesta no traía JSON con detalle: se usa el mensaje genérico */ }
-    if (!opts || !opts.quiet) toast('⚠ ' + friendly, 'err');
+      if (body && body.error) friendly = String(body.error);
+    } catch { /* respuesta sin JSON */ }
+    if (!cfg.quiet) toast('⚠ ' + esc(friendly), 'err');
     throw new Error(r.status + ' en ' + path);
   }
   return r.json();
@@ -352,37 +349,23 @@ async function withBusy(el, work) {
   }
 }
 
-let _modalDepth = 0;
-function modalLifecycle(back, close, focusSelector = 'input, select, button') {
-  const previousFocus = document.activeElement;
-  const previousOverflow = document.body.style.overflow;
-  _modalDepth += 1;
-  document.body.style.overflow = 'hidden';
-  const onKey = (ev) => {
-    if (ev.key === 'Escape' && back.isConnected) close();
-  };
-  document.addEventListener('keydown', onKey);
-  setTimeout(() => {
-    const first = back.querySelector(focusSelector);
-    if (first) first.focus();
-  }, 100);
-  return () => {
-    document.removeEventListener('keydown', onKey);
-    _modalDepth = Math.max(0, _modalDepth - 1);
-    if (_modalDepth === 0) document.body.style.overflow = previousOverflow;
-    if (previousFocus && previousFocus.isConnected && typeof previousFocus.focus === 'function') {
-      setTimeout(() => previousFocus.focus(), 0);
-    }
-  };
-}
-
 /* ====== MODALES Y TOASTS BONITOS ====== */
+function safeToastHTML(value) {
+  const tpl = document.createElement('template');
+  tpl.innerHTML = String(value ?? '');
+  const allowed = new Set(['B', 'STRONG', 'EM', 'I', 'BR', 'SPAN']);
+  [...tpl.content.querySelectorAll('*')].forEach(el => {
+    if (!allowed.has(el.tagName)) { el.replaceWith(document.createTextNode(el.textContent || '')); return; }
+    [...el.attributes].forEach(a => el.removeAttribute(a.name));
+  });
+  return tpl.innerHTML;
+}
 function toast(msg, tipo) {
   let wrap = document.getElementById('toastWrap');
   if (!wrap) { wrap = document.createElement('div'); wrap.id = 'toastWrap'; document.body.appendChild(wrap); }
   const t = document.createElement('div');
-  t.className = 'toast' + (tipo === 'err' ? ' err' : '');
-  t.innerHTML = msg;
+  t.className = 'toast' + (tipo === 'err' ? ' err' : tipo === 'warn' ? ' warn' : '');
+  t.innerHTML = safeToastHTML(msg);
   wrap.appendChild(t);
   setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 350); }, 2600);
 }
@@ -438,16 +421,7 @@ function celebrate({ icon = '🎉', title = '', text = '', confettiOn = true }) 
   </div>`;
   document.body.appendChild(back);
   requestAnimationFrame(() => back.classList.add('show'));
-  let closed = false;
-  let cleanup = () => {};
-  const close = () => {
-    if (closed) return;
-    closed = true;
-    cleanup();
-    back.classList.remove('show');
-    setTimeout(() => back.remove(), 300);
-  };
-  cleanup = modalLifecycle(back, close, '.m-ok');
+  const close = () => { back.classList.remove('show'); setTimeout(() => back.remove(), 300); };
   back.querySelector('.m-ok').onclick = close;
   back.onclick = (e) => { if (e.target === back) close(); };
 }
@@ -468,6 +442,7 @@ function snapshotDeudasVivas() {
 
 function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Confirmar', danger = false, extraBtn = null, cancelText = null }) {
   return new Promise((resolve) => {
+    const previousFocus = document.activeElement;
     const back = document.createElement('div');
     back.className = 'modal-back';
     const fieldsHtml = fields.map((f, i) => {
@@ -490,18 +465,31 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
         <button class="m-ok ${danger ? 'danger' : ''}">${okText}</button>
       </div></div>`;
     document.body.appendChild(back);
+    document.body.classList.add('modal-open');
     requestAnimationFrame(() => back.classList.add('show'));
     let closed = false;
-    let cleanup = () => {};
-    const close = (val = null) => {
+    const close = (val) => {
       if (closed) return;
       closed = true;
-      cleanup();
+      document.removeEventListener('keydown', onKeyDown);
       back.classList.remove('show');
-      setTimeout(() => back.remove(), 280);
+      setTimeout(() => {
+        back.remove();
+        if (!document.querySelector('.modal-back')) document.body.classList.remove('modal-open');
+        if (previousFocus && previousFocus.focus) previousFocus.focus();
+      }, 280);
       resolve(val);
     };
-    cleanup = modalLifecycle(back, close);
+    const onKeyDown = (ev) => {
+      if (ev.key === 'Escape') { ev.preventDefault(); close(null); return; }
+      if (ev.key !== 'Tab') return;
+      const focusables = [...back.querySelectorAll('button,input,select,textarea,[href]')].filter(el => !el.disabled && el.offsetParent !== null);
+      if (!focusables.length) return;
+      const firstEl = focusables[0], lastEl = focusables[focusables.length - 1];
+      if (ev.shiftKey && document.activeElement === firstEl) { ev.preventDefault(); lastEl.focus(); }
+      else if (!ev.shiftKey && document.activeElement === lastEl) { ev.preventDefault(); firstEl.focus(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
     back.querySelector('.m-ok').onclick = () => {
       if (fields.length) {
         const vals = [...back.querySelectorAll('[data-i]')].map(el =>
@@ -521,6 +509,8 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
         inp.value = limpio ? Number(limpio).toLocaleString('es-CO') : '';
       });
     });
+    const first = back.querySelector('input, select');
+    if (first) setTimeout(() => first.focus(), 100);
   });
 }
 async function confirmModal(title, text, danger = true) {
@@ -1116,18 +1106,10 @@ function docModal(title, html) {
     <div class="doc-body">${html}</div></div>`;
   document.body.appendChild(back);
   requestAnimationFrame(() => back.classList.add('show'));
-  let closed = false;
-  let cleanup = () => {};
-  const close = () => {
-    if (closed) return;
-    closed = true;
-    cleanup();
-    back.classList.remove('show');
-    setTimeout(() => back.remove(), 280);
-  };
-  cleanup = modalLifecycle(back, close, '.doc-x');
+  const close = () => { back.classList.remove('show'); setTimeout(() => back.remove(), 280); };
   back.querySelector('.doc-x').addEventListener('click', close);
   back.addEventListener('click', (e) => { if (e.target === back) close(); });
+  document.addEventListener('keydown', function esc(ev) { if (ev.key === 'Escape') { close(); document.removeEventListener('keydown', esc); } });
 }
 const GYM_MANUAL_HTML = `
   <div class="guide-block">
@@ -1255,21 +1237,25 @@ async function load(animate) {
     const nextState = await api('/api/state?month=' + ym);
     S = nextState;
     checkVersion();
-    await syncCarreraIngles();
-    renderFreedom();
-    renderInicio();
-    renderShopping();
-    renderTodos();
-    renderBoss(animate);
-    renderHabitos();
-    renderSuenos();
-    renderAnime();
-    renderLibros();
-    renderGoals();
-    renderLife();
-    renderGym();
-    renderHaki();
-    renderAchievements();
+    try { await syncCarreraIngles(); } catch (err) { console.error('[LifeOS] syncCarreraIngles failed', err); }
+    const safeRender = (name, fn) => {
+      try { fn(); }
+      catch (err) { console.error(`[LifeOS] ${name} failed`, err); toast(`⚠ ${esc(name)} could not be drawn. The rest of the app is still available.`, 'warn'); }
+    };
+    safeRender('Freedom', renderFreedom);
+    safeRender('Home', renderInicio);
+    safeRender('Shopping', renderShopping);
+    safeRender('To-do', renderTodos);
+    safeRender('Debt Boss', () => renderBoss(animate));
+    safeRender('Habits', renderHabitos);
+    safeRender('Wishlist', renderSuenos);
+    safeRender('Anime', renderAnime);
+    safeRender('Books', renderLibros);
+    safeRender('Goals', renderGoals);
+    safeRender('Life', renderLife);
+    safeRender('Gym', renderGym);
+    safeRender('Haki', renderHaki);
+    safeRender('Achievements', renderAchievements);
     document.querySelectorAll('.money-live').forEach(engancharMiles);
     setTimeout(avisosInteligentes, 1200);
     setTimeout(preguntaPagoDelDia, 2000);
@@ -2661,37 +2647,36 @@ document.addEventListener('click', async (e) => {
 
 $('#abonoForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const form = e.currentTarget;
-  const submit = form.querySelector('button[type="submit"]');
-  await withBusy(submit || form, async () => {
-  const valor = numVal('#abonoValor');
-  const vivasAntes = snapshotDeudasVivas();
-  const rawVal = $('#abonoDebt').value;
-  let body, debtName;
-  if (rawVal.startsWith('x:')) {
-    const exId = +rawVal.slice(2);
-    body = { extra_id: exId, valor };
-    debtName = ((S.extra_debts || []).find(d => d.id === exId) || {}).name || '';
-  } else {
-    const debtId = +rawVal;
-    body = { debt_id: debtId, valor };
-    debtName = (S.debts.find(d => d.id === debtId) || {}).name || '';
-  }
-  const r = await api('/api/abono', { body });
-  if (r.error) { toast('⚠ ' + r.error, 'err'); return; }
-  toast('⚔ Hit of <b>' + fmt(valor) + '</b> to the boss!');
-  const f = $('#dmgFloat');
-  f.textContent = '−' + fmt(valor);
-  f.classList.remove('show'); void f.offsetWidth; f.classList.add('show');
-  $('#abonoValor').value = '';
-  await load(true);
-  // ¿este abono mató al enemigo?
-  const vivasAhora = snapshotDeudasVivas();
-  if (debtName && vivasAntes.has(debtName) && !vivasAhora.has(debtName)) {
-    flashDerrota(debtName); setTimeout(() => celebrate({ icon: '☠', title: 'ENEMY DEFEATED', text: `<b>${debtName}</b> is down. One less chain. 🔥` }), 700);
-  } else if (vivasAhora.size === 0 && vivasAntes.size > 0) {
-    celebrate({ icon: '👑', title: 'YOU ARE FREE', text: 'Every debt defeated. You won the war, Kevin.' });
-  }
+  const submit = e.submitter || e.currentTarget.querySelector('[type="submit"]');
+  await withBusy(submit, async () => {
+    const valor = numVal('#abonoValor');
+    if (valor <= 0) { toast('Type an amount greater than 0', 'warn'); return; }
+    const vivasAntes = snapshotDeudasVivas();
+    const rawVal = $('#abonoDebt').value;
+    let body, debtName;
+    if (rawVal.startsWith('x:')) {
+      const exId = +rawVal.slice(2);
+      body = { extra_id: exId, valor };
+      debtName = ((S.extra_debts || []).find(d => d.id === exId) || {}).name || '';
+    } else {
+      const debtId = +rawVal;
+      body = { debt_id: debtId, valor };
+      debtName = (S.debts.find(d => d.id === debtId) || {}).name || '';
+    }
+    const r = await api('/api/abono', { body });
+    const aplicado = Number(r.aplicado || valor);
+    toast('⚔ Hit of <b>' + fmt(aplicado) + '</b> to the boss!');
+    const f = $('#dmgFloat');
+    f.textContent = '−' + fmt(aplicado);
+    f.classList.remove('show'); void f.offsetWidth; f.classList.add('show');
+    $('#abonoValor').value = '';
+    await load(true);
+    const vivasAhora = snapshotDeudasVivas();
+    if (debtName && vivasAntes.has(debtName) && !vivasAhora.has(debtName)) {
+      flashDerrota(esc(debtName)); setTimeout(() => celebrate({ icon: '☠', title: 'ENEMY DEFEATED', text: `<b>${esc(debtName)}</b> is down. One less chain. 🔥` }), 700);
+    } else if (vivasAhora.size === 0 && vivasAntes.size > 0) {
+      celebrate({ icon: '👑', title: 'YOU ARE FREE', text: 'Every debt defeated. You won the war, Kevin.' });
+    }
   });
 });
 
@@ -4439,6 +4424,7 @@ function finishedBooksByYear() {
     if (!grouped.has(year)) grouped.set(year, []);
     grouped.get(year).push(b);
   });
+  grouped.forEach(books => books.sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'es')));
   return [...grouped.entries()].sort((a, b) => a[0] - b[0]);
 }
 function renderLibros() {
@@ -4450,7 +4436,8 @@ function renderLibros() {
     lista.map(b => {
       const p = b.pages ? Math.min((b.status === 'Terminado' ? b.pages : b.current) / b.pages, 1) : 0;
       const year = Number(b.read_year || 0);
-      return `<tr><td>${esc(b.title)}</td>
+      const needsYear = b.status === 'Terminado' && !year;
+      return `<tr class="${needsYear ? 'book-needs-year' : ''}"><td>${esc(b.title)}${needsYear ? '<span class="book-year-missing">Year needed</span>' : ''}</td>
         <td><select class="book-status" data-id="${b.id}">
           ${BOOK_STATES.map(([v, t]) => `<option value="${v}" ${v === b.status ? 'selected' : ''}>${t}</option>`).join('')}
         </select></td>
@@ -4520,25 +4507,33 @@ $('#bookChartBtn').addEventListener('click', showBookChart);
 $('#bookTable').addEventListener('change', async (e) => {
   const control = e.target;
   const id = +control.dataset.id;
+  const previous = (S.books || []).find(x => x.id === id) || {};
   await withBusy(control, async () => {
-    if (control.classList.contains('book-status')) {
-      await api('/api/book', { body: { id, field: 'status', value: control.value } });
-    } else if (control.classList.contains('pg-input')) {
-      const f = control.dataset.f, val = +control.value || 0;
-      await api('/api/book', { body: { id, field: f, value: val } });
-      if (f !== 'read_year') {
-        // ESTADO AUTOMÁTICO por páginas: si llegas al total -> Terminado; si avanzas -> Leyendo
-        const b = (S.books || []).find(x => x.id === id) || {};
-        const pages = f === 'pages' ? val : (b.pages || 0);
-        const current = f === 'current' ? val : (b.current || 0);
-        if (pages > 0 && current >= pages)
-          await api('/api/book', { body: { id, field: 'status', value: 'Terminado' } });
-        else if (current > 0 && b.status !== 'Terminado' && b.status !== 'Leyendo')
-          await api('/api/book', { body: { id, field: 'status', value: 'Leyendo' } });
+    try {
+      if (control.classList.contains('book-status')) {
+        await api('/api/book', { body: { id, field: 'status', value: control.value } });
+      } else if (control.classList.contains('pg-input')) {
+        const f = control.dataset.f, val = +control.value || 0;
+        if (f === 'read_year' && previous.read_year && val && val !== Number(previous.read_year)) {
+          const ok = await confirmModal('Replace reading year', `Change <b>${esc(previous.title)}</b> from <b>${previous.read_year}</b> to <b>${val}</b>?`, false);
+          if (!ok) { control.value = previous.read_year; return; }
+        }
+        await api('/api/book', { body: { id, field: f, value: val } });
+        if (f !== 'read_year') {
+          const pages = f === 'pages' ? val : (previous.pages || 0);
+          const current = f === 'current' ? val : (previous.current || 0);
+          if (pages > 0 && current >= pages)
+            await api('/api/book', { body: { id, field: 'status', value: 'Terminado' } });
+          else if (current > 0 && previous.status !== 'Terminado' && previous.status !== 'Leyendo')
+            await api('/api/book', { body: { id, field: 'status', value: 'Leyendo' } });
+        }
       }
+      toast('📚 Book updated');
+      await load();
+    } catch (err) {
+      renderLibros();
+      throw err;
     }
-    toast('📚 Book updated');
-    await load();
   });
 });
 
@@ -4625,9 +4620,16 @@ $('#dreamNew').addEventListener('submit', async (e) => {
 
 $('#bookNew').addEventListener('submit', async (e) => {
   e.preventDefault();
-  await api('/api/book/new', { body: { title: $('#bkTitle').value } });
-  e.target.reset();
-  load();
+  const form = e.currentTarget;
+  const submit = e.submitter || form.querySelector('[type="submit"]');
+  await withBusy(submit, async () => {
+    const title = $('#bkTitle').value.trim();
+    if (!title) { toast('Write the book title', 'warn'); return; }
+    await api('/api/book/new', { body: { title } });
+    form.reset();
+    toast('📚 Book added');
+    await load();
+  });
 });
 
 $('#animeNew').addEventListener('submit', async (e) => {
@@ -4648,7 +4650,7 @@ $('#animeNew').addEventListener('submit', async (e) => {
   const [t1, t2, t3, peliculas, ovas] = r;
   await api('/api/anime/new', { body: { name: nombre, t1, t2, t3, peliculas, ovas } });
   e.target.reset();
-  toast('📺 <b>' + nombre + '</b> added to your list.');
+  toast('📺 <b>' + esc(nombre) + '</b> added to your list.');
   load();
 });
 
@@ -4844,3 +4846,5 @@ load().then(() => {
   // al abrir la app: si hay una cita en la ventana de 3 días, el robot la recuerda; si no, saluda
   setTimeout(() => { if (!petCheckAppointments()) petSay('idle'); }, 900);
 });
+
+// v102: el respaldo usa una descarga nativa para no depender del estado de la SPA.

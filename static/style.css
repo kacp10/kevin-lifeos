@@ -1227,3 +1227,19 @@ details.grp-paid > summary { color: var(--ok, #34d399); }
 #todoBackdrop { position: fixed; inset: 0; background: rgba(5,7,12,.66); backdrop-filter: blur(2px); z-index: 98; }
 #todoPanel.as-modal { position: fixed; top: 8vh; left: 50%; transform: translateX(-50%); width: min(560px, 92vw); max-height: 80vh; overflow: auto; z-index: 99; }
 .todo-check { background: none; border: none; font-size: 1.05rem; cursor: pointer; padding: 2px 6px; }
+
+
+/* ====== v102: mejoras seguras sin redistribuir la interfaz ====== */
+body.modal-open { overflow: hidden; }
+button[aria-busy="true"], input[aria-busy="true"], select[aria-busy="true"] {
+  cursor: wait; opacity: .68;
+}
+.toast.warn { border-left-color: var(--gold); }
+.footer-backup { color: var(--gold); text-decoration: none; font-weight: 700; }
+.footer-backup:hover { text-decoration: underline; }
+.book-year-missing {
+  display: inline-block; margin-left: 7px; padding: 2px 7px; border-radius: 999px;
+  border: 1px solid rgba(245,185,66,.45); color: var(--gold); font-size: .66rem;
+  vertical-align: middle; white-space: nowrap;
+}
+.book-needs-year td:first-child { box-shadow: inset 3px 0 0 rgba(245,185,66,.65); }
