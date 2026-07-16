@@ -12,12 +12,13 @@ import secrets
 import sqlite3
 from datetime import date
 from datetime import datetime
-from flask import Flask, jsonify, render_template, request, g
+from contextlib import contextmanager
+from flask import Flask, jsonify, render_template, request, g, Response
 import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 101  # debe coincidir con FRONT_V en static/app.js
+VERSION = 102  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 # Logging útil tanto en local como en Render. No imprime contraseñas ni cuerpos JSON.
@@ -136,6 +137,18 @@ def db():
     if 'db' not in g:
         g.db = db_layer.connect(DB)
     return g.db
+
+
+@contextmanager
+def transaction():
+    """Transacción atómica para operaciones que modifican varias tablas."""
+    con = db()
+    try:
+        yield con
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
 
 
 @app.teardown_appcontext
@@ -301,6 +314,8 @@ def init_db():
                 first_time = True
     con.executescript('''
     CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT);
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+        version TEXT PRIMARY KEY, applied_at TEXT NOT NULL, description TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS debts (
         id INTEGER PRIMARY KEY, name TEXT, initial INTEGER);
     CREATE TABLE IF NOT EXISTS abonos (
@@ -415,6 +430,10 @@ def init_db():
             con.execute(idx_sql)
         except Exception as e:
             print('  (aviso) no se pudo crear índice:', e)
+    con.execute(
+        'INSERT OR IGNORE INTO schema_migrations (version, applied_at, description) VALUES (?,?,?)',
+        ('v102_foundation', datetime.now().isoformat(timespec='seconds'),
+         'Backups, transactional guards and formal migration registry'))
     con.commit()
     if first_time:
         with open(os.path.join(BASE, 'seed_data.json'), encoding='utf-8') as f:
@@ -1215,20 +1234,44 @@ def state():
 
 @app.post('/api/abono')
 def abono():
-    j = request.json
-    valor = int(j['valor'])
+    j = request.json or {}
+    valor = to_int(j.get('valor'))
     if valor <= 0:
         return jsonify(error='El abono debe ser mayor a cero'), 400
-    extra_id = j.get('extra_id')        # si viene, el abono es a una deuda registrada
-    if extra_id:
-        db().execute('INSERT INTO abonos (fecha, debt_id, valor, nota) VALUES (?,?,?,?)',
-                     (j.get('fecha', date.today().isoformat()), None, valor, f'extra:{int(extra_id)}'))
-    else:
-        db().execute('INSERT INTO abonos (fecha, debt_id, valor) VALUES (?,?,?)',
-                     (j.get('fecha', date.today().isoformat()),
-                      int(j['debt_id']), valor))
-    db().commit()
-    return jsonify(ok=True)
+    extra_id = j.get('extra_id')
+    with transaction() as con:
+        if extra_id is not None:
+            try:
+                extra_id = int(extra_id)
+            except (TypeError, ValueError):
+                return jsonify(error='Deuda inválida'), 400
+            deuda = con.execute('SELECT total, abonado FROM extra_debts WHERE id=?', (extra_id,)).fetchone()
+            if not deuda:
+                return jsonify(error='La deuda ya no existe'), 404
+            deuda = dict(deuda)
+            saldo = max((deuda.get('total') or 0) - (deuda.get('abonado') or 0), 0)
+            valor = min(valor, saldo)
+            if valor <= 0:
+                return jsonify(error='La deuda ya está pagada'), 409
+            con.execute('INSERT INTO abonos (fecha, debt_id, valor, nota) VALUES (?,?,?,?)',
+                        (j.get('fecha', date.today().isoformat()), None, valor, f'extra:{extra_id}'))
+        else:
+            try:
+                debt_id = int(j.get('debt_id'))
+            except (TypeError, ValueError):
+                return jsonify(error='Deuda inválida'), 400
+            deuda = con.execute('SELECT initial FROM debts WHERE id=?', (debt_id,)).fetchone()
+            if not deuda:
+                return jsonify(error='La deuda ya no existe'), 404
+            pagado = con.execute('SELECT COALESCE(SUM(valor),0) AS s FROM abonos WHERE debt_id=?',
+                                 (debt_id,)).fetchone()
+            saldo = max((dict(deuda)['initial'] or 0) - (dict(pagado)['s'] or 0), 0)
+            valor = min(valor, saldo)
+            if valor <= 0:
+                return jsonify(error='La deuda ya está pagada'), 409
+            con.execute('INSERT INTO abonos (fecha, debt_id, valor) VALUES (?,?,?)',
+                        (j.get('fecha', date.today().isoformat()), debt_id, valor))
+    return jsonify(ok=True, aplicado=valor)
 
 
 @app.delete('/api/abono/<int:aid>')
@@ -1250,38 +1293,43 @@ def card_pay():
     monto = to_int(j.get('monto'))
     if monto <= 0:
         return jsonify(error='Enter an amount greater than 0'), 400
-    d = db().execute('SELECT * FROM debts WHERE name=?', (boss,)).fetchone()
+    con = db()
+    d = con.execute('SELECT * FROM debts WHERE name=?', (boss,)).fetchone()
     if not d:
         return jsonify(error='Card not found'), 404
     d = dict(d)
     restante = monto
-    # 1) liquidar compras a cuotas de esta tarjeta, de la más antigua a la más nueva
-    compras = [dict(r) for r in db().execute(
-        'SELECT * FROM compras WHERE creditor=? ORDER BY id ASC', (creditor,)).fetchall()]
-    for c in compras:
-        if restante <= 0:
-            break
-        saldo_c = max((c['valor'] or 0) - (c.get('abonado') or 0), 0)
-        if saldo_c <= 0:
-            continue
-        aplica = min(restante, saldo_c)
-        nuevo = (c.get('abonado') or 0) + aplica
-        if nuevo >= (c['valor'] or 0):
-            db().execute('DELETE FROM compras WHERE id=?', (c['id'],))   # compra saldada
-        else:
-            db().execute('UPDATE compras SET abonado=? WHERE id=?', (nuevo, c['id']))
-        restante -= aplica
-    # 2) lo que sobre baja la deuda base del jefe (registrada como abono)
-    if restante > 0:
-        row = db().execute('SELECT COALESCE(SUM(valor),0) AS s FROM abonos WHERE debt_id=?', (d['id'],)).fetchone()
-        ya_abonado = dict(row)['s'] if row else 0
-        base_saldo = max((d['initial'] or 0) - ya_abonado, 0)
-        aplica = min(restante, base_saldo)
-        if aplica > 0:
-            db().execute('INSERT INTO abonos (fecha, debt_id, valor) VALUES (?,?,?)',
-                         (date.today().isoformat(), d['id'], aplica))
+    try:
+        # 1) liquidar compras a cuotas de esta tarjeta, de la más antigua a la más nueva
+        compras = [dict(r) for r in con.execute(
+            'SELECT * FROM compras WHERE creditor=? ORDER BY id ASC', (creditor,)).fetchall()]
+        for c in compras:
+            if restante <= 0:
+                break
+            saldo_c = max((c['valor'] or 0) - (c.get('abonado') or 0), 0)
+            if saldo_c <= 0:
+                continue
+            aplica = min(restante, saldo_c)
+            nuevo = (c.get('abonado') or 0) + aplica
+            if nuevo >= (c['valor'] or 0):
+                con.execute('DELETE FROM compras WHERE id=?', (c['id'],))   # compra saldada
+            else:
+                con.execute('UPDATE compras SET abonado=? WHERE id=?', (nuevo, c['id']))
             restante -= aplica
-    db().commit()
+        # 2) lo que sobre baja la deuda base del jefe (registrada como abono)
+        if restante > 0:
+            row = con.execute('SELECT COALESCE(SUM(valor),0) AS s FROM abonos WHERE debt_id=?', (d['id'],)).fetchone()
+            ya_abonado = dict(row)['s'] if row else 0
+            base_saldo = max((d['initial'] or 0) - ya_abonado, 0)
+            aplica = min(restante, base_saldo)
+            if aplica > 0:
+                con.execute('INSERT INTO abonos (fecha, debt_id, valor) VALUES (?,?,?)',
+                             (date.today().isoformat(), d['id'], aplica))
+                restante -= aplica
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
     return jsonify(ok=True, aplicado=monto - restante, sobrante=restante)
 
 
@@ -1317,6 +1365,52 @@ def dream():
 
 
 
+BACKUP_TABLES = (
+    'config', 'schema_migrations', 'debts', 'abonos', 'habits', 'gym_sets',
+    'habit_marks', 'months_history', 'dreams', 'animes', 'books',
+    'payment_checks', 'week_shifts', 'routine_done', 'study_profile',
+    'careers', 'courses_done', 'routine_extra', 'routine_hidden',
+    'routine_hidden_day', 'journal', 'assets', 'expenses', 'month_income',
+    'services', 'fund', 'piggy', 'piggy_moves', 'shopping', 'todos',
+    'detalle_items', 'extra_debts', 'goals', 'compras', 'debts_v2', 'payments'
+)
+
+
+@app.get('/api/backup')
+def download_backup():
+    """Exportación portable y de solo lectura; funciona con SQLite y PostgreSQL."""
+    con = db()
+    tables = {}
+    counts = {}
+    for table in BACKUP_TABLES:
+        try:
+            rows = [dict(r) for r in con.execute(f'SELECT * FROM {table}').fetchall()]
+        except Exception as exc:
+            logger.warning('Backup: no se pudo leer %s: %s', table, exc)
+            continue
+        tables[table] = rows
+        counts[table] = len(rows)
+    payload = {
+        'format': 'kevin-lifeos-backup-v1',
+        'app_version': VERSION,
+        'generated_at': datetime.now().isoformat(timespec='seconds'),
+        'database': 'postgresql' if db_layer.IS_PG else 'sqlite',
+        'counts': counts,
+        'tables': tables,
+    }
+    raw = json.dumps(payload, ensure_ascii=False, indent=2).encode('utf-8')
+    filename = f'kevin-lifeos-backup-{date.today().isoformat()}.json'
+    return Response(
+        raw,
+        mimetype='application/json; charset=utf-8',
+        headers={
+            'Content-Disposition': f'attachment; filename="{filename}"',
+            'Content-Length': str(len(raw)),
+            'Cache-Control': 'no-store',
+        },
+    )
+
+
 @app.get('/api/ping')
 def ping():
     return jsonify(version=VERSION)
@@ -1329,41 +1423,42 @@ def check():
     debt_id = j.get('debt_id')          # si viene, es un pago de deuda principal -> abono real
     extra_id = j.get('extra_id')        # si viene, es un pago a deuda registrada prometida
     valor = int(j.get('valor') or 0)
-    cur = db().execute('SELECT 1 FROM payment_checks WHERE item=? AND month=?',
+    con = db()
+    cur = con.execute('SELECT 1 FROM payment_checks WHERE item=? AND month=?',
                        (item, month)).fetchone()
     if cur:
         # desmarcar: quitar el check y revertir el abono que creó este check
-        db().execute('DELETE FROM payment_checks WHERE item=? AND month=?', (item, month))
+        con.execute('DELETE FROM payment_checks WHERE item=? AND month=?', (item, month))
         if debt_id:
-            db().execute('DELETE FROM abonos WHERE debt_id=? AND nota=?',
+            con.execute('DELETE FROM abonos WHERE debt_id=? AND nota=?',
                          (int(debt_id), f'check:{item}:{month}'))
         if extra_id:
             # borrar el registro de abono que creó este check (revierte historial, boss y desglose)
-            db().execute('DELETE FROM abonos WHERE nota=?',
+            con.execute('DELETE FROM abonos WHERE nota=?',
                          (f'extracheck:{extra_id}:{item}:{month}',))
     else:
         # marcar: registrar el check y crear un abono real (baja el Debt Boss)
-        db().execute('INSERT INTO payment_checks VALUES (?,?)', (item, month))
+        con.execute('INSERT INTO payment_checks VALUES (?,?)', (item, month))
         if debt_id and valor > 0:
-            db().execute('INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
+            con.execute('INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
                          (int(debt_id), date.today().isoformat(), valor, f'check:{item}:{month}'))
         if extra_id and valor > 0:
             # registra el abono a la deuda registrada en la tabla 'abonos' (nota extracheck):
             # UNA sola fuente de verdad -> aparece en el HISTORIAL, baja el boss y el desglose.
-            db().execute('INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
+            con.execute('INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
                          (None, date.today().isoformat(), valor, f'extracheck:{extra_id}:{item}:{month}'))
             # si con este pago se salda del todo, borrar la deuda registrada (desaparece de todos lados)
-            ed = db().execute('SELECT * FROM extra_debts WHERE id=?', (int(extra_id),)).fetchone()
+            ed = con.execute('SELECT * FROM extra_debts WHERE id=?', (int(extra_id),)).fetchone()
             if ed:
                 ed = dict(ed)
-                pagado_total = db().execute(
+                pagado_total = con.execute(
                     "SELECT COALESCE(SUM(valor),0) AS s FROM abonos WHERE nota=? OR nota LIKE ?",
                     (f"extra:{ed['id']}", f"extracheck:{ed['id']}:%")).fetchone()
                 pagado_total = dict(pagado_total)['s'] + (ed.get('abonado') or 0)
                 if pagado_total >= (ed['total'] or 0):
-                    db().execute('DELETE FROM abonos WHERE nota LIKE ?', (f'extracheck:{ed["id"]}:%',))
-                    db().execute('DELETE FROM extra_debts WHERE id=?', (int(extra_id),))
-    db().commit()
+                    con.execute('DELETE FROM abonos WHERE nota LIKE ?', (f'extracheck:{ed["id"]}:%',))
+                    con.execute('DELETE FROM extra_debts WHERE id=?', (int(extra_id),))
+    con.commit()
     return jsonify(ok=True)
 
 
@@ -2233,8 +2328,12 @@ def dream_new():
 
 @app.post('/api/book/new')
 def book_new():
-    db().execute('INSERT INTO books (title) VALUES (?)',
-                 (request.json['title'].strip(),))
+    title = str((request.json or {}).get('title') or '').strip()
+    if not title:
+        return jsonify(error='Escribe el título del libro'), 400
+    if len(title) > 180:
+        return jsonify(error='El título es demasiado largo'), 400
+    db().execute('INSERT INTO books (title) VALUES (?)', (title,))
     db().commit()
     return jsonify(ok=True)
 
