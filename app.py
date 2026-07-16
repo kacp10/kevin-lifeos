@@ -17,7 +17,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 98  # debe coincidir con FRONT_V en static/app.js
+VERSION = 99  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 # Logging útil tanto en local como en Render. No imprime contraseñas ni cuerpos JSON.
@@ -1590,6 +1590,14 @@ def todo_del(i):
     db().execute('DELETE FROM todos WHERE id=?', (i,))
     db().commit()
     return jsonify(ok=True)
+
+
+@app.post('/api/todo/clear_done')
+def todo_clear_done():
+    """Elimina los pendientes completados en una sola operación atómica."""
+    cur = db().execute('DELETE FROM todos WHERE done=1')
+    db().commit()
+    return jsonify(ok=True, deleted=max(cur.rowcount or 0, 0))
 
 
 @app.post('/api/shopping/bought')
