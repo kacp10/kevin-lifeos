@@ -336,22 +336,17 @@ async function api(path, opts) {
 }
 
 // Evita envíos duplicados por doble clic mientras una operación sigue en curso.
-async function withBusy(el, work, busyText = '') {
+async function withBusy(el, work) {
   if (!el || el.dataset.busy === '1') return;
   el.dataset.busy = '1';
   const wasDisabled = !!el.disabled;
-  const oldText = el.matches('button') ? el.innerHTML : '';
   el.disabled = true;
-  el.classList.add('is-busy');
   el.setAttribute('aria-busy', 'true');
-  if (busyText && el.matches('button')) el.textContent = busyText;
   try {
     return await work();
   } finally {
     el.disabled = wasDisabled;
-    el.classList.remove('is-busy');
     el.removeAttribute('aria-busy');
-    if (busyText && el.matches('button')) el.innerHTML = oldText;
     delete el.dataset.busy;
   }
 }
@@ -359,16 +354,9 @@ async function withBusy(el, work, busyText = '') {
 /* ====== MODALES Y TOASTS BONITOS ====== */
 function toast(msg, tipo) {
   let wrap = document.getElementById('toastWrap');
-  if (!wrap) {
-    wrap = document.createElement('div');
-    wrap.id = 'toastWrap';
-    wrap.setAttribute('aria-live', 'polite');
-    wrap.setAttribute('aria-atomic', 'false');
-    document.body.appendChild(wrap);
-  }
+  if (!wrap) { wrap = document.createElement('div'); wrap.id = 'toastWrap'; document.body.appendChild(wrap); }
   const t = document.createElement('div');
-  t.className = 'toast' + (tipo === 'err' ? ' err' : tipo === 'warn' ? ' warn' : ' ok');
-  t.setAttribute('role', tipo === 'err' ? 'alert' : 'status');
+  t.className = 'toast' + (tipo === 'err' ? ' err' : '');
   t.innerHTML = msg;
   wrap.appendChild(t);
   setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 350); }, 2600);
@@ -413,29 +401,6 @@ function flashDerrota(nombre) {
   setTimeout(() => { f.classList.add('out'); setTimeout(() => f.remove(), 400); }, 1100);
 }
 
-function activateDialog(back, close) {
-  const previousFocus = document.activeElement;
-  back.setAttribute('role', 'dialog');
-  back.setAttribute('aria-modal', 'true');
-  document.body.classList.add('modal-open');
-  const onKey = (e) => {
-    if (e.key === 'Escape') { e.preventDefault(); close(null); return; }
-    if (e.key !== 'Tab') return;
-    const focusable = [...back.querySelectorAll('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')]
-      .filter(el => !el.disabled && el.offsetParent !== null);
-    if (!focusable.length) return;
-    const first = focusable[0], last = focusable[focusable.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-  };
-  document.addEventListener('keydown', onKey);
-  return () => {
-    document.removeEventListener('keydown', onKey);
-    if (!document.querySelector('.modal-back.show')) document.body.classList.remove('modal-open');
-    if (previousFocus && previousFocus.focus) setTimeout(() => previousFocus.focus(), 0);
-  };
-}
-
 function celebrate({ icon = '🎉', title = '', text = '', confettiOn = true }) {
   if (confettiOn) confetti();
   if (typeof petCelebrate === 'function') petCelebrate();   // la mascota también festeja
@@ -447,17 +412,8 @@ function celebrate({ icon = '🎉', title = '', text = '', confettiOn = true }) 
     <div class="modal-btns"><button class="m-ok">¡Sigamos! / Let's go!</button></div>
   </div>`;
   document.body.appendChild(back);
-  let deactivate = () => {};
-  const close = () => {
-    back.classList.remove('show');
-    deactivate();
-    setTimeout(() => back.remove(), 300);
-  };
-  deactivate = activateDialog(back, close);
-  requestAnimationFrame(() => {
-    back.classList.add('show');
-    back.querySelector('.m-ok')?.focus();
-  });
+  requestAnimationFrame(() => back.classList.add('show'));
+  const close = () => { back.classList.remove('show'); setTimeout(() => back.remove(), 300); };
   back.querySelector('.m-ok').onclick = close;
   back.onclick = (e) => { if (e.target === back) close(); };
 }
@@ -500,15 +456,8 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
         <button class="m-ok ${danger ? 'danger' : ''}">${okText}</button>
       </div></div>`;
     document.body.appendChild(back);
-    let deactivate = () => {};
-    const close = (val) => {
-      back.classList.remove('show');
-      deactivate();
-      setTimeout(() => back.remove(), 280);
-      resolve(val);
-    };
-    deactivate = activateDialog(back, close);
     requestAnimationFrame(() => back.classList.add('show'));
+    const close = (val) => { back.classList.remove('show'); setTimeout(() => back.remove(), 280); resolve(val); };
     back.querySelector('.m-ok').onclick = () => {
       if (fields.length) {
         const vals = [...back.querySelectorAll('[data-i]')].map(el =>
@@ -2692,7 +2641,7 @@ $('#abonoForm').addEventListener('submit', async (e) => {
   } else if (vivasAhora.size === 0 && vivasAntes.size > 0) {
     celebrate({ icon: '👑', title: 'YOU ARE FREE', text: 'Every debt defeated. You won the war, Kevin.' });
   }
-  }, 'Attacking...');
+  });
 });
 
 $('#abonoList').addEventListener('click', async (e) => {
@@ -4450,8 +4399,7 @@ function renderLibros() {
     lista.map(b => {
       const p = b.pages ? Math.min((b.status === 'Terminado' ? b.pages : b.current) / b.pages, 1) : 0;
       const year = Number(b.read_year || 0);
-      const missingYear = b.status === 'Terminado' && !year;
-      return `<tr class="${missingYear ? 'book-year-missing' : ''}"><td>${esc(b.title)}${missingYear ? '<span class="book-year-badge" title="Add the year you finished it">Year needed</span>' : ''}</td>
+      return `<tr><td>${esc(b.title)}</td>
         <td><select class="book-status" data-id="${b.id}">
           ${BOOK_STATES.map(([v, t]) => `<option value="${v}" ${v === b.status ? 'selected' : ''}>${t}</option>`).join('')}
         </select></td>
@@ -4739,8 +4687,6 @@ const PET_LINES = {
 };
 
 let _petMoodTimer = null;
-let _petLastMood = '';
-let _petLastAt = 0;
 function petMood() {
   // deriva el "humor" de tu situación real (misma fuente de verdad: S)
   try {
@@ -4774,11 +4720,7 @@ function renderPet(forceMood) {
 
 function petSay(mood, ms = 3200) {
   const bubble = document.getElementById('petBubble');
-  if (!bubble || document.body.classList.contains('modal-open')) return;
-  const now = Date.now();
-  if (_petLastMood === mood && now - _petLastAt < 4500) return;
-  _petLastMood = mood;
-  _petLastAt = now;
+  if (!bubble) return;
   const lines = PET_LINES[mood] || PET_LINES.idle;
   bubble.textContent = lines[Math.floor(Math.random() * lines.length)];
   bubble.classList.add('show');
