@@ -5,8 +5,10 @@ cópialo para hacer backup, bórralo para empezar de cero).
 Correr:  python app.py   →  http://localhost:5000
 """
 import json
+import logging
 import os
 import re
+import secrets
 import sqlite3
 from datetime import date
 from datetime import datetime
@@ -17,6 +19,62 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
 VERSION = 97  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
+
+# Logging útil tanto en local como en Render. No imprime contraseñas ni cuerpos JSON.
+logging.basicConfig(
+    level=os.environ.get('LOG_LEVEL', 'INFO').upper(),
+    format='%(asctime)s %(levelname)s %(name)s: %(message)s',
+)
+logger = logging.getLogger('kevin-lifeos')
+
+
+def _auth_enabled():
+    return bool(os.environ.get('LIFEOS_PASSWORD'))
+
+
+def _valid_credentials(username, password):
+    expected_user = os.environ.get('LIFEOS_USERNAME', 'kevin')
+    expected_password = os.environ.get('LIFEOS_PASSWORD', '')
+    return (
+        bool(expected_password)
+        and secrets.compare_digest(username or '', expected_user)
+        and secrets.compare_digest(password or '', expected_password)
+    )
+
+
+@app.before_request
+def protect_private_app():
+    """Protección opcional para el despliegue público.
+
+    Se activa únicamente al definir LIFEOS_PASSWORD en Render o en el entorno local.
+    /api/ping y los archivos estáticos quedan libres para health checks y carga inicial.
+    """
+    if not _auth_enabled() or request.path == '/api/ping' or request.path.startswith('/static/'):
+        return None
+    auth = request.authorization
+    if auth and _valid_credentials(auth.username, auth.password):
+        return None
+    return (
+        'Authentication required',
+        401,
+        {'WWW-Authenticate': 'Basic realm="Kevin LifeOS", charset="UTF-8"'},
+    )
+
+
+@app.after_request
+def add_security_headers(response):
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'DENY')
+    response.headers.setdefault('Referrer-Policy', 'same-origin')
+    response.headers.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    return response
+
+
+@app.errorhandler(500)
+def internal_error(error):
+    logger.exception('Unhandled server error: %s', error)
+    return jsonify(error='Internal server error. Please try again.'), 500
+
 
 
 def to_int(v):
