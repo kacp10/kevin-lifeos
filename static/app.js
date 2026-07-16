@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 100;
+const FRONT_V = 101;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -301,15 +301,26 @@ function hoyLocal() { return localISO(new Date()); }   // debe coincidir con VER
 
 async function api(path, opts) {
   let r;
+  const controller = new AbortController();
+  const timeoutMs = (opts && opts.timeoutMs) || 20000;
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   try {
     r = await fetch(path, opts ? {
       method: opts.method || 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: opts.body ? JSON.stringify(opts.body) : undefined
-    } : undefined);
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      signal: controller.signal
+    } : { signal: controller.signal });
   } catch (err) {
-    if (!opts || !opts.quiet) toast('⚠ Could not reach the server. Check your connection and try again.', 'err');
+    if (!opts || !opts.quiet) {
+      const msg = err && err.name === 'AbortError'
+        ? '⚠ The server took too long to respond. Nothing was confirmed; please try again.'
+        : '⚠ Could not reach the server. Check your connection and try again.';
+      toast(msg, 'err');
+    }
     throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
   if (!r.ok) {
     // Mensaje amigable en TODA la app (no solo gym): intenta usar el {error:'...'} que el
@@ -339,6 +350,30 @@ async function withBusy(el, work) {
     el.removeAttribute('aria-busy');
     delete el.dataset.busy;
   }
+}
+
+let _modalDepth = 0;
+function modalLifecycle(back, close, focusSelector = 'input, select, button') {
+  const previousFocus = document.activeElement;
+  const previousOverflow = document.body.style.overflow;
+  _modalDepth += 1;
+  document.body.style.overflow = 'hidden';
+  const onKey = (ev) => {
+    if (ev.key === 'Escape' && back.isConnected) close();
+  };
+  document.addEventListener('keydown', onKey);
+  setTimeout(() => {
+    const first = back.querySelector(focusSelector);
+    if (first) first.focus();
+  }, 100);
+  return () => {
+    document.removeEventListener('keydown', onKey);
+    _modalDepth = Math.max(0, _modalDepth - 1);
+    if (_modalDepth === 0) document.body.style.overflow = previousOverflow;
+    if (previousFocus && previousFocus.isConnected && typeof previousFocus.focus === 'function') {
+      setTimeout(() => previousFocus.focus(), 0);
+    }
+  };
 }
 
 /* ====== MODALES Y TOASTS BONITOS ====== */
@@ -403,7 +438,16 @@ function celebrate({ icon = '🎉', title = '', text = '', confettiOn = true }) 
   </div>`;
   document.body.appendChild(back);
   requestAnimationFrame(() => back.classList.add('show'));
-  const close = () => { back.classList.remove('show'); setTimeout(() => back.remove(), 300); };
+  let closed = false;
+  let cleanup = () => {};
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    cleanup();
+    back.classList.remove('show');
+    setTimeout(() => back.remove(), 300);
+  };
+  cleanup = modalLifecycle(back, close, '.m-ok');
   back.querySelector('.m-ok').onclick = close;
   back.onclick = (e) => { if (e.target === back) close(); };
 }
@@ -447,7 +491,17 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
       </div></div>`;
     document.body.appendChild(back);
     requestAnimationFrame(() => back.classList.add('show'));
-    const close = (val) => { back.classList.remove('show'); setTimeout(() => back.remove(), 280); resolve(val); };
+    let closed = false;
+    let cleanup = () => {};
+    const close = (val = null) => {
+      if (closed) return;
+      closed = true;
+      cleanup();
+      back.classList.remove('show');
+      setTimeout(() => back.remove(), 280);
+      resolve(val);
+    };
+    cleanup = modalLifecycle(back, close);
     back.querySelector('.m-ok').onclick = () => {
       if (fields.length) {
         const vals = [...back.querySelectorAll('[data-i]')].map(el =>
@@ -467,8 +521,6 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
         inp.value = limpio ? Number(limpio).toLocaleString('es-CO') : '';
       });
     });
-    const first = back.querySelector('input, select');
-    if (first) setTimeout(() => first.focus(), 100);
   });
 }
 async function confirmModal(title, text, danger = true) {
@@ -1064,10 +1116,18 @@ function docModal(title, html) {
     <div class="doc-body">${html}</div></div>`;
   document.body.appendChild(back);
   requestAnimationFrame(() => back.classList.add('show'));
-  const close = () => { back.classList.remove('show'); setTimeout(() => back.remove(), 280); };
+  let closed = false;
+  let cleanup = () => {};
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    cleanup();
+    back.classList.remove('show');
+    setTimeout(() => back.remove(), 280);
+  };
+  cleanup = modalLifecycle(back, close, '.doc-x');
   back.querySelector('.doc-x').addEventListener('click', close);
   back.addEventListener('click', (e) => { if (e.target === back) close(); });
-  document.addEventListener('keydown', function esc(ev) { if (ev.key === 'Escape') { close(); document.removeEventListener('keydown', esc); } });
 }
 const GYM_MANUAL_HTML = `
   <div class="guide-block">
@@ -2601,6 +2661,9 @@ document.addEventListener('click', async (e) => {
 
 $('#abonoForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const form = e.currentTarget;
+  const submit = form.querySelector('button[type="submit"]');
+  await withBusy(submit || form, async () => {
   const valor = numVal('#abonoValor');
   const vivasAntes = snapshotDeudasVivas();
   const rawVal = $('#abonoDebt').value;
@@ -2629,6 +2692,7 @@ $('#abonoForm').addEventListener('submit', async (e) => {
   } else if (vivasAhora.size === 0 && vivasAntes.size > 0) {
     celebrate({ icon: '👑', title: 'YOU ARE FREE', text: 'Every debt defeated. You won the war, Kevin.' });
   }
+  });
 });
 
 $('#abonoList').addEventListener('click', async (e) => {
@@ -4454,24 +4518,28 @@ document.addEventListener('click', (e) => {
 $('#bookHistoryBtn').addEventListener('click', showBookHistory);
 $('#bookChartBtn').addEventListener('click', showBookChart);
 $('#bookTable').addEventListener('change', async (e) => {
-  const id = +e.target.dataset.id;
-  if (e.target.classList.contains('book-status')) {
-    await api('/api/book', { body: { id, field: 'status', value: e.target.value } });
-  } else if (e.target.classList.contains('pg-input')) {
-    const f = e.target.dataset.f, val = +e.target.value || 0;
-    await api('/api/book', { body: { id, field: f, value: val } });
-    if (f !== 'read_year') {
-      // ESTADO AUTOMÁTICO por páginas: si llegas al total -> Terminado; si avanzas -> Leyendo
-      const b = (S.books || []).find(x => x.id === id) || {};
-      const pages = f === 'pages' ? val : (b.pages || 0);
-      const current = f === 'current' ? val : (b.current || 0);
-      if (pages > 0 && current >= pages)
-        await api('/api/book', { body: { id, field: 'status', value: 'Terminado' } });
-      else if (current > 0 && b.status !== 'Terminado' && b.status !== 'Leyendo')
-        await api('/api/book', { body: { id, field: 'status', value: 'Leyendo' } });
+  const control = e.target;
+  const id = +control.dataset.id;
+  await withBusy(control, async () => {
+    if (control.classList.contains('book-status')) {
+      await api('/api/book', { body: { id, field: 'status', value: control.value } });
+    } else if (control.classList.contains('pg-input')) {
+      const f = control.dataset.f, val = +control.value || 0;
+      await api('/api/book', { body: { id, field: f, value: val } });
+      if (f !== 'read_year') {
+        // ESTADO AUTOMÁTICO por páginas: si llegas al total -> Terminado; si avanzas -> Leyendo
+        const b = (S.books || []).find(x => x.id === id) || {};
+        const pages = f === 'pages' ? val : (b.pages || 0);
+        const current = f === 'current' ? val : (b.current || 0);
+        if (pages > 0 && current >= pages)
+          await api('/api/book', { body: { id, field: 'status', value: 'Terminado' } });
+        else if (current > 0 && b.status !== 'Terminado' && b.status !== 'Leyendo')
+          await api('/api/book', { body: { id, field: 'status', value: 'Leyendo' } });
+      }
     }
-  }
-  load();
+    toast('📚 Book updated');
+    await load();
+  });
 });
 
 /* ---------- BORRAR (nivel superior) ---------- */
