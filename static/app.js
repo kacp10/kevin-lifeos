@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 98;
+const FRONT_V = 99;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -323,6 +323,22 @@ async function api(path, opts) {
     throw new Error(r.status + ' en ' + path);
   }
   return r.json();
+}
+
+// Evita envíos duplicados por doble clic mientras una operación sigue en curso.
+async function withBusy(el, work) {
+  if (!el || el.dataset.busy === '1') return;
+  el.dataset.busy = '1';
+  const wasDisabled = !!el.disabled;
+  el.disabled = true;
+  el.setAttribute('aria-busy', 'true');
+  try {
+    return await work();
+  } finally {
+    el.disabled = wasDisabled;
+    el.removeAttribute('aria-busy');
+    delete el.dataset.busy;
+  }
 }
 
 /* ====== MODALES Y TOASTS BONITOS ====== */
@@ -1161,31 +1177,57 @@ document.getElementById('gymHistory')?.addEventListener('click', async (e) => {
   load();
 });
 
+let _loadPromise = null;
+let _loadQueued = false;
+let _loadQueuedAnimate = false;
+
 async function load(animate) {
-  const ym = hoyLocal().slice(0, 7);
-  S = await api('/api/state?month=' + ym);
-  checkVersion();
-  await syncCarreraIngles();   // sube la barra de Inglés según los días de práctica reales
-  // Career -> Goal ahora se sincroniza en el servidor (cada vez que se pide /api/state), no aquí.
-  renderFreedom();
-  renderInicio();
-  renderShopping();
-  renderTodos();
-  renderBoss(animate);
-  renderHabitos();
-  renderSuenos();
-  renderAnime();
-  renderLibros();
-  renderGoals();
-  renderLife();
-  renderGym();
-  renderHaki();
-  renderAchievements();
-  // engancha el formato de miles en vivo a TODOS los campos .money-live ya dibujados
-  document.querySelectorAll('.money-live').forEach(engancharMiles);
-  setTimeout(avisosInteligentes, 1200);
-  setTimeout(preguntaPagoDelDia, 2000);
+  // Varias acciones pueden pedir una recarga casi al mismo tiempo. Se ejecuta una sola
+  // y, si hubo cambios mientras cargaba, se hace exactamente una recarga adicional.
+  if (_loadPromise) {
+    _loadQueued = true;
+    _loadQueuedAnimate = _loadQueuedAnimate || !!animate;
+    return _loadPromise;
+  }
+
+  _loadPromise = (async () => {
+    const ym = hoyLocal().slice(0, 7);
+    const nextState = await api('/api/state?month=' + ym);
+    S = nextState;
+    checkVersion();
+    await syncCarreraIngles();
+    renderFreedom();
+    renderInicio();
+    renderShopping();
+    renderTodos();
+    renderBoss(animate);
+    renderHabitos();
+    renderSuenos();
+    renderAnime();
+    renderLibros();
+    renderGoals();
+    renderLife();
+    renderGym();
+    renderHaki();
+    renderAchievements();
+    document.querySelectorAll('.money-live').forEach(engancharMiles);
+    setTimeout(avisosInteligentes, 1200);
+    setTimeout(preguntaPagoDelDia, 2000);
+  })();
+
+  try {
+    await _loadPromise;
+  } finally {
+    _loadPromise = null;
+    if (_loadQueued) {
+      const queuedAnimate = _loadQueuedAnimate;
+      _loadQueued = false;
+      _loadQueuedAnimate = false;
+      return load(queuedAnimate);
+    }
+  }
 }
+
 
 let _avisosMostrados = false;
 // Extrae el día del mes de un texto de payday ("22 de cada mes" -> 22)
@@ -1363,20 +1405,27 @@ function renderTodos() {
 
 document.getElementById('todoNew')?.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const inp = document.getElementById('tdText');
-  const texto = (inp.value || '').trim();
-  if (!texto) return;
-  await api('/api/todo/new', { body: { texto } });
-  inp.value = '';
-  toast('📝 Added to your to-do list');
-  load();
+  const form = e.currentTarget;
+  const submit = form.querySelector('[type="submit"]');
+  await withBusy(submit || form, async () => {
+    const inp = document.getElementById('tdText');
+    const texto = (inp.value || '').trim();
+    if (!texto) return;
+    await api('/api/todo/new', { body: { texto } });
+    inp.value = '';
+    toast('📝 Added to your to-do list');
+    await load();
+  });
 });
 
-document.getElementById('todoClearBtn')?.addEventListener('click', async () => {
+document.getElementById('todoClearBtn')?.addEventListener('click', async (e) => {
   const hechos = (S.todos || []).filter(t => t.done);
-  for (const t of hechos) await api('/api/todo/' + t.id, { method: 'DELETE' });
-  if (hechos.length) toast('🧹 Done items cleared');
-  load();
+  if (!hechos.length) return;
+  await withBusy(e.currentTarget, async () => {
+    await api('/api/todo/clear_done', { body: {} });
+    toast('🧹 Done items cleared');
+    await load();
+  });
 });
 
 document.addEventListener('click', async (e) => {
@@ -1564,22 +1613,37 @@ function renderFreedom() {
 }
 // Enlaza el % de "Your road to freedom" con la meta de deudas en Goals (por palabras clave),
 // igual que Career -> Goal: tu esfuerzo pagando deudas mueve la meta sola, sin tocar nada a mano.
+let _debtGoalSync = Promise.resolve();
 function syncDebtGoal(pct) {
   const re = /deuda|debt/i;
   const cand = (S.goals || []).filter(g => re.test(g.name || ''));
-  if (cand.length !== 1) return;   // si hay 0 o varias coincidencias, no adivina (evita enlazar mal)
+  if (cand.length !== 1) return;
   const g = cand[0];
-  if ((g.pct || 0) === pct) return;
-  api('/api/goal', { body: { id: g.id, field: 'pct', value: pct } });
-  g.pct = pct;
+
+  const updates = [];
+  if ((g.pct || 0) !== pct) updates.push({ field: 'pct', value: pct });
   if (pct >= 100 && g.status !== 'Lograda 🏆') {
-    api('/api/goal', { body: { id: g.id, field: 'status', value: 'Lograda 🏆' } });
-    g.status = 'Lograda 🏆';
+    updates.push({ field: 'status', value: 'Lograda 🏆' });
   } else if (pct > 0 && g.status === 'Pendiente') {
-    api('/api/goal', { body: { id: g.id, field: 'status', value: 'En proceso 🔥' } });
-    g.status = 'En proceso 🔥';
+    updates.push({ field: 'status', value: 'En proceso 🔥' });
   }
+  if (!updates.length) return;
+
+  // Serializa esta sincronización automática: nunca deja peticiones sueltas ni silenciosas.
+  _debtGoalSync = _debtGoalSync.then(async () => {
+    for (const u of updates) {
+      await api('/api/goal', {
+        body: { id: g.id, field: u.field, value: u.value },
+        quiet: true
+      });
+      g[u.field] = u.value;
+    }
+  }).catch((err) => {
+    console.error('Debt goal sync failed', err);
+    toast('⚠ Your debt progress was calculated, but the linked goal could not be updated. Try again.', 'err');
+  });
 }
+
 
 function renderInicio() {
   const sel = $('#monthSel');
