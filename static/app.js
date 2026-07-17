@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 105;
+const FRONT_V = 106;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -3076,6 +3076,7 @@ function expeditionZoneIndex(pctValue, achieved=false) {
   const p = Math.max(0, Math.min(99, +pctValue || 0));
   return Math.min(EXPEDITION_ZONES.length - 1, Math.floor(p / 20));
 }
+let activeExpeditionId = null;
 function renderExpeditions() {
   const host = document.getElementById('expeditionPanel');
   if (!host) return;
@@ -3084,35 +3085,70 @@ function renderExpeditions() {
     return aw - bw || (b.pct || 0) - (a.pct || 0) || String(a.name).localeCompare(String(b.name));
   });
   if (!goals.length) {
+    activeExpeditionId = null;
     host.innerHTML = '<div class="dc-empty">Create your first Goal to open an expedition route.</div>';
     return;
   }
-  host.innerHTML = goals.map((g, goalIndex) => {
-    const p = Math.max(0, Math.min(100, +(g.pct || 0)));
-    const achieved = g.status === 'Lograda 🏆' || p >= 100;
-    const zoneIx = expeditionZoneIndex(p, achieved);
-    const rank = hunterRankFor(p, achieved);
-    const zones = EXPEDITION_ZONES.map((z, i) => {
-      const conquered = achieved || i < zoneIx;
-      const current = !achieved && i === zoneIx;
-      return `<div class="dc-zone ${conquered ? 'conquered' : ''} ${current ? 'current' : ''}">
-        <span class="dc-zone-dot">${conquered ? '✓' : current ? '◆' : '◇'}</span>
-        <small>${esc(z.name)}</small>
-      </div>`;
-    }).join('<span class="dc-route-line"></span>');
-    return `<article class="dc-expedition ${achieved ? 'completed' : ''}" data-goal-id="${g.id}">
-      <div class="dc-expedition-head">
-        <div><span class="dc-eyebrow">EXPEDITION ${String(goalIndex + 1).padStart(2,'0')}</span>
-          <h3>${esc(g.name)}</h3><p>${esc(g.why || 'A territory worth conquering.')}</p></div>
-        <div class="dc-rank rank-${rank}"><small>RANK</small><b>${rank}</b></div>
-      </div>
-      <div class="dc-progress-row"><div class="dc-progress"><i style="width:${p}%"></i></div><strong>${p}%</strong></div>
-      <div class="dc-map" aria-label="Expedition territories">${zones}</div>
-      <div class="dc-critical"><span>CRITICAL MISSION</span><b>${esc(expeditionMission(g))}</b></div>
-      ${achieved ? '<div class="dc-seal">EXPEDITION CONQUERED</div>' : ''}
-    </article>`;
+  if (!goals.some(g => String(g.id) === String(activeExpeditionId))) activeExpeditionId = goals[0].id;
+  const active = goals.find(g => String(g.id) === String(activeExpeditionId)) || goals[0];
+  const p = Math.max(0, Math.min(100, +(active.pct || 0)));
+  const achieved = active.status === 'Lograda 🏆' || p >= 100;
+  const zoneIx = expeditionZoneIndex(p, achieved);
+  const rank = hunterRankFor(p, achieved);
+  const zones = EXPEDITION_ZONES.map((z, i) => {
+    const conquered = achieved || i < zoneIx;
+    const current = !achieved && i === zoneIx;
+    const locked = !conquered && !current;
+    return `<div class="dc-zone ${conquered ? 'conquered' : ''} ${current ? 'current' : ''} ${locked ? 'locked' : ''}">
+      <span class="dc-zone-dot">${conquered ? '✓' : current ? '◆' : '◇'}</span>
+      <small>${esc(z.name)}</small>
+    </div>`;
+  }).join('<span class="dc-route-line"></span>');
+  const routes = goals.map((g, i) => {
+    const gp = Math.max(0, Math.min(100, +(g.pct || 0)));
+    const ga = g.status === 'Lograda 🏆' || gp >= 100;
+    const gr = hunterRankFor(gp, ga);
+    const selected = String(g.id) === String(active.id);
+    return `<button type="button" class="dc-route-card ${selected ? 'active' : ''} ${ga ? 'completed' : ''}" data-expedition-select="${esc(String(g.id))}" aria-pressed="${selected}">
+      <span class="dc-route-number">${String(i + 1).padStart(2,'0')}</span>
+      <span class="dc-route-copy"><b>${esc(g.name)}</b><small>${gp}% · Rank ${gr}</small></span>
+      <span class="dc-route-status">${ga ? '✓' : selected ? '◆' : '→'}</span>
+    </button>`;
   }).join('');
+  host.innerHTML = `<div class="dc-shell">
+    <aside class="dc-route-selector" aria-label="Expedition routes">
+      <div class="dc-selector-title"><span>AVAILABLE ROUTES</span><b>${goals.length}</b></div>
+      <div class="dc-route-scroll">${routes}</div>
+    </aside>
+    <article class="dc-expedition-feature ${achieved ? 'completed' : ''}" data-goal-id="${active.id}">
+      <div class="dc-map-art" aria-hidden="true"></div>
+      <div class="dc-map-overlay"></div>
+      <div class="dc-feature-content">
+        <div class="dc-expedition-head">
+          <div><span class="dc-eyebrow">ACTIVE EXPEDITION</span>
+            <h2>${esc(active.name)}</h2><p>${esc(active.why || 'A territory worth conquering.')}</p></div>
+          <div class="dc-rank rank-${rank}"><small>RANK</small><b>${rank}</b></div>
+        </div>
+        <div class="dc-feature-stats">
+          <div><small>PROGRESS</small><strong>${p}%</strong></div>
+          <div><small>CURRENT TERRITORY</small><strong>${esc(EXPEDITION_ZONES[zoneIx].name)}</strong></div>
+          <div><small>STATUS</small><strong>${achieved ? 'Conquered' : 'In progress'}</strong></div>
+        </div>
+        <div class="dc-progress-row"><div class="dc-progress"><i style="width:${p}%"></i></div><strong>${p}%</strong></div>
+        <div class="dc-map" aria-label="Expedition territories">${zones}</div>
+        <div class="dc-critical"><span>CRITICAL MISSION</span><b>${esc(expeditionMission(active))}</b></div>
+        ${achieved ? '<div class="dc-seal">EXPEDITION CONQUERED</div>' : ''}
+      </div>
+    </article>
+  </div>`;
 }
+
+document.addEventListener('click', (event) => {
+  const route = event.target.closest('[data-expedition-select]');
+  if (!route) return;
+  activeExpeditionId = route.dataset.expeditionSelect;
+  renderExpeditions();
+});
 
 const SKILL_DOMAINS = [
   { key:'wisdom', icon:'◈', name:'Wisdom',
@@ -3389,6 +3425,7 @@ function renderGoals() {
         <td><input class="g-edit wide" data-id="${g.id}" data-f="next_step" value="${esc(g.next_step)}" placeholder="next small action"></td>
         <td><button class="del-x" data-type="goal" data-id="${g.id}">✕</button></td></tr>`;
     }).join('');
+  renderExpeditions();
 }
 $('#goalTable').addEventListener('change', async (e) => {
   if (!e.target.classList.contains('g-edit')) return;
