@@ -4,6 +4,7 @@ Flask + SQLite. Los datos viven en lifeos.db (ese archivo ES tu base de datos:
 cópialo para hacer backup, bórralo para empezar de cero).
 Correr:  python app.py   →  http://localhost:5000
 """
+import hashlib
 import json
 import logging
 import os
@@ -18,7 +19,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 102  # debe coincidir con FRONT_V en static/app.js
+VERSION = 103  # debe coincidir con FRONT_V en static/app.js
 app = Flask(__name__)
 
 # Logging útil tanto en local como en Render. No imprime contraseñas ni cuerpos JSON.
@@ -148,6 +149,27 @@ def transaction():
         con.commit()
     except Exception:
         con.rollback()
+        raise
+
+
+def apply_migration(con, version, description, statements=()):
+    """Ejecuta una migración nueva una sola vez y deja registro verificable."""
+    done = con.execute('SELECT 1 FROM schema_migrations WHERE version=?', (version,)).fetchone()
+    if done:
+        return False
+    try:
+        for sql, params in statements:
+            con.execute(sql, params)
+        con.execute(
+            'INSERT INTO schema_migrations (version, applied_at, description) VALUES (?,?,?)',
+            (version, datetime.now().isoformat(timespec='seconds'), description),
+        )
+        con.commit()
+        logger.info('Migration %s applied: %s', version, description)
+        return True
+    except Exception:
+        con.rollback()
+        logger.exception('Migration %s failed: %s', version, description)
         raise
 
 
@@ -430,11 +452,20 @@ def init_db():
             con.execute(idx_sql)
         except Exception as e:
             print('  (aviso) no se pudo crear índice:', e)
-    con.execute(
-        'INSERT OR IGNORE INTO schema_migrations (version, applied_at, description) VALUES (?,?,?)',
-        ('v102_foundation', datetime.now().isoformat(timespec='seconds'),
-         'Backups, transactional guards and formal migration registry'))
-    con.commit()
+    apply_migration(
+        con, 'v102_foundation',
+        'Backups, transactional guards and formal migration registry'
+    )
+    apply_migration(
+        con, 'v103_performance_indexes',
+        'Indexes for books, expenses, purchases and payment history',
+        (
+            ('CREATE INDEX IF NOT EXISTS idx_books_status_year ON books(status, read_year)', ()),
+            ('CREATE INDEX IF NOT EXISTS idx_expenses_month ON expenses(month)', ()),
+            ('CREATE INDEX IF NOT EXISTS idx_compras_creditor ON compras(creditor)', ()),
+            ('CREATE INDEX IF NOT EXISTS idx_extra_debts_start ON extra_debts(start)', ()),
+        ),
+    )
     if first_time:
         with open(os.path.join(BASE, 'seed_data.json'), encoding='utf-8') as f:
             seed = json.load(f)
@@ -1390,12 +1421,30 @@ def download_backup():
             continue
         tables[table] = rows
         counts[table] = len(rows)
+    warnings = []
+    required = {'config', 'debts', 'books', 'habits', 'goals'}
+    missing = sorted(required - set(tables))
+    if missing:
+        warnings.append('Missing required tables: ' + ', '.join(missing))
+    if counts.get('config', 0) == 0:
+        warnings.append('The config table is empty')
+    if counts.get('books', 0) and any(
+        int(row.get('read_year') or 0) > date.today().year for row in tables.get('books', [])
+    ):
+        warnings.append('Some books contain a future read_year')
+
+    canonical = json.dumps(
+        tables, ensure_ascii=False, sort_keys=True, separators=(',', ':')
+    ).encode('utf-8')
     payload = {
-        'format': 'kevin-lifeos-backup-v1',
+        'format': 'kevin-lifeos-backup-v2',
         'app_version': VERSION,
         'generated_at': datetime.now().isoformat(timespec='seconds'),
         'database': 'postgresql' if db_layer.IS_PG else 'sqlite',
+        'table_count': len(tables),
         'counts': counts,
+        'warnings': warnings,
+        'data_sha256': hashlib.sha256(canonical).hexdigest(),
         'tables': tables,
     }
     raw = json.dumps(payload, ensure_ascii=False, indent=2).encode('utf-8')
