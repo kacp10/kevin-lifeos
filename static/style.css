@@ -1394,3 +1394,98 @@ details.grp-paid > summary { color: var(--ok, #34d399); }
 @media (prefers-reduced-motion:reduce) {
   .dc-expedition::before,.dc-zone.current .dc-zone-dot,.hunter-license::after { animation:none!important; }
 }
+
+/* ====== v105.1 · CREDIT CARD VISUAL FIX ====== */
+#myCards {
+  gap: 18px;
+}
+
+#myCards .card-box {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: 22px 24px 20px;
+  border: 1px solid rgba(130, 112, 235, .62);
+  background:
+    radial-gradient(640px 220px at 100% 0%, rgba(124, 108, 224, .22), transparent 62%),
+    linear-gradient(135deg, #2b234b 0%, #201a38 58%, #171329 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.065),
+    0 12px 34px rgba(0,0,0,.26),
+    0 0 0 1px rgba(124,108,224,.08),
+    0 0 24px rgba(108,92,231,.10);
+  transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+}
+
+#myCards .card-box::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 18%, rgba(255,255,255,.04) 42%, transparent 64%);
+}
+
+#myCards .card-box:hover {
+  border-color: rgba(245,185,66,.62);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.08),
+    0 16px 38px rgba(0,0,0,.30),
+    0 0 28px rgba(124,108,224,.17);
+}
+
+#myCards .card-name { font-size: 1.03rem; letter-spacing: .1px; }
+#myCards .card-cupo { font-size: .88rem; }
+#myCards .card-grid { gap: 13px 26px; margin: 17px 0 13px; }
+#myCards .card-grid label { font-size: .74rem; }
+#myCards .card-grid b { font-size: 1.05rem; }
+
+#myCards .card-pay-btn {
+  width: fit-content !important;
+  min-width: 180px;
+  max-width: calc(100% - 24px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 15px auto 13px;
+  padding: 10px 24px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #4cdabf, #2dbb9e);
+  color: #062a22;
+  box-shadow:
+    0 8px 20px rgba(54,201,167,.20),
+    inset 0 1px 0 rgba(255,255,255,.24);
+  font-weight: 900;
+  line-height: 1.1;
+  white-space: nowrap;
+  transition: transform .18s ease, filter .18s ease, box-shadow .18s ease;
+}
+
+#myCards .card-pay-btn:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow:
+    0 11px 24px rgba(54,201,167,.27),
+    inset 0 1px 0 rgba(255,255,255,.30);
+}
+
+#myCards .card-pay-btn:active { transform: translateY(0); }
+#myCards .card-pay-btn:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+#myCards .card-bar { margin-top: 3px; }
+
+@media (max-width: 680px) {
+  #myCards .card-box { padding: 18px 17px 17px; }
+  #myCards .card-grid { gap: 11px 15px; }
+  #myCards .card-pay-btn {
+    min-width: 164px;
+    max-width: 92%;
+    padding: 10px 19px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #myCards .card-box,
+  #myCards .card-pay-btn { transition: none !important; }
+  #myCards .card-pay-btn:hover { transform: none; }
+}
