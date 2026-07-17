@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 104;
+const FRONT_V = 105;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -3043,8 +3043,192 @@ $('#closeMonth').addEventListener('click', async (e) => {
   if (+p >= 0.7) celebrate({ icon: '👑', title: 'MONTH CONQUERED', text: `<b>${label}</b> closed at <b>${(p * 100).toFixed(0)}%</b>. Your Haki grows stronger.` });
 });
 
+
+/* ====== DARK CONTINENT · EXPEDITIONS & SKILL TRAINING ====== */
+const EXPEDITION_ZONES = [
+  { name: 'Awakening', min: 0 },
+  { name: 'Foundation', min: 20 },
+  { name: 'Trial', min: 40 },
+  { name: 'Mastery', min: 60 },
+  { name: 'Conquest', min: 80 }
+];
+const HUNTER_RANKS = [
+  { min: 0, rank: 'E' }, { min: 20, rank: 'D' }, { min: 40, rank: 'C' },
+  { min: 60, rank: 'B' }, { min: 80, rank: 'A' }, { min: 100, rank: 'S' }
+];
+function hunterRankFor(pctValue, achieved=false) {
+  if (achieved) return 'S';
+  return [...HUNTER_RANKS].reverse().find(r => pctValue >= r.min)?.rank || 'E';
+}
+function expeditionMission(goal) {
+  const next = String(goal.next_step || '').trim();
+  if (next) return next;
+  const p = Math.max(0, Math.min(100, +(goal.pct || 0)));
+  if (goal.status === 'Lograda 🏆' || p >= 100) return 'Expedition completed. Preserve what you conquered.';
+  if (p < 20) return 'Define the smallest action that proves you truly started.';
+  if (p < 40) return 'Repeat the foundation until it feels controlled, not accidental.';
+  if (p < 60) return 'Face one real-world test outside your comfort zone.';
+  if (p < 80) return 'Correct your weakest point and repeat under pressure.';
+  return 'Complete the final proof and claim the territory.';
+}
+function expeditionZoneIndex(pctValue, achieved=false) {
+  if (achieved) return EXPEDITION_ZONES.length - 1;
+  const p = Math.max(0, Math.min(99, +pctValue || 0));
+  return Math.min(EXPEDITION_ZONES.length - 1, Math.floor(p / 20));
+}
+function renderExpeditions() {
+  const host = document.getElementById('expeditionPanel');
+  if (!host) return;
+  const goals = (S.goals || []).slice().sort((a,b) => {
+    const aw = a.status === 'Lograda 🏆' ? 1 : 0, bw = b.status === 'Lograda 🏆' ? 1 : 0;
+    return aw - bw || (b.pct || 0) - (a.pct || 0) || String(a.name).localeCompare(String(b.name));
+  });
+  if (!goals.length) {
+    host.innerHTML = '<div class="dc-empty">Create your first Goal to open an expedition route.</div>';
+    return;
+  }
+  host.innerHTML = goals.map((g, goalIndex) => {
+    const p = Math.max(0, Math.min(100, +(g.pct || 0)));
+    const achieved = g.status === 'Lograda 🏆' || p >= 100;
+    const zoneIx = expeditionZoneIndex(p, achieved);
+    const rank = hunterRankFor(p, achieved);
+    const zones = EXPEDITION_ZONES.map((z, i) => {
+      const conquered = achieved || i < zoneIx;
+      const current = !achieved && i === zoneIx;
+      return `<div class="dc-zone ${conquered ? 'conquered' : ''} ${current ? 'current' : ''}">
+        <span class="dc-zone-dot">${conquered ? '✓' : current ? '◆' : '◇'}</span>
+        <small>${esc(z.name)}</small>
+      </div>`;
+    }).join('<span class="dc-route-line"></span>');
+    return `<article class="dc-expedition ${achieved ? 'completed' : ''}" data-goal-id="${g.id}">
+      <div class="dc-expedition-head">
+        <div><span class="dc-eyebrow">EXPEDITION ${String(goalIndex + 1).padStart(2,'0')}</span>
+          <h3>${esc(g.name)}</h3><p>${esc(g.why || 'A territory worth conquering.')}</p></div>
+        <div class="dc-rank rank-${rank}"><small>RANK</small><b>${rank}</b></div>
+      </div>
+      <div class="dc-progress-row"><div class="dc-progress"><i style="width:${p}%"></i></div><strong>${p}%</strong></div>
+      <div class="dc-map" aria-label="Expedition territories">${zones}</div>
+      <div class="dc-critical"><span>CRITICAL MISSION</span><b>${esc(expeditionMission(g))}</b></div>
+      ${achieved ? '<div class="dc-seal">EXPEDITION CONQUERED</div>' : ''}
+    </article>`;
+  }).join('');
+}
+
+const SKILL_DOMAINS = [
+  { key:'wisdom', icon:'◈', name:'Wisdom',
+    skills:['Deep reading','Critical thinking','Personal finance','Clear writing','General culture'],
+    tips:[
+      'Read one difficult page twice: first for the idea, then for the evidence.',
+      'Before accepting a claim, ask: what would prove this wrong?',
+      'Explain one concept in five simple sentences without looking at notes.',
+      'Keep one decision journal: what you chose, why, and what happened.'
+    ] },
+  { key:'body', icon:'⬟', name:'Body',
+    skills:['Strength','Mobility','Posture','Nutrition','Self-defense'],
+    tips:[
+      'Master movement quality before adding weight or speed.',
+      'Train posture by strengthening upper back and opening the chest daily.',
+      'Build meals around protein, vegetables and one controlled carb source.',
+      'Learn one safe escape, guard and distance-control principle at a time.'
+    ] },
+  { key:'communication', icon:'✦', name:'Communication',
+    skills:['Conversation','Diction','Negotiation','Public speaking','Listening'],
+    tips:[
+      'Record a two-minute explanation and remove filler words on the second take.',
+      'In conversation, summarize the other person before defending your point.',
+      'Negotiate interests, not positions: discover what each side truly needs.',
+      'Practice pauses; calm silence sounds more confident than rushed speech.'
+    ] },
+  { key:'independence', icon:'⬢', name:'Independence',
+    skills:['Driving','Cooking','Basic repairs','First aid','Personal organization'],
+    tips:[
+      'Break fear into controlled exposure: parked car, quiet street, then traffic.',
+      'Master five reliable meals before chasing complicated recipes.',
+      'Learn to shut off water, electricity and gas before attempting repairs.',
+      'First aid starts with scene safety, emergency call and bleeding control.'
+    ] },
+  { key:'profession', icon:'◆', name:'Profession',
+    skills:['English','Data analysis','Programming','Projects','Portfolio'],
+    tips:[
+      'Turn every course module into one tiny artifact you can show.',
+      'For data work, always state the question before touching the dataset.',
+      'Build projects around real constraints, not tutorial-perfect examples.',
+      'A portfolio needs context, decisions and results—not only screenshots.'
+    ] },
+  { key:'presence', icon:'✧', name:'Presence',
+    skills:['Style','Grooming','Body language','Discipline','Confidence'],
+    tips:[
+      'Fit and cleanliness improve style more than expensive brands.',
+      'Keep shoulders relaxed, chin neutral and movements deliberate.',
+      'Confidence grows from evidence: keep promises small enough to complete.',
+      'Choose one grooming standard and make it automatic, not motivational.'
+    ] }
+];
+function skillRotationIndex(domainIndex) {
+  const d = new Date();
+  const start = new Date(d.getFullYear(),0,0);
+  const day = Math.floor((d - start) / 86400000);
+  return (day + domainIndex) % 20;
+}
+function renderSkillAcademy() {
+  const host = document.getElementById('skillAcademy');
+  if (!host) return;
+  host.innerHTML = SKILL_DOMAINS.map((d, i) => {
+    const ix = skillRotationIndex(i);
+    const skill = d.skills[ix % d.skills.length];
+    const tip = d.tips[ix % d.tips.length];
+    return `<article class="skill-domain skill-${d.key}">
+      <div class="skill-domain-head"><span class="skill-sigil">${d.icon}</span><div><small>TRAINING DOMAIN</small><h3>${d.name}</h3></div></div>
+      <div class="skill-focus"><span>SKILL TO LEARN</span><b>${esc(skill)}</b></div>
+      <p>${esc(tip)}</p>
+      <div class="skill-pool">${d.skills.map(s => `<span class="${s === skill ? 'active' : ''}">${esc(s)}</span>`).join('')}</div>
+    </article>`;
+  }).join('');
+}
+
+function hunterLicenseState() {
+  const months = (S.history || []).filter(h => h.pct >= 0.7).length;
+  const goals = (S.goals || []).filter(g => g.status === 'Lograda 🏆' || (g.pct || 0) >= 100).length;
+  const streak = Math.max(0, ...(S.habits || []).map(h => rachaHabito(h.id, new Set(S.marks || []), h.name === 'Exercise' ? [6] : [])));
+  const courses = (S.courses_done || []).length;
+  const books = (S.books || []).filter(b => b.status === 'Terminado').length;
+  const requirements = [
+    { label:'Conquer a major goal', done: goals >= 1, value:`${goals}/1` },
+    { label:'Conquer two Haki months', done: months >= 2, value:`${months}/2` },
+    { label:'Hold a 14-day discipline streak', done: streak >= 14, value:`${Math.min(streak,14)}/14` },
+    { label:'Prove growth: course or 3 books', done: courses >= 1 || books >= 3, value:courses >= 1 ? `${courses} course` : `${books}/3 books` }
+  ];
+  return { unlocked: requirements.every(r => r.done), requirements, months, goals, streak, courses, books };
+}
+function renderHunterLicense() {
+  const host = document.getElementById('hunterLicensePanel');
+  if (!host) return;
+  const st = hunterLicenseState();
+  const unlockedOn = (S.profile || {}).hunter_license_unlocked_on || '';
+  if (st.unlocked && !unlockedOn && !renderHunterLicense._saving) {
+    renderHunterLicense._saving = true;
+    const day = hoyLocal();
+    api('/api/profile', { body:{ key:'hunter_license_unlocked_on', value:day }, quiet:true })
+      .then(() => { S.profile = S.profile || {}; S.profile.hunter_license_unlocked_on = day; renderHunterLicense(); })
+      .catch(() => {})
+      .finally(() => { renderHunterLicense._saving = false; });
+  }
+  const dateText = (S.profile || {}).hunter_license_unlocked_on || (st.unlocked ? hoyLocal() : 'LOCKED');
+  host.innerHTML = `<section class="hunter-license ${st.unlocked ? 'unlocked' : 'locked'}">
+    <div class="hunter-license-mark"><span>◆</span></div>
+    <div class="hunter-license-main">
+      <span class="hunter-license-kicker">KEVIN LIFE OS · HUNTER ASSOCIATION</span>
+      <h2>${st.unlocked ? 'HUNTER LICENSE' : 'LICENSE EXAM IN PROGRESS'}</h2>
+      <p>${st.unlocked ? 'Granted for proven discipline across multiple territories.' : 'This license cannot be won with one click. Build evidence in goals, Haki, discipline and learning.'}</p>
+      <div class="hunter-license-reqs">${st.requirements.map(r => `<div class="${r.done ? 'done' : ''}"><span>${r.done ? '✓' : '◇'} ${esc(r.label)}</span><b>${esc(r.value)}</b></div>`).join('')}</div>
+    </div>
+    <div class="hunter-license-id"><small>STATUS</small><b>${st.unlocked ? 'AUTHORIZED' : 'CANDIDATE'}</b><small>ISSUED</small><strong>${esc(dateText)}</strong><span class="hunter-license-rank">${st.unlocked ? 'S' : hunterRankFor(Math.round(st.requirements.filter(r=>r.done).length / st.requirements.length * 100))}</span></div>
+  </section>`;
+}
+
 /* ====== ACHIEVEMENTS ====== */
 function renderAchievements() {
+  renderHunterLicense();
   const grid = document.getElementById('achievementsGrid');
   if (!grid) return;
   const dmg = (S.debts || []).reduce((s, d) => s + d.abonado, 0);
@@ -3078,7 +3262,7 @@ function renderAchievements() {
   const got = LOGROS.filter(l => l.got).length;
   grid.innerHTML = `<div class="ach-count">${got} / ${LOGROS.length} unlocked</div>` +
     LOGROS.map(l => `<div class="ach-card ${l.got ? 'got' : 'locked'}">
-      <div class="ach-icon">${l.got ? l.icon : '🔒'}</div>
+      <div class="ach-icon">${l.got ? '<span class="hunter-medal-core">' + l.icon + '</span>' : '<span class="hunter-medal-lock">◇</span>'}</div>
       <div class="ach-name">${l.name}</div>
       <div class="ach-desc">${l.desc}</div>
     </div>`).join('');
