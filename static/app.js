@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 109;
+const FRONT_V = 110;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -3150,172 +3150,116 @@ document.addEventListener('click', (event) => {
   renderExpeditions();
 });
 
-const SKILL_DOMAINS = [
-  { key:'wisdom', icon:'◈', name:'Wisdom',
-    skills:['Deep reading','Critical thinking','Personal finance','Clear writing','General culture'],
-    facts:[
-      'Knowledge becomes useful when you can explain it, question it and apply it.',
-      'Critical thinking is not doubting everything; it is checking evidence before deciding.',
-      'Writing exposes gaps in understanding that passive reading can hide.',
-      'Financial wisdom begins with knowing where each peso goes before trying to invest.'
-    ],
-    tips:[
-      'Read one difficult page twice: first for the idea, then for the evidence.',
-      'Before accepting a claim, ask: what would prove this wrong?',
-      'Explain one concept in five simple sentences without looking at notes.',
-      'Keep one decision journal: what you chose, why, and what happened.'
-    ],
-    drills:[
-      'Choose one paragraph and write its main idea in your own words.',
-      'Take one opinion you hold and list evidence for and against it.',
-      'Review one expense and decide whether it bought value, convenience or impulse.',
-      'Write 150 clear words about something you learned today.'
-    ] },
-  { key:'body', icon:'⬟', name:'Body',
-    skills:['Strength','Mobility','Posture','Nutrition','Self-defense'],
-    facts:[
-      'A stronger body improves daily capacity only when movement quality and recovery grow with it.',
-      'Mobility is usable control through a range of motion, not only flexibility.',
-      'Posture changes more through strength and habits than through forcing yourself upright.',
-      'Self-defense starts with awareness, distance and escape—not fighting.'
-    ],
-    tips:[
-      'Master movement quality before adding weight or speed.',
-      'Train posture by strengthening upper back and opening the chest daily.',
-      'Build meals around protein, vegetables and one controlled carb source.',
-      'Learn one safe escape, guard and distance-control principle at a time.'
-    ],
-    drills:[
-      'Practice five slow perfect repetitions of one basic movement.',
-      'Do a five-minute mobility flow for hips, shoulders and ankles.',
-      'Plan tomorrow’s first high-protein meal before going to sleep.',
-      'Practice a stable stance, hands up and two safe steps backward.'
-    ] },
-  { key:'communication', icon:'✦', name:'Communication',
-    skills:['Conversation','Diction','Negotiation','Public speaking','Listening'],
-    facts:[
-      'People usually remember how clearly and calmly you made them feel understood.',
-      'Good diction depends more on breathing, pace and articulation than on speaking loudly.',
-      'Negotiation improves when you separate the person from the problem.',
-      'Listening is a visible skill: summaries and good questions prove attention.'
-    ],
-    tips:[
-      'Record a two-minute explanation and remove filler words on the second take.',
-      'In conversation, summarize the other person before defending your point.',
-      'Negotiate interests, not positions: discover what each side truly needs.',
-      'Practice pauses; calm silence sounds more confident than rushed speech.'
-    ],
-    drills:[
-      'Explain one idea aloud for two minutes and listen to the recording once.',
-      'Ask one open question and follow it with a genuine follow-up.',
-      'Rephrase one disagreement as a shared problem to solve.',
-      'Read one paragraph aloud slowly, finishing every word.'
-    ] },
-  { key:'independence', icon:'⬢', name:'Independence',
-    skills:['Driving','Cooking','Basic repairs','First aid','Personal organization'],
-    facts:[
-      'Independence grows through repeatable systems, not heroic one-time effort.',
-      'Driving confidence is built through controlled exposure, not waiting for fear to disappear.',
-      'Five dependable meals create more independence than fifty saved recipes.',
-      'In an emergency, scene safety and a clear call for help come before intervention.'
-    ],
-    tips:[
-      'Break fear into controlled exposure: parked car, quiet street, then traffic.',
-      'Master five reliable meals before chasing complicated recipes.',
-      'Learn to shut off water, electricity and gas before attempting repairs.',
-      'First aid starts with scene safety, emergency call and bleeding control.'
-    ],
-    drills:[
-      'Spend ten minutes identifying every control in a parked car.',
-      'Cook one basic meal without checking the recipe more than twice.',
-      'Locate the main water, power and gas shutoffs in your home.',
-      'Review the emergency number and basic bleeding-control steps.'
-    ] },
-  { key:'profession', icon:'◆', name:'Profession',
-    skills:['English','Data analysis','Programming','Projects','Portfolio'],
-    facts:[
-      'Professional skill becomes visible when it produces evidence: a project, decision or result.',
-      'English improves faster when input, output and correction happen in the same week.',
-      'Data analysis begins with a precise question, not with a chart.',
-      'A portfolio proves judgment when it explains constraints and trade-offs.'
-    ],
-    tips:[
-      'Turn every course module into one tiny artifact you can show.',
-      'For data work, always state the question before touching the dataset.',
-      'Build projects around real constraints, not tutorial-perfect examples.',
-      'A portfolio needs context, decisions and results—not only screenshots.'
-    ],
-    drills:[
-      'Create one small output from what you studied today.',
-      'Write the business question before opening a dataset.',
-      'Improve one real project by removing one unnecessary step.',
-      'Document one decision, one obstacle and one result from a project.'
-    ] },
-  { key:'presence', icon:'✧', name:'Presence',
-    skills:['Style','Grooming','Body language','Discipline','Confidence'],
-    facts:[
-      'Presence is the combined signal of care, calm, competence and consistency.',
-      'Fit, cleanliness and coherence usually matter more than expensive clothing.',
-      'Body language looks confident when movements are deliberate rather than rigid.',
-      'Confidence is often remembered evidence that you can rely on yourself.'
-    ],
-    tips:[
-      'Fit and cleanliness improve style more than expensive brands.',
-      'Keep shoulders relaxed, chin neutral and movements deliberate.',
-      'Confidence grows from evidence: keep promises small enough to complete.',
-      'Choose one grooming standard and make it automatic, not motivational.'
-    ],
-    drills:[
-      'Prepare one complete outfit tonight and remove one distracting element.',
-      'Walk for two minutes with relaxed shoulders and a steady pace.',
-      'Complete one small promise before starting another task.',
-      'Do a five-minute grooming reset and prepare tomorrow’s essentials.'
-    ] }
+const ACADEMY_DOMAINS = [
+  { key:'wisdom', name:'Sabiduría', icon:'◈', skills:[
+    ['wisdom-critical','Pensamiento crítico','Distinguir hechos, opiniones y suposiciones antes de decidir.', ['Elige una afirmación de redes y escribe qué evidencia la respaldaría.','Busca una fuente primaria sobre esa afirmación.','Escribe una explicación alternativa que también encaje con los hechos.','Detecta una palabra emocional usada para persuadirte.','Resume el argumento contrario de forma justa.','Anota qué dato te haría cambiar de opinión.','Toma una decisión pequeña usando evidencia y registra el resultado.']],
+    ['wisdom-memory','Memoria activa','Recordar mejor usando recuperación, conexión y repetición espaciada.', ['Cierra tus apuntes y escribe cinco ideas que recuerdes.','Convierte tres datos en preguntas y respóndelas sin mirar.','Relaciona una idea nueva con algo que ya conoces.','Repasa lo aprendido ayer antes de volver a leer.','Explica un concepto en voz alta durante dos minutos.','Haz una mini prueba de diez preguntas.','Recuerda lo esencial después de 24 horas y corrige vacíos.']],
+    ['wisdom-reading','Lectura profunda','Leer para comprender, cuestionar y aplicar, no solo terminar páginas.', ['Lee diez minutos sin notificaciones y marca una idea central.','Resume una página en una sola oración.','Escribe una pregunta que el texto todavía no responda.','Busca un ejemplo real de una idea del libro.','Explica el capítulo sin mirar.','Contrasta una idea con otra fuente.','Escribe una acción concreta derivada de la lectura.']],
+    ['wisdom-writing','Escritura clara','Ordenar pensamientos para comunicar con precisión.', ['Escribe 100 palabras sobre una idea sin editar.','Reduce ese texto un 25% sin perder significado.','Reescribe el primer párrafo con una idea principal clara.','Sustituye cinco palabras vagas por términos concretos.','Escribe una explicación para alguien que no conoce el tema.','Lee el texto en voz alta y corrige lo que suene torpe.','Publica o guarda una versión final de 150 palabras.']],
+    ['wisdom-decisions','Toma de decisiones','Elegir con criterios claros y aprender del resultado.', ['Define una decisión pendiente y su fecha límite.','Escribe tres criterios que realmente importan.','Asigna un peso simple a cada criterio.','Anota el peor resultado razonable y cómo reducirlo.','Distingue qué parte es reversible.','Decide con la información disponible, no con certeza imposible.','Revisa el resultado sin juzgarte y extrae una regla.']],
+    ['wisdom-culture','Cultura general útil','Construir contexto sobre historia, ciencia, economía y sociedad.', ['Aprende la ubicación y capital de un país nuevo.','Lee una explicación breve de un evento histórico.','Comprende un concepto económico cotidiano.','Aprende cómo funciona un sistema del cuerpo humano.','Investiga el origen de una tecnología que usas.','Resume una noticia internacional desde dos fuentes.','Conecta dos temas de la semana en un mapa mental.']]
+  ], tips:['Antes de creer una cifra, pregunta quién la midió y con qué método.','La memoria mejora más al intentar recordar que al releer pasivamente.','Una idea que no puedes explicar con palabras simples todavía no está dominada.','Leer menos páginas con notas útiles suele vencer a leer mucho sin retención.','Separa decisiones reversibles de irreversibles; las primeras merecen menos ansiedad.','Escribir aclara contradicciones que el pensamiento silencioso esconde.','Cuando una noticia te produzca ira inmediata, retrasa compartirla y busca la fuente original.','Un buen argumento puede tener una conclusión equivocada si parte de datos malos.','Aprende una palabra nueva usándola hoy en una frase real.','El aburrimiento breve ayuda a que el cerebro consolide ideas.','Haz preguntas específicas: “¿qué evidencia falta?” funciona mejor que “¿esto será verdad?”.','Guarda una lista de errores propios convertidos en reglas útiles.'] },
+  { key:'body', name:'Cuerpo y salud', icon:'◆', skills:[
+    ['body-strength','Fuerza básica','Mover tu cuerpo con control y progresar sin lesionarte.', ['Haz una prueba cómoda de sentadillas, flexiones inclinadas y plancha.','Practica diez sentadillas lentas cuidando rodillas y espalda.','Haz tres series fáciles de empuje sin llegar al fallo.','Practica una bisagra de cadera frente a un espejo.','Camina cargando dos objetos iguales durante un minuto.','Repite el circuito dejando dos repeticiones en reserva.','Registra qué ejercicio mejoró y aumenta solo una variable.']],
+    ['body-mobility','Movilidad','Conservar rangos de movimiento útiles para entrenar y vivir sin rigidez.', ['Mueve cuello, hombros, cadera y tobillos durante cinco minutos.','Practica movilidad de tobillo contra una pared.','Haz rotaciones torácicas lentas a ambos lados.','Mantén una sentadilla asistida durante 30 segundos.','Estira flexores de cadera sin arquear la espalda.','Combina los movimientos en una rutina de ocho minutos.','Repite la prueba inicial y registra el rango que cambió.']],
+    ['body-posture','Postura funcional','Colocarte mejor sin mantener una pose rígida todo el día.', ['Ajusta pantalla para que la parte superior quede cerca de tus ojos.','Apoya pies y cambia de posición cada 30–45 minutos.','Practica diez retracciones suaves de barbilla.','Camina dos minutos con hombros relajados y mirada al frente.','Haz una pausa de respiración y extensión torácica.','Graba diez segundos de perfil y corrige solo un detalle.','Diseña dos recordatorios ambientales para moverte.']],
+    ['body-sleep','Sueño consistente','Crear condiciones para dormir y despertar con más energía.', ['Fija una hora de despertar realista para siete días.','Pon la alarma lejos de la cama antes de dormir.','Reduce luz intensa durante los últimos 30 minutos.','Evita cafeína al menos ocho horas antes de dormir.','Prepara ropa y agua para reducir decisiones al despertar.','Sal a recibir luz natural al comenzar el día.','Compara energía y sueño; conserva las dos acciones más útiles.']],
+    ['body-nutrition','Nutrición práctica','Comer mejor con decisiones simples y sostenibles.', ['Añade una fuente de proteína a una comida.','Incluye una fruta o verdura de color distinto.','Bebe agua antes de una bebida azucarada.','Arma un plato con proteína, vegetal y carbohidrato.','Lee la porción real de un producto frecuente.','Prepara una comida sencilla para mañana.','Diseña tres comidas económicas que puedas repetir.']],
+    ['body-firstaid','Primeros auxilios básicos','Responder con calma mientras llega ayuda profesional.', ['Guarda los números locales de emergencia.','Ubica botiquín, extintor y llaves de servicios de casa.','Aprende a evaluar seguridad de la escena antes de acercarte.','Revisa cómo controlar una hemorragia con presión directa.','Aprende señales de alarma de infarto y accidente cerebrovascular.','Busca un curso certificado de RCP cercano o virtual.','Explícale a alguien tu plan básico de emergencia.']]
+  ], tips:['La mejora física ocurre con estímulo, recuperación y repetición; no con castigo.','La postura perfecta no existe: cambiar de posición suele importar más.','La luz natural al despertar ayuda a sincronizar el reloj biológico.','Entrenar dejando algunas repeticiones en reserva facilita la constancia.','Una comida simple preparada vence a una dieta perfecta que nunca haces.','Dolor agudo, mareo o falta de aire inusual son señales para detenerte y evaluar.','Caminar diez minutos después de comer puede ser una herramienta sencilla de salud.','La cafeína puede seguir activa muchas horas después de tomarla.','Aprender RCP requiere práctica certificada, no solo videos.','Para mejorar movilidad, controla el rango; no rebotes dentro del dolor.','Dormir mejor suele comenzar por una hora de despertar estable.','La hidratación se evalúa mejor por hábitos y contexto que por una cifra universal rígida.'] },
+  { key:'finance', name:'Finanzas', icon:'◇', skills:[
+    ['finance-tracking','Control de gastos','Saber exactamente adónde va tu dinero.', ['Registra cada gasto de hoy, incluso los pequeños.','Clasifica ayer en necesidades, crecimiento y deseo.','Detecta una compra que no recuerdas con satisfacción.','Compara gasto previsto contra gasto real.','Agrupa suscripciones y cobros automáticos.','Calcula tu gasto diario promedio de la semana.','Define un límite concreto para una categoría problemática.']],
+    ['finance-budget','Presupuesto realista','Asignar dinero antes de gastarlo sin fingir que nunca habrá imprevistos.', ['Anota ingreso disponible del mes.','Separa vivienda, servicios, comida, transporte y deuda.','Reserva una pequeña categoría para imprevistos.','Asigna dinero a una meta importante.','Ajusta una categoría usando datos reales.','Haz una prueba de presupuesto para la próxima semana.','Cierra la semana y mueve sobrantes con intención.']],
+    ['finance-emergency','Fondo de emergencia','Crear margen para no convertir sorpresas en deuda.', ['Calcula una primera meta pequeña y alcanzable.','Elige una cuenta o bolsillo separado.','Programa un aporte automático modesto.','Vende o elimina un gasto y dirige ese valor al fondo.','Lista tres emergencias reales que cubriría.','Evita usarlo para compras previsibles.','Celebra el primer hito y fija el siguiente.']],
+    ['finance-debt','Ataque de deuda','Reducir saldos con estrategia y sin ocultar el flujo real.', ['Lista saldo, tasa, cuota y fecha de cada deuda.','Elige avalancha o bola de nieve conscientemente.','Calcula cuánto puedes abonar sin afectar necesidades.','Identifica el pago mínimo de todas las cuentas.','Dirige un extra a una sola deuda objetivo.','Revisa cargos o seguros negociables.','Actualiza saldos y estima el próximo hito.']],
+    ['finance-buying','Compras conscientes','Evitar que impulsos cortos dominen metas largas.', ['Aplica una espera de 24 horas a una compra no planeada.','Calcula cuántas horas de trabajo cuesta.','Busca costo total, mantenimiento y vida útil.','Compara tres alternativas, incluida no comprar.','Elimina un disparador de compra del teléfono.','Pregunta qué problema concreto resolverá.','Decide y registra si el deseo sobrevivió una semana.']],
+    ['finance-investing','Inversión básica','Comprender riesgo, horizonte, costos y diversificación.', ['Define para qué invertirías y en cuántos años.','Aprende diferencia entre ahorro e inversión.','Investiga inflación y rendimiento real.','Comprende por qué diversificar reduce riesgo específico.','Revisa comisiones de un producto financiero.','Identifica tu tolerancia a caídas sin inventarla.','Escribe una política personal simple antes de invertir.']]
+  ], tips:['Una compra barata que no necesitas sigue siendo dinero perdido.','El fondo de emergencia compra tiempo para pensar, no solo objetos.','Paga primero todas las cuotas mínimas antes de atacar una deuda.','La tasa y el costo total importan más que una cuota aparentemente cómoda.','Esperar 24 horas reduce decisiones impulsivas sin prohibirte disfrutar.','Nunca inviertas en algo que no puedes explicar con tus palabras.','Automatizar un aporte pequeño suele vencer a depender de motivación.','Revisa suscripciones como si tuvieras que comprarlas otra vez hoy.','El presupuesto es un plan ajustable, no una prueba moral.','Más rendimiento esperado normalmente implica aceptar más riesgo.','Separa dinero de gastos próximos del dinero para objetivos lejanos.','Antes de prestar dinero, decide si podrías soportar no recuperarlo.'] },
+  { key:'communication', name:'Comunicación', icon:'✦', skills:[
+    ['communication-listening','Escucha activa','Entender antes de preparar tu respuesta.', ['En una conversación, no interrumpas durante un minuto completo.','Resume lo que entendiste y pregunta si es correcto.','Haz una pregunta abierta en vez de dar consejo inmediato.','Observa tono y emoción además de palabras.','Elimina el teléfono de una conversación importante.','Detecta una suposición que estabas haciendo.','Pide retroalimentación sobre cómo escuchas.']],
+    ['communication-diction','Dicción y voz','Hablar con claridad, ritmo y respiración.', ['Lee un párrafo lentamente exagerando consonantes.','Graba 30 segundos y detecta muletillas.','Practica pausas al final de cada idea.','Respira bajo y habla sin correr.','Lee con un lápiz entre dientes y luego sin él.','Explica algo mirando al frente, no al suelo.','Graba de nuevo y compara claridad.']],
+    ['communication-smalltalk','Conversación','Iniciar y sostener intercambios naturales.', ['Haz una observación concreta y una pregunta abierta.','Pregunta por una experiencia, no solo por datos.','Comparte una respuesta breve antes de devolver la pregunta.','Recuerda y usa el nombre de una persona.','Busca un interés común sin forzarlo.','Cierra una conversación de forma amable y directa.','Inicia una conversación corta con alguien nuevo.']],
+    ['communication-boundaries','Límites','Decir sí y no con respeto y sin explicaciones infinitas.', ['Escribe una situación donde necesitas un límite.','Formula: “No puedo X; sí puedo Y”.','Practícalo en voz alta sin pedir perdón por existir.','Tolera cinco segundos de silencio después de decirlo.','Repite el límite sin añadir nuevas excusas.','Aplica un límite pequeño y seguro.','Evalúa el resultado y ajusta el tono, no el límite.']],
+    ['communication-negotiation','Negociación','Buscar acuerdos con preparación y alternativas.', ['Define tu objetivo y tu mínimo aceptable.','Investiga el valor de mercado o contexto.','Escribe tres intereses de la otra parte.','Prepara una alternativa si no hay acuerdo.','Haz una petición concreta y guarda silencio.','Intercambia condiciones en vez de ceder gratis.','Registra qué funcionó y qué mejorar.']],
+    ['communication-public','Hablar en público','Organizar ideas y transmitirlas con presencia.', ['Prepara una idea central en una frase.','Organiza inicio, tres puntos y cierre.','Habla un minuto sin leer.','Grábate y elimina una muletilla.','Practica el inicio hasta decirlo con calma.','Presenta a una persona o cámara durante tres minutos.','Repite usando una historia o ejemplo concreto.']]
+  ], tips:['Las personas recuerdan cómo las escuchaste más que una respuesta brillante.','Hablar más lento suele sonar más seguro que hablar más fuerte.','Una buena pregunta abierta comienza con qué, cómo o cuéntame.','Un límite claro no necesita una defensa de diez minutos.','En negociación, prepara tu alternativa antes de sentarte.','Las pausas bien usadas transmiten control y ayudan a pensar.','Repetir el nombre de alguien una vez ayuda a recordarlo.','No respondas a una emoción intensa con un texto inmediato.','Una historia concreta vuelve memorable una idea abstracta.','La confianza al hablar se entrena grabándote y revisando una cosa a la vez.','Resume el desacuerdo antes de defender tu posición.','En una conversación difícil, describe conducta e impacto, no la identidad de la persona.'] },
+  { key:'independence', name:'Independencia', icon:'⬡', skills:[
+    ['independence-driving','Conducir con confianza','Reducir miedo mediante exposición gradual y práctica controlada.', ['Con el carro apagado, identifica todos los controles.','Ajusta asiento, espejos y postura hasta estar cómodo.','Practica encender, avanzar y frenar en un espacio seguro.','Repite giros amplios y control de velocidad baja.','Practica estacionamiento con referencias visuales.','Conduce una ruta tranquila con acompañante confiable.','Repite la ruta y registra qué miedo disminuyó.']],
+    ['independence-cooking','Cocina básica','Preparar comidas seguras, económicas y repetibles.', ['Domina higiene, cuchillo y tabla de cortar.','Cocina huevos de dos formas.','Prepara arroz o pasta controlando tiempo y agua.','Cocina una proteína verificando cocción segura.','Prepara vegetales con dos técnicas.','Arma una comida completa con sobras planeadas.','Repite sin receta y anota mejoras.']],
+    ['independence-repairs','Reparaciones domésticas','Resolver problemas pequeños y saber cuándo llamar a un profesional.', ['Identifica tablero eléctrico, llave de agua y gas.','Aprende a usar destornillador, alicate y cinta métrica.','Aprieta una bisagra o tornillo flojo.','Cambia una bombilla con seguridad.','Aprende a desatascar un desagüe simple.','Mide y cuelga un objeto liviano correctamente.','Crea una caja básica de herramientas.']],
+    ['independence-cleaning','Limpieza eficiente','Mantener espacios funcionales con sistemas cortos.', ['Haz un reset de diez minutos recogiendo superficies.','Limpia de arriba hacia abajo en una habitación.','Separa productos que nunca deben mezclarse.','Crea un lugar fijo para llaves, documentos y cargadores.','Limpia baño usando orden y tiempo definidos.','Lava ropa leyendo etiquetas y separando colores.','Diseña una rutina semanal de 20 minutos.']],
+    ['independence-documents','Documentos y trámites','Proteger y encontrar información importante.', ['Reúne identificación, seguros y documentos principales.','Crea copias digitales seguras.','Anota fechas de vencimiento importantes.','Organiza una carpeta física y otra digital.','Revisa contactos de emergencia.','Prepara una lista de trámites pendientes.','Completa un trámite pequeño de principio a fin.']],
+    ['independence-safety','Seguridad personal y doméstica','Prevenir riesgos y reaccionar sin pánico.', ['Revisa cerraduras, iluminación y rutas de salida.','Define un punto de encuentro de emergencia.','Comprueba detectores y extintor si los tienes.','Aprende a identificar una estafa común.','Practica compartir ubicación y ruta con alguien confiable.','Revisa privacidad básica del teléfono.','Haz un simulacro mental de una emergencia realista.']]
+  ], tips:['La confianza al conducir llega después de repeticiones seguras, no antes.','Nunca mezcles cloro con amoníaco ni otros limpiadores.','Saber cerrar agua, gas y electricidad puede evitar daños mayores.','Cinco comidas dominadas valen más que cincuenta recetas guardadas.','Escanea documentos importantes, pero protege el acceso a las copias.','Una caja de herramientas pequeña resuelve gran parte de los arreglos cotidianos.','Cuando una reparación involucra gas o electricidad compleja, llama a un profesional.','Mantén llaves y documentos en lugares fijos para reducir estrés diario.','Antes de usar un extintor, asegúrate de conservar una salida detrás de ti.','Las estafas crean urgencia para impedir que verifiques.','Practica estacionar en espacios amplios antes de aumentar dificultad.','La independencia también consiste en pedir ayuda competente a tiempo.'] },
+  { key:'profession', name:'Profesión y estudio', icon:'▣', skills:[
+    ['profession-focus','Concentración','Proteger bloques de trabajo de distracciones evitables.', ['Elige una tarea y define qué significa terminarla.','Pon el teléfono fuera de alcance durante 20 minutos.','Cierra pestañas que no sirven a la tarea.','Trabaja 25 minutos y registra cada impulso de distraerte.','Haz una pausa sin pantalla.','Repite un bloque aumentando cinco minutos.','Diseña una regla permanente contra tu mayor distractor.']],
+    ['profession-learning','Aprender a aprender','Convertir información en capacidad aplicable.', ['Define una habilidad concreta, no un tema gigante.','Divide la habilidad en subhabilidades observables.','Busca un recurso principal y evita acumular cursos.','Practica antes de sentirte preparado.','Pide retroalimentación sobre un resultado real.','Corrige el error más frecuente.','Crea una pequeña prueba o proyecto final.']],
+    ['profession-english','Inglés práctico','Usar el idioma diariamente en comprensión y producción.', ['Escucha cinco minutos con transcripción.','Repite diez frases imitando ritmo.','Escribe cinco oraciones sobre tu día.','Habla dos minutos sin traducir palabra por palabra.','Aprende cinco palabras dentro de frases.','Mantén una conversación o intercambio breve.','Graba un resumen y compara con el día uno.']],
+    ['profession-data','Análisis de datos','Convertir preguntas en datos, cálculos y conclusiones.', ['Formula una pregunta que pueda responderse con datos.','Identifica columnas y tipos de una tabla.','Limpia valores vacíos o inconsistentes.','Calcula promedio, mediana y rango.','Crea un gráfico apropiado para la pregunta.','Escribe tres conclusiones y una limitación.','Presenta el hallazgo en una diapositiva o nota.']],
+    ['profession-programming','Programación','Resolver problemas construyendo y depurando sistemas pequeños.', ['Escribe el problema en entradas, proceso y salida.','Resuelve una versión manual antes de programar.','Implementa el caso más sencillo.','Prueba un caso vacío y uno extremo.','Lee el error completo antes de cambiar código.','Refactoriza nombres y elimina duplicación.','Documenta y guarda una versión funcional.']],
+    ['profession-portfolio','Portafolio profesional','Demostrar capacidad con evidencia visible.', ['Elige un proyecto que resuelva un problema real.','Define alcance para terminarlo en pocas semanas.','Crea una primera versión pequeña.','Documenta decisiones y dificultades.','Añade capturas, resultados o métricas.','Pide revisión a una persona.','Publica una versión y escribe qué aprendiste.']]
+  ], tips:['Un curso terminado sin práctica vale menos que un proyecto pequeño funcional.','Define la salida antes de comenzar un bloque de concentración.','La recuperación activa también funciona para código, idiomas y entrevistas.','Un portafolio debe mostrar decisiones y resultados, no solo capturas bonitas.','Leer el mensaje de error completo ahorra cambios aleatorios.','Aprender una habilidad exige producir, no solo consumir.','Una pregunta clara determina qué datos necesitas.','En inglés, la frecuencia diaria supera a una sesión gigante semanal.','Elimina una fuente de distracción antes de pedir más disciplina.','Publicar una versión imperfecta crea retroalimentación real.','Las notas útiles terminan en preguntas, ejemplos o acciones.','Practica entrevistas explicando proyectos reales, no memorizando adjetivos.'] },
+  { key:'presence', name:'Presencia y glow up', icon:'✧', skills:[
+    ['presence-grooming','Aseo personal','Construir una rutina limpia, consistente y apropiada para ti.', ['Revisa higiene dental, uñas, cabello y ropa limpia.','Define una rutina de mañana de cinco minutos.','Define una rutina nocturna simple.','Limpia y organiza tus herramientas de cuidado.','Revisa detalles que suelen olvidarse: cuello, zapatos y aliento.','Prepara productos y ropa antes de necesitarlos.','Elimina pasos inútiles y conserva la rutina mínima.']],
+    ['presence-skincare','Cuidado de la piel','Proteger la barrera de la piel con una rutina básica.', ['Identifica si tu piel suele sentirse seca, grasa o sensible.','Usa un limpiador suave sin frotar agresivamente.','Aplica hidratante adecuada después de limpiar.','Usa protector solar de amplio espectro durante el día.','Evita introducir varios productos nuevos al mismo tiempo.','Limpia funda de almohada y evita manipular lesiones.','Evalúa tolerancia y consulta dermatología si hay un problema persistente.']],
+    ['presence-style','Estilo masculino','Vestir con ajuste, coherencia y cuidado antes que con precio.', ['Prueba tu ropa y separa lo que no ajusta bien.','Arma un conjunto simple con colores compatibles.','Limpia y revisa el estado de tus zapatos.','Aprende dónde deberían terminar mangas y pantalón.','Elige una prenda que mejore la silueta sin incomodarte.','Toma una foto del conjunto y elimina un elemento innecesario.','Define tres fórmulas de outfit que puedas repetir.']],
+    ['presence-bodylanguage','Lenguaje corporal','Proyectar calma y atención mediante movimientos conscientes.', ['Camina dos minutos con ritmo estable y mirada al frente.','Mantén manos visibles durante una conversación.','Practica contacto visual natural, sin sostenerlo rígidamente.','Reduce movimientos nerviosos durante 60 segundos.','Saluda con voz clara y postura relajada.','Ocupa el espacio necesario sin encogerte ni imponerte.','Grábate entrando, saludando y sentándote; corrige un detalle.']],
+    ['presence-confidence','Confianza basada en evidencia','Creer más en ti cumpliendo compromisos concretos.', ['Elige una promesa pequeña que puedas cumplir hoy.','Termínala antes de añadir otra.','Anota una situación difícil que ya superaste.','Haz una acción incómoda pero segura durante cinco minutos.','Pide algo de forma clara sin minimizarte.','Acepta un error sin insultarte.','Resume siete evidencias de que puedes confiar en ti.']],
+    ['presence-social','Presencia social','Ser recordado por calidez, interés y consistencia.', ['Saluda primero a tres personas.','Haz un cumplido específico y sincero.','Guarda el teléfono durante una interacción.','Recuerda un detalle y pregúntalo después.','Presenta a dos personas diciendo algo positivo de cada una.','Agradece con precisión una acción concreta.','Invita o propone un plan sencillo con fecha.']]
+  ], tips:['El ajuste y la limpieza suelen mejorar más un outfit que una marca cara.','Protector solar y constancia son una base más sólida que una rutina de diez productos.','La confianza se construye reuniendo evidencia de promesas cumplidas.','Un aroma agradable debe descubrirse de cerca, no anunciarse desde lejos.','Mantén hombros relajados y barbilla neutral; la rigidez no es seguridad.','La ropa cuidada y los zapatos limpios elevan conjuntos simples.','Evita manipular lesiones de la piel; aumenta irritación y marcas.','Contacto visual natural incluye pausas, no una mirada fija.','Preparar ropa la noche anterior reduce decisiones y mejora consistencia.','Un cumplido específico suena más auténtico que uno genérico.','La presencia mejora cuando escuchas y recuerdas detalles.','No necesitas fingir extroversión; necesitas comunicar atención y calma.'] }
 ];
-function skillRotationIndex(domainIndex) {
-  const d = new Date();
-  const start = new Date(d.getFullYear(),0,0);
-  const day = Math.floor((d - start) / 86400000);
-  return (day + domainIndex) % 20;
+const ACADEMY_TARGET = 7;
+function academyAllSkills(){ return ACADEMY_DOMAINS.flatMap(d => d.skills.map(s => ({domain:d, id:s[0], name:s[1], summary:s[2], practices:s[3]}))); }
+function academyReadState(){
+  const raw=(S.profile||{}).hunter_academy_state;
+  let st={activeSkillId:'',sessions:0,doneDates:[],mastered:[],startedOn:hoyLocal(),domain:'independence'};
+  if(raw){ try{ st={...st,...JSON.parse(raw)}; }catch(_e){} }
+  const all=academyAllSkills();
+  if(!all.some(x=>x.id===st.activeSkillId)){
+    const rec=academyRecommendationV2(); const first=all.find(x=>x.domain.key===rec.key)||all[0];
+    st.activeSkillId=first.id; st.domain=first.domain.key; st.sessions=0; st.doneDates=[]; st.startedOn=hoyLocal();
+  }
+  st.mastered=Array.isArray(st.mastered)?st.mastered:[]; st.doneDates=Array.isArray(st.doneDates)?st.doneDates:[];
+  return st;
 }
-function academyRecommendation() {
-  const domains = SKILL_DOMAINS;
-  const habits = S.habits || [];
-  const goals = S.goals || [];
-  const books = S.books || [];
-  const courses = S.courses_done || [];
-  const scores = {
-    wisdom: books.filter(b => b.status === 'Leyendo' || b.status === 'Terminado').length,
-    body: habits.filter(h => /exercise|gym|walk|run|entrena|ejercicio/i.test(h.name || '')).length,
-    communication: habits.filter(h => /speak|conversation|dicci|comunica/i.test(h.name || '')).length,
-    independence: goals.filter(g => /driv|licen|cook|cocina|independ|carro/i.test((g.name || '') + ' ' + (g.description || ''))).length,
-    profession: courses.length + goals.filter(g => /english|ingl|career|program|data|profes/i.test((g.name || '') + ' ' + (g.description || ''))).length,
-    presence: habits.filter(h => /groom|skin|posture|style|cuidado|disciplina/i.test(h.name || '')).length
-  };
-  return domains.slice().sort((a,b) => (scores[a.key] || 0) - (scores[b.key] || 0))[0] || domains[0];
+async function academySaveState(st){
+  S.profile=S.profile||{}; S.profile.hunter_academy_state=JSON.stringify(st);
+  await api('/api/profile',{body:{key:'hunter_academy_state',value:S.profile.hunter_academy_state},quiet:true});
 }
-function renderSkillAcademy() {
-  const host = document.getElementById('skillAcademy');
-  if (!host) return;
-  const recommended = academyRecommendation();
-  const cards = SKILL_DOMAINS.map((d, i) => {
-    const ix = skillRotationIndex(i);
-    const skill = d.skills[ix % d.skills.length];
-    const fact = d.facts[ix % d.facts.length];
-    const tip = d.tips[ix % d.tips.length];
-    const drill = d.drills[ix % d.drills.length];
-    const isRecommended = d.key === recommended.key;
-    return `<article class="skill-domain skill-${d.key}${isRecommended ? ' recommended' : ''}">
-      <div class="skill-domain-head"><span class="skill-sigil">${d.icon}</span><div><small>TRAINING DOMAIN</small><h3>${d.name}</h3></div>${isRecommended ? '<em>RECOMMENDED</em>' : ''}</div>
-      <div class="skill-focus"><span>SKILL TO LEARN</span><b>${esc(skill)}</b></div>
-      <div class="skill-lesson"><span>WHY IT MATTERS</span><p>${esc(fact)}</p></div>
-      <div class="skill-lesson"><span>MASTERY TIP</span><p>${esc(tip)}</p></div>
-      <div class="skill-drill"><span>TODAY’S PRACTICE</span><b>${esc(drill)}</b></div>
-      <div class="skill-pool">${d.skills.map(s => `<span class="${s === skill ? 'active' : ''}">${esc(s)}</span>`).join('')}</div>
-    </article>`;
-  }).join('');
-  host.innerHTML = `<div class="skill-academy-intro"><div><span>DAILY GROWTH DIRECTIVE</span><b>${esc(recommended.name)} is today’s recommended domain</b></div><p>The recommendation favors areas with less visible support in your current habits, goals, books and completed courses. It does not create or complete tasks.</p></div>${cards}`;
+function academyRecommendationV2(){
+  const habits=S.habits||[], goals=S.goals||[], books=S.books||[], courses=S.courses_done||[];
+  const score={wisdom:books.length,body:habits.filter(h=>/exercise|gym|walk|run|entrena|ejercicio|sleep|sueño/i.test(h.name||'')).length,finance:goals.filter(g=>/debt|deuda|ahorro|finance|dinero|tarjeta/i.test((g.name||'')+' '+(g.description||''))).length,communication:habits.filter(h=>/speak|conversation|dicci|comunica/i.test(h.name||'')).length,independence:goals.filter(g=>/driv|licen|cook|cocina|independ|carro/i.test((g.name||'')+' '+(g.description||''))).length,profession:courses.length+goals.filter(g=>/english|ingl|career|program|data|profes|estudio/i.test((g.name||'')+' '+(g.description||''))).length,presence:habits.filter(h=>/groom|skin|posture|style|cuidado|disciplina/i.test(h.name||'')).length};
+  return ACADEMY_DOMAINS.slice().sort((a,b)=>(score[a.key]||0)-(score[b.key]||0))[0]||ACADEMY_DOMAINS[0];
 }
+function academyDayNumber(){ const d=new Date(), start=new Date(d.getFullYear(),0,0); return Math.floor((d-start)/86400000); }
+function academyDailyIntel(){ const flat=ACADEMY_DOMAINS.flatMap(d=>d.tips.map(t=>({domain:d.name,icon:d.icon,text:t}))); return flat[academyDayNumber()%flat.length]; }
+function renderSkillAcademy(){
+  const host=document.getElementById('skillAcademy'); if(!host)return;
+  const st=academyReadState(), all=academyAllSkills(), active=all.find(x=>x.id===st.activeSkillId)||all[0];
+  const today=hoyLocal(), doneToday=st.doneDates.includes(today), sessions=Math.min(Number(st.sessions)||0,ACADEMY_TARGET), progress=Math.round(sessions/ACADEMY_TARGET*100), intel=academyDailyIntel();
+  const practice=active.practices[Math.min(sessions,active.practices.length-1)]||active.practices[0];
+  const recommended=academyRecommendationV2();
+  const domainTabs=ACADEMY_DOMAINS.map(d=>`<button class="academy-domain-tab ${d.key===st.domain?'active':''}" data-academy-domain="${d.key}"><span>${d.icon}</span>${esc(d.name)}</button>`).join('');
+  const visible=all.filter(x=>x.domain.key===st.domain);
+  const catalogue=visible.map(x=>{const mastered=st.mastered.includes(x.id), current=x.id===active.id; return `<button class="academy-skill-option ${current?'current':''} ${mastered?'mastered':''}" data-academy-skill="${x.id}"><span>${mastered?'✓':current?'◆':'◇'}</span><div><b>${esc(x.name)}</b><small>${mastered?'DOMINADA':current?`${sessions}/${ACADEMY_TARGET} sesiones`:esc(x.summary)}</small></div></button>`}).join('');
+  host.innerHTML=`<section class="academy-command-card">
+    <div class="academy-command-top"><div><span>DAILY HUNTER TRAINING</span><h3>${esc(active.name)}</h3><p>${esc(active.summary)}</p></div><div class="academy-rank-orb"><b>${sessions}</b><small>DE ${ACADEMY_TARGET}</small></div></div>
+    <div class="academy-meta"><span>${active.domain.icon} ${esc(active.domain.name)}</span><span>Día ${Math.min(sessions+1,ACADEMY_TARGET)} del entrenamiento</span><span>${st.mastered.length} habilidades dominadas</span></div>
+    <div class="academy-progress"><i style="width:${progress}%"></i></div>
+    <div class="academy-practice"><span>PRÁCTICA DE HOY</span><strong>${esc(practice)}</strong><p>Hazla con intención. Una sesión breve y real vale más que guardar veinte consejos.</p></div>
+    <button class="btn academy-complete-btn" data-academy-complete ${doneToday?'disabled':''}>${doneToday?'✓ PRÁCTICA REGISTRADA HOY':sessions>=ACADEMY_TARGET?'ELEGIR SIGUIENTE HABILIDAD':'MARCAR PRÁCTICA COMPLETA'}</button>
+  </section>
+  <aside class="academy-intel"><div><span>${intel.icon} DAILY INTEL · ${esc(intel.domain)}</span><strong>${esc(intel.text)}</strong></div><small>Un consejo diario adicional. No suma progreso ni duplica tu rutina.</small></aside>
+  <div class="academy-catalogue"><div class="academy-catalogue-head"><div><span>SKILL PATHS</span><b>Elige qué quieres dominar</b></div><em>Recomendado hoy: ${esc(recommended.name)}</em></div><div class="academy-domain-tabs">${domainTabs}</div><div class="academy-skill-list">${catalogue}</div></div>`;
+}
+document.addEventListener('click',async(e)=>{
+  const domainBtn=e.target.closest('[data-academy-domain]');
+  if(domainBtn){const st=academyReadState();st.domain=domainBtn.dataset.academyDomain;await academySaveState(st);renderSkillAcademy();return;}
+  const skillBtn=e.target.closest('[data-academy-skill]');
+  if(skillBtn){const st=academyReadState(), next=academyAllSkills().find(x=>x.id===skillBtn.dataset.academySkill);if(!next)return;st.activeSkillId=next.id;st.domain=next.domain.key;st.sessions=0;st.doneDates=[];st.startedOn=hoyLocal();await academySaveState(st);renderSkillAcademy();toast('New Hunter training selected');return;}
+  const complete=e.target.closest('[data-academy-complete]');
+  if(complete){const st=academyReadState(),today=hoyLocal();if(st.doneDates.includes(today))return;st.doneDates.push(today);st.sessions=Math.min((Number(st.sessions)||0)+1,ACADEMY_TARGET);if(st.sessions>=ACADEMY_TARGET&&!st.mastered.includes(st.activeSkillId)){st.mastered.push(st.activeSkillId);toast('Skill mastered · choose your next training');}else toast('Practice registered');await academySaveState(st);renderSkillAcademy();return;}
+});
 
 function hunterLicenseState() {
   const months = (S.history || []).filter(h => h.pct >= 0.7).length;
@@ -3757,6 +3701,7 @@ function renderLife() {
   // Panel de carreras personalizables
   renderCareer();
   renderEnglish();
+  renderSkillAcademy();
   // sincronizar metas que coincidan por nombre con una carrera (emparejamiento robusto)
   for (const c of (S.careers || [])) {
     const prog = progresoCareer(c);
