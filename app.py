@@ -1252,9 +1252,9 @@ def state():
     for row in d.execute("""
         SELECT nota, COALESCE(SUM(valor), 0) AS ab
         FROM abonos
-        WHERE nota LIKE 'extra:%' OR nota LIKE 'extracheck:%'
+        WHERE nota LIKE ? OR nota LIKE ?
         GROUP BY nota
-    """):
+    """, ('extra:%', 'extracheck:%')):
         item = dict(row)
         nota = str(item.get('nota') or '')
         partes = nota.split(':')
