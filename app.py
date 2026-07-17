@@ -19,7 +19,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 113  # must match FRONT_V in static/app.js
+VERSION = 114  # must match FRONT_V in static/app.js
 app = Flask(__name__)
 
 # Logging útil tanto en local como en Render. No imprime contraseñas ni cuerpos JSON.
@@ -1247,12 +1247,26 @@ def state():
     extra_debts = [dict(r) for r in d.execute('SELECT * FROM extra_debts')]
     # 'abonado' de una deuda registrada = abono guardado en su columna (checks nuevos + abonos parciales)
     #  MÁS abonos históricos registrados en la tabla 'abonos' (compatibilidad con datos viejos).
+    # V114: se consulta el historial una sola vez para evitar una consulta adicional por cada deuda.
+    historicos_extra = {}
+    for row in d.execute("""
+        SELECT nota, COALESCE(SUM(valor), 0) AS ab
+        FROM abonos
+        WHERE nota LIKE 'extra:%' OR nota LIKE 'extracheck:%'
+        GROUP BY nota
+    """):
+        item = dict(row)
+        nota = str(item.get('nota') or '')
+        partes = nota.split(':')
+        if len(partes) < 2:
+            continue
+        try:
+            extra_id = int(partes[1])
+        except (TypeError, ValueError):
+            continue
+        historicos_extra[extra_id] = historicos_extra.get(extra_id, 0) + (item.get('ab') or 0)
     for ed in extra_debts:
-        row = d.execute(
-            "SELECT COALESCE(SUM(valor),0) AS ab FROM abonos WHERE nota=? OR nota LIKE ?",
-            (f"extra:{ed['id']}", f"extracheck:{ed['id']}:%")).fetchone()
-        historicos = dict(row)['ab'] if row else 0
-        ed['abonado'] = (ed.get('abonado') or 0) + historicos
+        ed['abonado'] = (ed.get('abonado') or 0) + historicos_extra.get(ed['id'], 0)
     core = [x[0] for x in _SEED['debts']]
     return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
                         marks=marks, history=history, dreams=dreams,
@@ -1833,9 +1847,12 @@ def piggy_new():
 
 @app.post('/api/piggy/add')
 def piggy_add():
-    j = request.json
+    j = request.json or {}
+    amount = to_int(j.get('amount'))
+    if amount <= 0:
+        return jsonify(error='El aporte debe ser mayor a cero'), 400
     db().execute('INSERT INTO piggy_moves (piggy_id, amount, day, note) VALUES (?,?,?,?)',
-                 (int(j['piggy_id']), int(j['amount'] or 0),
+                 (int(j['piggy_id']), amount,
                   j.get('day', date.today().isoformat()), j.get('note', '')))
     db().commit()
     return jsonify(ok=True)
@@ -1904,19 +1921,28 @@ def service_del(i):
 
 @app.post('/api/income')
 def income_set():
-    j = request.json
+    j = request.json or {}
+    income = to_int(j.get('income'))
+    if income < 0:
+        return jsonify(error='El ingreso no puede ser negativo'), 400
     db().execute('INSERT OR REPLACE INTO month_income (month, income) VALUES (?,?)',
-                 (j['month'], int(j['income'] or 0)))
+                 (j['month'], income))
     db().commit()
     return jsonify(ok=True)
 
 
 @app.post('/api/expense/new')
 def expense_new():
-    j = request.json
+    j = request.json or {}
+    name = str(j.get('name') or '').strip()
+    amount = to_int(j.get('amount'))
+    if not name:
+        return jsonify(error='Escribe el nombre del gasto'), 400
+    if amount <= 0:
+        return jsonify(error='El gasto debe ser mayor a cero'), 400
     db().execute('''INSERT INTO expenses (name, amount, method, kind, month, created)
                     VALUES (?,?,?,?,?,?)''',
-                 (j['name'].strip(), int(j['amount'] or 0), j.get('method', 'Efectivo'),
+                 (name, amount, j.get('method', 'Efectivo'),
                   j.get('kind', 'once'), j.get('month', ''), date.today().isoformat()))
     db().commit()
     return jsonify(ok=True)
@@ -1947,9 +1973,15 @@ def journal_del(i):
 
 @app.post('/api/asset/new')
 def asset_new():
-    j = request.json
+    j = request.json or {}
+    name = str(j.get('name') or '').strip()
+    value = to_int(j.get('value'))
+    if not name:
+        return jsonify(error='Escribe el nombre del activo'), 400
+    if value < 0:
+        return jsonify(error='El valor del activo no puede ser negativo'), 400
     db().execute('INSERT INTO assets (name, value) VALUES (?,?)',
-                 (j['name'].strip(), int(j.get('value') or 0)))
+                 (name, value))
     db().commit()
     return jsonify(ok=True)
 
@@ -2368,9 +2400,16 @@ def debt_del(i):
 
 @app.post('/api/dream/new')
 def dream_new():
-    j = request.json
+    j = request.json or {}
+    category = str(j.get('category') or '').strip()
+    name = str(j.get('name') or '').strip()
+    value = to_int(j.get('value'))
+    if not category or not name:
+        return jsonify(error='Completa la categoría y el nombre'), 400
+    if value < 0:
+        return jsonify(error='El valor no puede ser negativo'), 400
     db().execute('INSERT INTO dreams (category, name, value) VALUES (?,?,?)',
-                 (j['category'].strip(), j['name'].strip(), int(j.get('value') or 0)))
+                 (category, name, value))
     db().commit()
     return jsonify(ok=True)
 
