@@ -19,7 +19,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 114  # must match FRONT_V in static/app.js
+VERSION = 115  # must match FRONT_V in static/app.js
 app = Flask(__name__)
 
 # Logging útil tanto en local como en Render. No imprime contraseñas ni cuerpos JSON.
@@ -1324,6 +1324,58 @@ def abono_del(aid):
     db().execute('DELETE FROM abonos WHERE id=?', (aid,))
     db().commit()
     return jsonify(ok=True)
+
+
+@app.post('/api/card/new')
+def card_new():
+    """Crea una tarjeta propia adicional sin alterar las cuatro tarjetas base.
+    La tarjeta usa la tabla debts para que pagos, compras y Debt Boss compartan
+    una sola fuente de verdad; sus metadatos visuales se guardan livianos en profile.
+    """
+    j = request.json or {}
+    name = str(j.get('name') or '').strip()
+    limit_value = to_int(j.get('limit'))
+    initial = to_int(j.get('initial'))
+    accent = str(j.get('accent') or 'violet').strip().lower()
+    allowed_accents = {'violet', 'blue', 'red', 'amber', 'green', 'cyan'}
+
+    if len(name) < 2 or len(name) > 40:
+        return jsonify(error='Use a card name between 2 and 40 characters'), 400
+    if limit_value < 0 or initial < 0:
+        return jsonify(error='Limit and current balance cannot be negative'), 400
+    if limit_value and initial > limit_value:
+        return jsonify(error='Current balance cannot be greater than the card limit'), 400
+    if accent not in allowed_accents:
+        accent = 'violet'
+
+    con = db()
+    try:
+        exists = con.execute('SELECT 1 FROM debts WHERE LOWER(name)=LOWER(?)', (name,)).fetchone()
+        if exists:
+            return jsonify(error='A debt or card with that name already exists'), 409
+
+        raw = con.execute("SELECT value FROM study_profile WHERE key='custom_credit_cards'").fetchone()
+        cards = []
+        if raw:
+            try:
+                cards = json.loads(dict(raw).get('value') or '[]')
+            except Exception:
+                cards = []
+        if any(str(c.get('key', '')).lower() == name.lower() for c in cards if isinstance(c, dict)):
+            return jsonify(error='A card with that name already exists'), 409
+
+        con.execute('INSERT INTO debts (name, initial) VALUES (?,?)', (name, initial))
+        cards.append({'key': name, 'label': name, 'boss': name, 'creditor': name, 'accent': accent})
+        con.execute('INSERT OR REPLACE INTO study_profile VALUES (?,?)',
+                    ('custom_credit_cards', json.dumps(cards, ensure_ascii=False)))
+        con.execute('INSERT OR REPLACE INTO study_profile VALUES (?,?)',
+                    ('cupo_' + name, str(limit_value)))
+        con.commit()
+    except Exception:
+        con.rollback()
+        raise
+    return jsonify(ok=True, card={'key': name, 'label': name, 'boss': name,
+                                  'creditor': name, 'accent': accent})
 
 
 @app.post('/api/card/pay')
