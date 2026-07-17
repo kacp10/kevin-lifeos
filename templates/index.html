@@ -242,7 +242,8 @@
   <div class="panel scroll-x">
     <table class="habit-grid" id="habitGrid"></table>
   </div>
-  <div class="panel">
+  <div class="panel haki-panel">
+    <div id="hakiShowcase" class="haki-showcase" aria-live="polite"></div>
     <h2>Haki history — months conquered (≥70%)</h2>
     <div id="hakiHistory" class="haki-history"></div>
     <canvas id="hakiChart" height="200" style="margin-top:14px"></canvas>
@@ -422,7 +423,7 @@
   <div id="petBody" class="pet-body"><!-- el SVG (o tu imagen) se inyecta aquí --></div>
 </div>
 
-<footer>Made by Kevin with Claude · <a class="footer-backup" href="/api/backup" title="Download a portable backup of all your LifeOS data">⬇ Download backup</a> · <b>v{{ version }}</b></footer>
+<footer>Made by Kevin with Claude · Data lives in <code>lifeos.db</code> — copy it for a backup. · <b>v{{ version }}</b></footer>
 <script src="/static/app.js?v={{ version }}"></script>
 </body>
 </html>
