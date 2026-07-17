@@ -1769,3 +1769,250 @@ button[aria-busy="true"]::after {
 @media (prefers-reduced-motion: reduce) {
   button[aria-busy="true"]::after { animation-duration: 1.4s; }
 }
+
+/* ====== v114.1 · HUNTER SKILL ACADEMY ROOT RESPONSIVE FIX ======
+   Structural containment lives at the end of the cascade so legacy Academy
+   rules cannot make the page wider than the mobile viewport. */
+.skill-academy-panel {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+.skill-academy-panel > .row-between,
+.skill-academy-panel > .row-between > div,
+.skill-academy-grid,
+.skill-academy-grid > *,
+.academy-command-card,
+.academy-command-top,
+.academy-command-top > div,
+.academy-intel,
+.academy-catalogue,
+.academy-catalogue-head,
+.academy-catalogue-head > *,
+.academy-domain-tabs,
+.academy-skill-list,
+.academy-skill-option,
+.academy-skill-option > div {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.skill-academy-panel > .row-between > div {
+  overflow-wrap: anywhere;
+}
+.skill-academy-panel .hint,
+.academy-command-top h3,
+.academy-command-top p,
+.academy-practice strong,
+.academy-practice p,
+.academy-intel strong,
+.academy-intel small,
+.academy-catalogue-head b,
+.academy-catalogue-head em,
+.academy-skill-option b,
+.academy-skill-option small {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.academy-domain-tabs {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.academy-domain-tab {
+  flex: 0 0 auto;
+}
+
+/* Logged state keeps the premium Hunter identity instead of fading into a
+   generic disabled control. The button remains disabled functionally. */
+.academy-complete-btn:disabled:not([aria-busy="true"]) {
+  position: relative;
+  opacity: 1;
+  color: #eafff8;
+  border: 1px solid rgba(54, 201, 167, .68);
+  background:
+    radial-gradient(circle at 15% 20%, rgba(255,255,255,.14), transparent 28%),
+    linear-gradient(115deg, rgba(31,139,116,.94), rgba(62,74,151,.96) 58%, rgba(126,91,255,.92));
+  box-shadow:
+    0 10px 24px rgba(16, 109, 91, .22),
+    0 0 22px rgba(126, 91, 255, .18),
+    inset 0 1px 0 rgba(255,255,255,.16);
+  text-shadow: 0 1px 8px rgba(0,0,0,.34);
+  letter-spacing: .075em;
+  cursor: default;
+  overflow: hidden;
+}
+.academy-complete-btn:disabled:not([aria-busy="true"])::before {
+  content: "◆";
+  display: inline-grid;
+  width: 1.45em;
+  height: 1.45em;
+  margin-right: .6em;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,.38);
+  border-radius: 50%;
+  background: rgba(6,28,30,.24);
+  color: #baffeb;
+  font-size: .72em;
+  vertical-align: .08em;
+  box-shadow: 0 0 14px rgba(110,255,217,.22);
+}
+.academy-complete-btn:disabled:not([aria-busy="true"])::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,.14) 48%, transparent 66%);
+  transform: translateX(-115%);
+  animation: academyLoggedSweep 5.5s ease-in-out infinite;
+}
+@keyframes academyLoggedSweep {
+  0%, 72% { transform: translateX(-115%); }
+  92%, 100% { transform: translateX(115%); }
+}
+
+@media (max-width: 850px) {
+  .skill-academy-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .academy-command-card,
+  .academy-intel,
+  .academy-catalogue {
+    grid-column: 1;
+    width: 100%;
+  }
+  .academy-skill-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .skill-academy-panel {
+    padding: 13px;
+  }
+  .skill-academy-panel > .row-between {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .skill-academy-panel > .row-between > div {
+    width: 100%;
+  }
+  .skill-academy-panel .hint {
+    margin-top: 6px;
+    line-height: 1.52;
+  }
+  .skill-academy-seal {
+    justify-self: start;
+    max-width: 100%;
+    white-space: normal;
+    text-align: center;
+    line-height: 1.35;
+  }
+  .academy-command-card {
+    width: 100%;
+    padding: 13px;
+    border-radius: 15px;
+  }
+  .academy-command-top {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 56px;
+    align-items: start;
+    gap: 10px;
+  }
+  .academy-rank-orb {
+    width: 56px;
+    min-width: 56px;
+    max-width: 56px;
+    flex-basis: 56px;
+  }
+  .academy-rank-orb b {
+    font-size: 1.35rem;
+  }
+  .academy-command-top h3 {
+    font-size: clamp(1.08rem, 6vw, 1.35rem);
+  }
+  .academy-meta {
+    gap: 6px;
+  }
+  .academy-meta span {
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.3;
+  }
+  .academy-practice {
+    padding: 13px;
+  }
+  .academy-complete-btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    padding: 11px 13px;
+    white-space: normal;
+    line-height: 1.32;
+    text-align: center;
+  }
+  .academy-intel {
+    width: 100%;
+    min-height: 0;
+    padding: 14px;
+  }
+  .academy-catalogue {
+    width: 100%;
+    overflow: hidden;
+  }
+  .academy-catalogue-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 7px;
+  }
+  .academy-catalogue-head em {
+    display: block;
+    width: 100%;
+  }
+  .academy-domain-tabs {
+    margin-inline: 0;
+    padding: 11px 0 10px;
+  }
+  .academy-skill-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .academy-skill-option {
+    width: 100%;
+  }
+}
+
+@media (max-width: 360px) {
+  .skill-academy-panel {
+    padding: 11px;
+  }
+  .academy-command-top {
+    grid-template-columns: minmax(0, 1fr) 50px;
+    gap: 8px;
+  }
+  .academy-rank-orb {
+    width: 50px;
+    min-width: 50px;
+    max-width: 50px;
+    flex-basis: 50px;
+  }
+  .academy-rank-orb b {
+    font-size: 1.2rem;
+  }
+  .academy-complete-btn:disabled:not([aria-busy="true"]) {
+    letter-spacing: .04em;
+    font-size: .72rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .academy-complete-btn:disabled:not([aria-busy="true"])::after {
+    animation: none;
+  }
+}
