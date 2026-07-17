@@ -1356,43 +1356,47 @@ details.grp-paid > summary { color: var(--ok, #34d399); }
 .skill-pool span.active { color:var(--gold); border-color:rgba(245,185,66,.45); background:rgba(245,185,66,.08); }
 
 /* ====== v105 · BIG HUNTER LICENSE + MEDALS ====== */
-.hunter-license { display:grid; grid-template-columns:110px 1fr 150px; gap:18px; align-items:center; position:relative; overflow:hidden; margin-bottom:24px; padding:22px; border-radius:20px; border:1px solid #4b4166; background:radial-gradient(circle at 0 0,rgba(124,108,224,.28),transparent 35%),linear-gradient(135deg,#151125,#28203f); box-shadow:0 18px 45px rgba(0,0,0,.32); }
-.hunter-license::after { content:''; position:absolute; inset:-60% -20%; background:linear-gradient(110deg,transparent 42%,rgba(255,255,255,.06) 50%,transparent 58%); transform:translateX(-60%); animation:licenseShine 9s ease-in-out infinite; pointer-events:none; }
-.hunter-license.unlocked { border-color:var(--gold); box-shadow:0 0 38px rgba(245,185,66,.18),0 18px 45px rgba(0,0,0,.35); }
-.hunter-license-mark { width:94px; height:94px; border-radius:50%; display:grid; place-items:center; border:2px solid var(--gold); background:radial-gradient(circle,rgba(245,185,66,.2),#100d1d 65%); box-shadow:inset 0 0 22px rgba(245,185,66,.18); }
-.hunter-license-mark span { color:var(--gold); font-size:2.7rem; text-shadow:0 0 16px rgba(245,185,66,.55); }
-.hunter-license-kicker { color:var(--gold); font-size:.62rem; letter-spacing:1.8px; font-weight:800; }
-.hunter-license-main h2 { color:var(--txt); font-size:1.35rem; margin:6px 0; }
-.hunter-license-main p { color:var(--mut); font-size:.82rem; line-height:1.4; }
-.hunter-license-reqs { display:grid; grid-template-columns:1fr 1fr; gap:6px 12px; margin-top:12px; }
-.hunter-license-reqs div { display:flex; justify-content:space-between; gap:8px; font-size:.7rem; color:#78718e; }
-.hunter-license-reqs div.done { color:var(--ok); }
-.hunter-license-id { align-self:stretch; border-left:1px solid var(--line); padding-left:17px; display:flex; flex-direction:column; justify-content:center; gap:3px; }
-.hunter-license-id small { color:var(--mut); font-size:.56rem; letter-spacing:1.4px; margin-top:5px; }
-.hunter-license-id b { color:var(--gold); font-size:.8rem; }
-.hunter-license-id strong { font-size:.76rem; }
-.hunter-license-rank { position:absolute; right:16px; top:12px; font-family:'Russo One'; font-size:3.4rem; color:rgba(245,185,66,.12); }
-#tab-logros .achievements-grid { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); }
-#tab-logros .ach-card { position:relative; overflow:hidden; background:linear-gradient(145deg,#171329,#221c3a); }
-#tab-logros .ach-card.got { border-color:#66578f; box-shadow:0 0 20px rgba(124,108,224,.14); }
-#tab-logros .ach-card.got::before { content:''; position:absolute; inset:0; background:radial-gradient(circle at 50% 20%,rgba(245,185,66,.1),transparent 45%); pointer-events:none; }
-.hunter-medal-core,.hunter-medal-lock { width:48px; height:48px; display:grid; place-items:center; margin:0 auto; border-radius:50%; border:2px solid var(--gold); background:#100d1d; box-shadow:0 0 18px rgba(245,185,66,.2); }
-.hunter-medal-lock { color:#58516c; border-color:#40384f; box-shadow:none; }
-@keyframes licenseShine { 0%,80%{transform:translateX(-70%)} 100%{transform:translateX(70%)} }
+.hunter-license-stage { margin-bottom:26px; }
+.hunter-license-card { position:relative; width:min(100%,1120px); margin:0 auto; aspect-ratio:16/9; overflow:hidden; border-radius:24px; border:1px solid rgba(245,185,66,.62); background:#090712; box-shadow:0 22px 55px rgba(0,0,0,.48),0 0 30px rgba(134,87,255,.18),inset 0 0 0 1px rgba(255,255,255,.04); isolation:isolate; }
+.hunter-license-card::after { content:''; position:absolute; inset:-35%; z-index:4; background:linear-gradient(110deg,transparent 42%,rgba(255,255,255,.16) 49%,transparent 56%); transform:translateX(-70%); animation:hunterLicenseShine 8s ease-in-out infinite; pointer-events:none; }
+.hunter-license-art { width:100%; height:100%; display:block; object-fit:contain; background:#05040a; }
+.hunter-license-data { position:absolute; z-index:3; left:53.5%; right:6.5%; top:19%; bottom:12%; display:flex; flex-direction:column; color:#11152d; text-shadow:0 1px 0 rgba(255,255,255,.32); }
+.hunter-license-overline { font-size:clamp(.48rem,.8vw,.72rem); letter-spacing:.22em; font-weight:900; color:#4b365e; }
+.hunter-license-title { margin-top:4px; font-family:'Russo One',sans-serif; font-size:clamp(.95rem,2vw,1.7rem); letter-spacing:.09em; color:#171329; }
+.hunter-license-fields { display:grid; grid-template-columns:1.15fr .55fr; gap:clamp(6px,1.2vw,14px) clamp(10px,2vw,26px); margin-top:auto; }
+.hunter-license-fields div,.hunter-license-expedition { padding:clamp(5px,.8vw,10px) clamp(7px,1vw,12px); border:1px solid rgba(30,25,58,.28); background:rgba(218,231,255,.34); backdrop-filter:blur(2px); }
+.hunter-license-fields small,.hunter-license-expedition small { display:block; margin-bottom:2px; font-size:clamp(.42rem,.68vw,.62rem); letter-spacing:.12em; color:#4f506a; }
+.hunter-license-fields b,.hunter-license-expedition b { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:clamp(.58rem,1.05vw,.93rem); color:#171329; }
+.hunter-license-expedition { margin-top:clamp(6px,1vw,11px); }
+.hunter-license-lock { position:absolute; z-index:5; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; background:rgba(4,3,10,.57); color:#fff; backdrop-filter:grayscale(1) blur(1px); }
+.hunter-license-lock span { color:var(--gold); font-size:2rem; text-shadow:0 0 18px rgba(245,185,66,.7); }
+.hunter-license-lock b { font-family:'Russo One'; font-size:clamp(1.8rem,5vw,4.5rem); color:#fff; }
+.hunter-license-lock small { letter-spacing:.18em; color:#cec6e5; }
+.hunter-license-authorized { position:absolute; right:4%; bottom:7%; z-index:5; padding:8px 14px; transform:rotate(-7deg); border:3px double rgba(116,24,35,.85); border-radius:8px; color:#681521; background:rgba(223,208,174,.78); font-family:'Russo One'; letter-spacing:.12em; font-size:clamp(.6rem,1.1vw,1rem); box-shadow:0 2px 8px rgba(0,0,0,.25); }
+.hunter-license-progress { width:min(100%,1120px); margin:12px auto 0; padding:16px 18px; border:1px solid #3d3454; border-radius:16px; background:linear-gradient(135deg,rgba(24,19,42,.97),rgba(13,11,24,.97)); box-shadow:0 12px 30px rgba(0,0,0,.24); }
+.hunter-license-progress-head { display:flex; align-items:flex-end; justify-content:space-between; gap:18px; }
+.hunter-license-progress-head div { display:flex; flex-direction:column; gap:3px; }
+.hunter-license-progress-head span { color:var(--gold); font-size:.65rem; letter-spacing:.16em; font-weight:900; }
+.hunter-license-progress-head strong { font-size:.9rem; }
+.hunter-license-progress-head>b { font-family:'Russo One'; color:#a993ff; font-size:1.25rem; }
+.hunter-license-meter { height:7px; margin:10px 0 13px; overflow:hidden; border-radius:999px; background:#090713; }
+.hunter-license-meter i { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,#704de8,#b892ff,#f5b942); box-shadow:0 0 14px rgba(169,147,255,.55); transition:width .55s ease; }
+.hunter-license-reqs { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px 14px; }
+.hunter-license-reqs div { display:flex; justify-content:space-between; gap:9px; padding:7px 9px; border:1px solid rgba(255,255,255,.055); border-radius:9px; color:#7f7893; font-size:.72rem; }
+.hunter-license-reqs div.done { color:var(--ok); border-color:rgba(48,207,153,.18); background:rgba(48,207,153,.045); }
+@keyframes hunterLicenseShine { 0%,78%{transform:translateX(-72%)} 100%{transform:translateX(72%)} }
 
 @media (max-width:760px) {
   .dc-map { overflow-x:auto; justify-content:flex-start; }
   .dc-zone { min-width:76px; }
   .dc-route-line { min-width:22px; }
   .skill-academy-grid { grid-template-columns:1fr; }
-  .hunter-license { grid-template-columns:72px 1fr; }
-  .hunter-license-mark { width:66px;height:66px; }
-  .hunter-license-id { grid-column:1/-1; border-left:0; border-top:1px solid var(--line); padding:10px 0 0; display:grid; grid-template-columns:auto 1fr auto 1fr; align-items:center; }
-  .hunter-license-rank { font-size:2.8rem; }
+  .hunter-license-card { border-radius:16px; }
+  .hunter-license-data { left:51%; right:4.5%; top:17%; bottom:9%; }
   .hunter-license-reqs { grid-template-columns:1fr; }
 }
 @media (prefers-reduced-motion:reduce) {
-  .dc-expedition::before,.dc-zone.current .dc-zone-dot,.hunter-license::after { animation:none!important; }
+  .dc-expedition::before,.dc-zone.current .dc-zone-dot,.hunter-license-card::after { animation:none!important; }
 }
 
 /* ====== v105.1 · CREDIT CARD VISUAL FIX ====== */

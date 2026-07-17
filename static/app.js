@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 106;
+const FRONT_V = 107;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -3249,16 +3249,37 @@ function renderHunterLicense() {
       .catch(() => {})
       .finally(() => { renderHunterLicense._saving = false; });
   }
-  const dateText = (S.profile || {}).hunter_license_unlocked_on || (st.unlocked ? hoyLocal() : 'LOCKED');
-  host.innerHTML = `<section class="hunter-license ${st.unlocked ? 'unlocked' : 'locked'}">
-    <div class="hunter-license-mark"><span>◆</span></div>
-    <div class="hunter-license-main">
-      <span class="hunter-license-kicker">KEVIN LIFE OS · HUNTER ASSOCIATION</span>
-      <h2>${st.unlocked ? 'HUNTER LICENSE' : 'LICENSE EXAM IN PROGRESS'}</h2>
-      <p>${st.unlocked ? 'Granted for proven discipline across multiple territories.' : 'This license cannot be won with one click. Build evidence in goals, Haki, discipline and learning.'}</p>
+
+  const doneCount = st.requirements.filter(r => r.done).length;
+  const examPct = Math.round(doneCount / st.requirements.length * 100);
+  const rank = st.unlocked ? 'S' : hunterRankFor(examPct);
+  const dateText = unlockedOn || (st.unlocked ? hoyLocal() : 'PENDING');
+  const serialDate = (unlockedOn || hoyLocal()).replaceAll('-', '');
+  const licenseNo = `KLV-${serialDate}-${String(st.goals).padStart(2,'0')}`;
+  const highlightedGoal = (S.goals || []).find(g => g.status === 'Lograda 🏆' || Number(g.pct || 0) >= 100);
+  const expedition = highlightedGoal ? highlightedGoal.name : 'DARK CONTINENT CANDIDATE';
+
+  host.innerHTML = `<section class="hunter-license-stage ${st.unlocked ? 'unlocked' : 'locked'}">
+    <div class="hunter-license-card" role="img" aria-label="Hunter License ${st.unlocked ? 'unlocked' : 'in progress'}">
+      <img src="/static/img/hunter_license_front.webp" alt="" class="hunter-license-art" loading="eager">
+      <div class="hunter-license-data">
+        <span class="hunter-license-overline">KEVIN LIFEOS</span>
+        <strong class="hunter-license-title">${st.unlocked ? 'AUTHORIZED HUNTER' : 'LICENSE EXAM'}</strong>
+        <div class="hunter-license-fields">
+          <div><small>LICENSEE</small><b>KEVIN</b></div>
+          <div><small>RANK</small><b>${esc(rank)}</b></div>
+          <div><small>LICENSE NO.</small><b>${esc(licenseNo)}</b></div>
+          <div><small>ISSUED</small><b>${esc(dateText)}</b></div>
+        </div>
+        <div class="hunter-license-expedition"><small>MAJOR EXPEDITION</small><b>${esc(expedition)}</b></div>
+      </div>
+      ${st.unlocked ? '<span class="hunter-license-authorized">AUTHORIZED</span>' : `<div class="hunter-license-lock"><span>◆</span><b>${examPct}%</b><small>EXAM IN PROGRESS</small></div>`}
+    </div>
+    <div class="hunter-license-progress">
+      <div class="hunter-license-progress-head"><div><span>HUNTER LICENSE EXAM</span><strong>${st.unlocked ? 'License permanently unlocked' : `${doneCount} of ${st.requirements.length} trials completed`}</strong></div><b>${examPct}%</b></div>
+      <div class="hunter-license-meter"><i style="width:${examPct}%"></i></div>
       <div class="hunter-license-reqs">${st.requirements.map(r => `<div class="${r.done ? 'done' : ''}"><span>${r.done ? '✓' : '◇'} ${esc(r.label)}</span><b>${esc(r.value)}</b></div>`).join('')}</div>
     </div>
-    <div class="hunter-license-id"><small>STATUS</small><b>${st.unlocked ? 'AUTHORIZED' : 'CANDIDATE'}</b><small>ISSUED</small><strong>${esc(dateText)}</strong><span class="hunter-license-rank">${st.unlocked ? 'S' : hunterRankFor(Math.round(st.requirements.filter(r=>r.done).length / st.requirements.length * 100))}</span></div>
   </section>`;
 }
 
