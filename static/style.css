@@ -1229,17 +1229,75 @@ details.grp-paid > summary { color: var(--ok, #34d399); }
 .todo-check { background: none; border: none; font-size: 1.05rem; cursor: pointer; padding: 2px 6px; }
 
 
-/* ====== v102: mejoras seguras sin redistribuir la interfaz ====== */
-body.modal-open { overflow: hidden; }
-button[aria-busy="true"], input[aria-busy="true"], select[aria-busy="true"] {
-  cursor: wait; opacity: .68;
+/* ====== HAKI EVOLUTION SHOWCASE v104 ====== */
+.haki-badge {
+  display: inline-flex; align-items: center; gap: 9px;
+  min-height: 44px; padding: 5px 12px 5px 6px;
+  overflow: hidden;
 }
-.toast.warn { border-left-color: var(--gold); }
-.footer-backup { color: var(--gold); text-decoration: none; font-weight: 700; }
-.footer-backup:hover { text-decoration: underline; }
-.book-year-missing {
-  display: inline-block; margin-left: 7px; padding: 2px 7px; border-radius: 999px;
-  border: 1px solid rgba(245,185,66,.45); color: var(--gold); font-size: .66rem;
-  vertical-align: middle; white-space: nowrap;
+.haki-badge img {
+  width: 34px; height: 34px; object-fit: contain; border-radius: 9px;
+  border: 1px solid rgba(255,255,255,.16); background: #100d1d;
 }
-.book-needs-year td:first-child { box-shadow: inset 3px 0 0 rgba(245,185,66,.65); }
+.haki-badge span { display: flex; flex-direction: column; line-height: 1.12; text-align: left; }
+.haki-badge b { font-size: .78rem; color: var(--gold); white-space: nowrap; }
+.haki-badge small { color: var(--mut); font-size: .65rem; font-weight: 600; }
+
+.haki-panel { overflow: hidden; }
+.haki-showcase { margin-bottom: 24px; }
+.haki-hero {
+  display: grid; grid-template-columns: minmax(260px, 440px) minmax(240px, 1fr);
+  gap: 24px; align-items: center; padding: 18px;
+  background: radial-gradient(circle at 23% 45%, rgba(124,108,224,.18), transparent 48%), #151126;
+  border: 1px solid var(--line); border-radius: 18px; overflow: hidden;
+}
+.haki-hero-art {
+  width: 100%; aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
+  border-radius: 16px; overflow: hidden; background: #090711;
+  box-shadow: 0 18px 45px rgba(0,0,0,.38);
+}
+.haki-hero-art img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.haki-hero-info { min-width: 0; }
+.haki-rank { color: var(--gold); letter-spacing: 2px; font-size: .68rem; font-weight: 800; }
+.haki-hero-info h3 { font-family: 'Russo One', sans-serif; font-size: clamp(1.45rem, 3vw, 2.25rem); margin: 8px 0; }
+.haki-hero-info p { color: var(--mut); line-height: 1.5; margin-bottom: 16px; }
+.haki-next { color: var(--txt); font-size: .88rem; line-height: 1.45; margin-bottom: 10px; }
+.haki-next b { color: var(--gold); }
+.haki-progress { height: 11px; border-radius: 99px; overflow: hidden; background: #090711; border: 1px solid var(--line); }
+.haki-progress i { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg,var(--ok),var(--gold)); transition:width .8s cubic-bezier(.22,1,.36,1); }
+
+.haki-evolution-grid {
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px; margin-top: 14px;
+}
+.haki-evolution {
+  min-width: 0; text-align: center; padding: 9px;
+  background: #151126; border: 1px solid var(--line); border-radius: 13px;
+}
+.haki-evolution-img { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: #090711; }
+.haki-evolution-img img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.haki-evolution b { display: block; margin-top: 8px; font-size: .76rem; color: var(--txt); }
+.haki-evolution small { display: block; margin-top: 2px; color: var(--mut); font-size: .62rem; line-height: 1.25; }
+.haki-evolution.locked .haki-evolution-img img { filter: grayscale(1) brightness(.28); opacity: .68; }
+.haki-lock { position:absolute; inset:0; display:grid; place-items:center; font-size:1.45rem; background:rgba(8,6,18,.28); }
+.haki-current-tag { position:absolute; left:6px; right:6px; bottom:6px; padding:4px 5px; border-radius:7px; background:rgba(245,185,66,.92); color:#211705; font-size:.55rem; font-weight:900; letter-spacing:1px; }
+.haki-evolution.current { border-color: var(--gold); box-shadow: 0 0 22px rgba(245,185,66,.18); }
+.haki-evolution.unlocked:not(.current) { border-color: rgba(54,201,167,.42); }
+.haki-evolution.current .haki-evolution-img { animation: hakiPulse 2.8s ease-in-out infinite; }
+@keyframes hakiPulse { 0%,100% { box-shadow:0 0 0 rgba(245,185,66,0); } 50% { box-shadow:0 0 24px rgba(245,185,66,.32); } }
+
+@media (max-width: 820px) {
+  .haki-hero { grid-template-columns: 1fr; }
+  .haki-hero-art { max-width: 520px; margin: 0 auto; }
+  .haki-evolution-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .haki-evolution:last-child { grid-column: 1 / -1; max-width: calc(50% - 5px); width: 100%; justify-self: center; }
+}
+@media (max-width: 480px) {
+  .haki-badge { max-width: 190px; }
+  .haki-badge b { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+  .haki-hero { padding: 10px; gap: 16px; }
+  .haki-evolution { padding: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .haki-evolution.current .haki-evolution-img { animation: none !important; }
+}

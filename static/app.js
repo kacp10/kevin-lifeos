@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 103;
+const FRONT_V = 104;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -3084,17 +3084,74 @@ function renderAchievements() {
     </div>`).join('');
 }
 
+const HAKI_LEVELS = [
+  { min: 0, key: 'dormant', name: 'Dormant Haki', short: 'Dormant', img: '/static/img/haki_dormant.webp', need: 0, next: 'Conquer 1 month at 70% or more' },
+  { min: 1, key: 'observation', name: 'Observation Haki', short: 'Observation', img: '/static/img/haki_observation.webp', need: 1, next: 'Conquer 2 months at 70% or more' },
+  { min: 2, key: 'armament', name: 'Armament Haki', short: 'Armament', img: '/static/img/haki_armament.webp', need: 2, next: 'Conquer 4 months at 70% or more' },
+  { min: 4, key: 'advanced', name: 'Advanced Haki', short: 'Advanced', img: '/static/img/haki_advanced.webp', need: 4, next: 'Conquer 6 months at 70% or more' },
+  { min: 6, key: 'conqueror', name: "Conqueror's Haki", short: 'Conqueror', img: '/static/img/haki_conqueror.webp', need: 6, next: 'The throne is yours' }
+];
+
+function hakiLevelFor(wins) {
+  return [...HAKI_LEVELS].reverse().find(level => wins >= level.min) || HAKI_LEVELS[0];
+}
+
 function renderHaki() {
-  const wins = S.history.filter(h => h.pct >= 0.7).length;
-  const level =
-    wins === 0 ? '😴 Haki asleep' :
-    wins < 2 ? '👁 Observation Haki' :
-    wins < 4 ? '🛡 Armament Haki' :
-    wins < 6 ? '⚡ Advanced Haki' : '👑 CONQUEROR\'S HAKI';
-  $('#hakiBadge').textContent = `${level} · ${wins} ${wins === 1 ? 'month' : 'months'}`;
-  $('#hakiHistory').innerHTML = S.history.map(h =>
+  const wins = (S.history || []).filter(h => h.pct >= 0.7).length;
+  const current = hakiLevelFor(wins);
+  const currentIx = HAKI_LEVELS.findIndex(x => x.key === current.key);
+  const next = HAKI_LEVELS[currentIx + 1] || null;
+
+  const badge = $('#hakiBadge');
+  if (badge) {
+    badge.className = `haki-badge haki-badge-${current.key}`;
+    badge.innerHTML = `<img src="${current.img}" alt="" onerror="this.style.display='none'">
+      <span><b>${esc(current.name)}</b><small>${wins} ${wins === 1 ? 'month' : 'months'}</small></span>`;
+  }
+
+  const showcase = $('#hakiShowcase');
+  if (showcase) {
+    const progressStart = current.need;
+    const progressEnd = next ? next.need : current.need;
+    const progress = next && progressEnd > progressStart
+      ? Math.max(0, Math.min(100, ((wins - progressStart) / (progressEnd - progressStart)) * 100))
+      : 100;
+    const nextText = next
+      ? `<b>Next evolution:</b> ${esc(next.name)} · ${next.need - wins} conquered month${next.need - wins === 1 ? '' : 's'} remaining`
+      : `<b>Maximum evolution reached.</b> The throne is yours.`;
+
+    const gallery = HAKI_LEVELS.map(level => {
+      const unlocked = wins >= level.need;
+      const isCurrent = level.key === current.key;
+      return `<div class="haki-evolution ${unlocked ? 'unlocked' : 'locked'} ${isCurrent ? 'current' : ''}">
+        <div class="haki-evolution-img">
+          <img src="${level.img}" alt="${esc(level.name)}" loading="lazy">
+          ${unlocked ? '' : '<span class="haki-lock">🔒</span>'}
+          ${isCurrent ? '<span class="haki-current-tag">CURRENT</span>' : ''}
+        </div>
+        <b>${esc(level.short)}</b>
+        <small>${level.need === 0 ? 'Starting state' : `${level.need}+ conquered months`}</small>
+      </div>`;
+    }).join('');
+
+    showcase.innerHTML = `<div class="haki-hero haki-${current.key}">
+      <div class="haki-hero-art"><img src="${current.img}" alt="${esc(current.name)}"></div>
+      <div class="haki-hero-info">
+        <span class="haki-rank">CURRENT HAKI</span>
+        <h3>${esc(current.name)}</h3>
+        <p>${wins} conquered ${wins === 1 ? 'month' : 'months'} at 70% or more.</p>
+        <div class="haki-next">${nextText}</div>
+        <div class="haki-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(progress)}">
+          <i style="width:${progress}%"></i>
+        </div>
+      </div>
+    </div>
+    <div class="haki-evolution-grid">${gallery}</div>`;
+  }
+
+  $('#hakiHistory').innerHTML = (S.history || []).map(h =>
     `<span class="haki-month ${h.pct >= 0.7 ? 'win' : 'lose'}">
-     ${h.label}: ${pct(h.pct)} ${h.pct >= 0.7 ? '✔' : '✘'}</span>`
+     ${esc(h.label)}: ${pct(h.pct)} ${h.pct >= 0.7 ? '✔' : '✘'}</span>`
   ).join('') || '<span class="hint">Close your first month to start earning Haki. The King demands 6 months ≥70%.</span>';
   renderHakiChart();
 }
