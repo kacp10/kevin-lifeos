@@ -2016,3 +2016,372 @@ button[aria-busy="true"]::after {
     animation: none;
   }
 }
+
+/* ====== v115 · HUNTER BANK CARDS ====== */
+#myCards {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+.credit-command {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(190px, .8fr) minmax(420px, 1.6fr) auto;
+  gap: 18px;
+  align-items: center;
+  overflow: hidden;
+  margin: 14px 0 18px;
+  padding: 18px;
+  border: 1px solid rgba(163, 128, 255, .32);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 12% 15%, rgba(119, 70, 255, .25), transparent 30%),
+    radial-gradient(circle at 85% 80%, rgba(31, 199, 255, .13), transparent 36%),
+    linear-gradient(135deg, rgba(36, 25, 69, .96), rgba(16, 18, 34, .98));
+  box-shadow: 0 18px 44px rgba(4, 5, 18, .3), inset 0 1px 0 rgba(255,255,255,.04);
+}
+.credit-command::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  width: 240px;
+  height: 140px;
+  right: 9%;
+  top: -72px;
+  border: 1px solid rgba(255,255,255,.055);
+  border-radius: 28px;
+  transform: rotate(-12deg);
+  box-shadow: 55px 68px 0 -1px rgba(255,255,255,.018);
+}
+.credit-command-copy { min-width: 0; }
+.credit-command-copy > span {
+  display: block;
+  color: #b49cff;
+  font-size: .67rem;
+  font-weight: 900;
+  letter-spacing: .18em;
+}
+.credit-command-copy > strong {
+  display: block;
+  margin-top: 4px;
+  color: #fff;
+  font-size: clamp(1.05rem, 2vw, 1.35rem);
+}
+.credit-command-copy > small {
+  display: block;
+  margin-top: 5px;
+  color: var(--mut);
+  line-height: 1.35;
+}
+.credit-command-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+.credit-command-stats > div {
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 13px;
+  background: rgba(6, 8, 22, .34);
+}
+.credit-command-stats label {
+  display: block;
+  overflow: hidden;
+  color: var(--mut);
+  font-size: .64rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.credit-command-stats b {
+  display: block;
+  overflow: hidden;
+  margin-top: 5px;
+  color: #f7f4ff;
+  font-size: .9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.credit-add-btn {
+  display: inline-grid;
+  grid-template-columns: 34px auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 46px;
+  padding: 6px 14px 6px 7px;
+  border: 1px solid rgba(190, 164, 255, .44);
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(117, 72, 255, .92), rgba(74, 39, 177, .94));
+  box-shadow: 0 10px 25px rgba(76, 39, 190, .28), inset 0 1px 0 rgba(255,255,255,.12);
+  cursor: pointer;
+  transition: transform .18s ease, box-shadow .18s ease, filter .18s ease;
+}
+.credit-add-btn span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: #23164f;
+  background: linear-gradient(145deg, #fff, #cabaff);
+  font-size: 1.35rem;
+  font-weight: 500;
+}
+.credit-add-btn b { font-size: .78rem; white-space: nowrap; }
+.credit-add-btn:hover { transform: translateY(-2px); filter: brightness(1.08); box-shadow: 0 14px 30px rgba(76, 39, 190, .38); }
+.credit-add-btn:active { transform: translateY(0); }
+.credit-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  min-width: 0;
+}
+.hunter-card {
+  --card-accent: 139, 100, 255;
+  --card-accent-2: 58, 205, 255;
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(var(--card-accent), .32);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 86% 14%, rgba(var(--card-accent-2), .2), transparent 28%),
+    radial-gradient(circle at 5% 90%, rgba(var(--card-accent), .18), transparent 34%),
+    linear-gradient(145deg, rgba(29, 25, 52, .98), rgba(12, 14, 28, .99));
+  box-shadow: 0 18px 38px rgba(2, 4, 14, .34), inset 0 1px 0 rgba(255,255,255,.045);
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+.hunter-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(var(--card-accent), .55);
+  box-shadow: 0 23px 46px rgba(2, 4, 14, .4), 0 0 28px rgba(var(--card-accent), .08);
+}
+.hunter-card--red { --card-accent: 255, 76, 95; --card-accent-2: 255, 158, 82; }
+.hunter-card--green { --card-accent: 54, 222, 148; --card-accent-2: 35, 196, 219; }
+.hunter-card--amber { --card-accent: 255, 178, 57; --card-accent-2: 255, 91, 73; }
+.hunter-card--blue { --card-accent: 65, 141, 255; --card-accent-2: 67, 223, 255; }
+.hunter-card--cyan { --card-accent: 47, 211, 231; --card-accent-2: 102, 138, 255; }
+.hunter-card--violet { --card-accent: 151, 104, 255; --card-accent-2: 231, 87, 255; }
+.hunter-card--critical { border-color: rgba(255, 74, 92, .58); }
+.hunter-card.is-defeated { border-color: rgba(79, 231, 161, .5); }
+.hunter-card-art {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.hunter-card-shadow {
+  position: absolute;
+  width: 76%;
+  height: 66%;
+  right: -19%;
+  top: -27%;
+  border: 1px solid rgba(var(--card-accent), .15);
+  border-radius: 25px;
+  transform: rotate(-13deg);
+  background: linear-gradient(145deg, rgba(var(--card-accent), .055), transparent 70%);
+  box-shadow: -32px 88px 0 -1px rgba(var(--card-accent-2), .025);
+}
+.hunter-card-chip {
+  position: absolute;
+  right: 24px;
+  top: 75px;
+  width: 42px;
+  height: 31px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 8px;
+  opacity: .5;
+  background:
+    linear-gradient(90deg, transparent 31%, rgba(255,255,255,.16) 32% 34%, transparent 35% 66%, rgba(255,255,255,.12) 67% 69%, transparent 70%),
+    linear-gradient(0deg, transparent 45%, rgba(255,255,255,.14) 46% 49%, transparent 50%),
+    linear-gradient(145deg, rgba(var(--card-accent), .35), rgba(255,255,255,.08));
+}
+.hunter-card-orbit {
+  position: absolute;
+  border: 1px solid rgba(var(--card-accent-2), .15);
+  border-radius: 50%;
+}
+.hunter-card-orbit.orbit-a { width: 96px; height: 96px; right: -31px; bottom: -38px; }
+.hunter-card-orbit.orbit-b { width: 68px; height: 68px; right: 24px; bottom: -31px; }
+.hunter-card-number {
+  position: absolute;
+  right: 24px;
+  bottom: 17px;
+  color: rgba(255,255,255,.075);
+  font: 800 .82rem/1 monospace;
+  letter-spacing: .1em;
+}
+.hunter-card-content { position: relative; z-index: 1; padding: 19px; min-width: 0; }
+.hunter-card-head {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: flex-start;
+  min-width: 0;
+}
+.hunter-card-head > div:first-child { min-width: 0; }
+.hunter-card-kicker {
+  display: block;
+  color: rgba(var(--card-accent-2), .86);
+  font-size: .6rem;
+  font-weight: 900;
+  letter-spacing: .16em;
+}
+.hunter-card h3 {
+  overflow-wrap: anywhere;
+  margin: 5px 0 0;
+  color: #fff;
+  font-size: 1.08rem;
+  line-height: 1.2;
+}
+.hunter-card-actions { display: flex; gap: 6px; align-items: center; flex: 0 0 auto; }
+.hunter-card-risk {
+  padding: 5px 7px;
+  border: 1px solid rgba(var(--card-accent), .26);
+  border-radius: 999px;
+  color: rgba(255,255,255,.75);
+  background: rgba(6, 7, 18, .42);
+  font-size: .55rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+  white-space: nowrap;
+}
+.hunter-card--critical .hunter-card-risk { color: #ffd7dc; border-color: rgba(255,74,92,.38); background: rgba(105,12,27,.32); }
+.hunter-card--controlled .hunter-card-risk, .hunter-card.is-defeated .hunter-card-risk { color: #bcffe0; border-color: rgba(79,231,161,.3); }
+.hunter-card .card-cupo-edit {
+  display: grid;
+  place-items: center;
+  flex: 0 0 29px;
+  width: 29px;
+  height: 29px;
+  padding: 0;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 9px;
+  color: #fff;
+  background: rgba(255,255,255,.055);
+}
+.hunter-card-limit {
+  margin-top: 10px;
+  color: rgba(255,255,255,.48);
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: .1em;
+}
+.hunter-card-limit strong { color: rgba(255,255,255,.82); }
+.hunter-card .card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin: 15px 0 12px;
+}
+.hunter-card .card-grid > div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,.065);
+  border-radius: 12px;
+  background: rgba(3, 5, 16, .27);
+}
+.hunter-card .card-grid label {
+  display: block;
+  color: rgba(255,255,255,.47);
+  font-size: .63rem;
+  font-weight: 750;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.hunter-card .card-grid b {
+  display: block;
+  overflow-wrap: anywhere;
+  margin-top: 4px;
+  color: #f7f5ff;
+  font-size: .93rem;
+  line-height: 1.2;
+}
+.hunter-card .card-pay-btn {
+  position: relative;
+  width: 100%;
+  min-height: 42px;
+  margin: 0 0 11px;
+  border: 1px solid rgba(var(--card-accent), .36);
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, rgba(var(--card-accent), .25), rgba(var(--card-accent-2), .12));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07);
+  font-weight: 850;
+  letter-spacing: .02em;
+}
+.hunter-card .card-pay-btn:hover { border-color: rgba(var(--card-accent), .62); filter: brightness(1.12); }
+.hunter-card .card-clear {
+  display: grid;
+  gap: 3px;
+  margin: 0 0 11px;
+  padding: 10px 12px;
+  border: 1px solid rgba(79, 231, 161, .28);
+  border-radius: 12px;
+  color: #c8ffe6;
+  background: linear-gradient(135deg, rgba(30, 159, 105, .18), rgba(20, 94, 79, .1));
+}
+.hunter-card .card-clear b { font-size: .73rem; letter-spacing: .08em; }
+.hunter-card .card-clear span { color: rgba(210,255,233,.65); font-size: .69rem; }
+.hunter-card-meter small { color: rgba(255,255,255,.48); }
+.hunter-card .card-bar {
+  overflow: hidden;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.07);
+}
+.hunter-card .card-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(var(--card-accent), .9), rgba(var(--card-accent-2), .92));
+  box-shadow: 0 0 14px rgba(var(--card-accent), .32);
+}
+.hunter-card--critical .card-bar i { background: linear-gradient(90deg, #ff3f5d, #ff9f52); }
+.hunter-card.is-defeated .card-bar i { background: linear-gradient(90deg, #36db91, #58efd0); }
+
+@media (max-width: 1050px) {
+  .credit-command { grid-template-columns: minmax(170px, .75fr) minmax(360px, 1.5fr); }
+  .credit-add-btn { grid-column: 1 / -1; justify-self: end; }
+}
+@media (max-width: 760px) {
+  .credit-command {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 13px;
+    padding: 15px;
+  }
+  .credit-command-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .credit-add-btn { grid-column: auto; justify-self: stretch; justify-content: center; width: 100%; }
+  .credit-card-grid { grid-template-columns: minmax(0, 1fr); }
+  .hunter-card:hover { transform: none; }
+}
+@media (max-width: 430px) {
+  .credit-command { margin-inline: 0; border-radius: 17px; }
+  .credit-command-stats > div { padding: 9px; }
+  .credit-command-stats b { font-size: .82rem; }
+  .hunter-card { border-radius: 18px; }
+  .hunter-card-content { padding: 15px; }
+  .hunter-card-head { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .hunter-card-actions { justify-content: space-between; width: 100%; }
+  .hunter-card-risk { white-space: normal; }
+  .hunter-card .card-grid { gap: 7px; }
+  .hunter-card .card-grid > div { padding: 9px 8px; }
+  .hunter-card .card-grid b { font-size: .84rem; }
+  .hunter-card-chip { right: 17px; top: 85px; opacity: .35; }
+  .hunter-card-number { right: 15px; font-size: .68rem; }
+}
+@media (max-width: 350px) {
+  .credit-command-stats { grid-template-columns: minmax(0, 1fr); }
+  .hunter-card .card-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hunter-card, .credit-add-btn { transition: none !important; }
+}

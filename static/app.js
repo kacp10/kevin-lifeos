@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 114;
+const FRONT_V = 115;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -284,7 +284,20 @@ const PAY_METHODS = [
   { id: 'Banco de Bogotá', label: 'Banco de Bogotá (credit)', logo: '🔵', card: true },
   { id: 'ADDI', label: 'ADDI (credit)', logo: '🟢', card: true }
 ];
-const payMethod = (id) => PAY_METHODS.find(m => m.id === id) || PAY_METHODS[0];
+function getCustomCards() {
+  const raw = ((S || {}).profile || {}).custom_credit_cards;
+  if (!raw) return [];
+  try {
+    const cards = JSON.parse(raw);
+    return Array.isArray(cards) ? cards.filter(c => c && c.key && c.label) : [];
+  } catch (e) { return []; }
+}
+function getPayMethods() {
+  const custom = getCustomCards().map(c => ({ id: c.creditor || c.key, label: `${c.label} (credit)`, logo: '💳', card: true }));
+  const seen = new Set();
+  return [...PAY_METHODS, ...custom].filter(m => !seen.has(m.id) && seen.add(m.id));
+}
+const payMethod = (id) => getPayMethods().find(m => m.id === id) || PAY_METHODS[0];
 // el ingreso del mes actual (editable) o el del plan por defecto
 function ingresoDelMes(i) {
   const monthKey2 = S.plan.months[i];
@@ -1550,7 +1563,7 @@ document.addEventListener('click', async (e) => {
       text: `<b>${esc(it.name)}</b> — how much did it cost and how did you pay? This moves it to your purchase history. (Leave amount blank to just mark it bought.)`,
       fields: [
         { type: 'money', label: 'Amount', placeholder: 'e.g. 25.000' },
-        { type: 'select', label: 'Paid with', options: PAY_METHODS.map(m => ({ v: m.id, t: `${m.logo} ${m.label}` })) }
+        { type: 'select', label: 'Paid with', options: getPayMethods().map(m => ({ v: m.id, t: `${m.logo} ${m.label}` })) }
       ], okText: 'Mark as bought' });
     if (r === null) return;   // canceló: no lo marca (sigue en la lista)
     const amount = +String(r[0] || '').replace(/[^0-9]/g, '') || 0;
@@ -2004,7 +2017,7 @@ function renderExpenses(i) {
   // llenar el select de medios de pago con logos (una vez)
   const ms = $('#exMethod');
   if (ms && !ms.options.length) {
-    ms.innerHTML = PAY_METHODS.map(m => `<option value="${m.id}">${m.logo} ${m.label}</option>`).join('');
+    ms.innerHTML = getPayMethods().map(m => `<option value="${m.id}">${m.logo} ${m.label}</option>`).join('');
   }
   const mesKey = S.plan.months[i];
   // gastos visibles: recurrentes (todos los meses) + los de ESTE mes
@@ -2268,7 +2281,7 @@ document.addEventListener('click', async (e) => {
       fields: [
         { type: 'text', placeholder: 'Name', value: s.name },
         { type: 'money', placeholder: 'Amount', value: s.amount },
-        { type: 'select', value: s.method, options: PAY_METHODS.map(m => ({ v: m.id, t: `${m.logo} ${m.label}` })) },
+        { type: 'select', value: s.method, options: getPayMethods().map(m => ({ v: m.id, t: `${m.logo} ${m.label}` })) },
         { type: 'text', placeholder: 'Payday (e.g. 5th of each month)', value: s.payday }
       ], okText: 'Save', danger: false, extraBtn: 'Delete' });
     if (r === null) return;
@@ -2315,7 +2328,7 @@ document.addEventListener('click', async (e) => {
       fields: [
         { type: 'text', placeholder: 'Name (e.g. Spotify)' },
         { type: 'number', placeholder: 'Amount' },
-        { type: 'select', options: PAY_METHODS.map(m => ({ v: m.id, t: `${m.logo} ${m.label}` })) },
+        { type: 'select', options: getPayMethods().map(m => ({ v: m.id, t: `${m.logo} ${m.label}` })) },
         { type: 'text', placeholder: 'Payday (e.g. 5th of each month)' }
       ], okText: 'Add service' });
     if (!r || !r[0].trim()) return;
@@ -2377,12 +2390,18 @@ document.addEventListener('visibilitychange', () => {     // y al volver a la pe
 /* ---------- ALCANCÍA / BOSS ---------- */
 // Solo TUS tarjetas propias (no préstamos personales, Nicole ni créditos).
 // boss = nombre en la lista del jefe; creditor = nombre en el plan mensual.
-const MIS_TARJETAS = [
-  { key: 'Tarjeta DV', label: '💳 Davivienda', boss: 'Tarjeta DV — Jefe Final', creditor: 'Tarjeta DV' },
-  { key: 'ADDI', label: '💳 ADDI', boss: 'ADDI', creditor: 'ADDI' },
-  { key: 'Codensa', label: '💳 Codensa', boss: 'Codensa', creditor: 'Codensa' },
-  { key: 'Banco de Bogotá', label: '💳 Banco de Bogotá', boss: 'Banco de Bogotá', creditor: 'Banco de Bogotá' }
+const BASE_TARJETAS = [
+  { key: 'Tarjeta DV', label: 'Davivienda', boss: 'Tarjeta DV — Jefe Final', creditor: 'Tarjeta DV', accent: 'red', code: '4582' },
+  { key: 'ADDI', label: 'ADDI', boss: 'ADDI', creditor: 'ADDI', accent: 'green', code: '2048' },
+  { key: 'Codensa', label: 'Codensa', boss: 'Codensa', creditor: 'Codensa', accent: 'amber', code: '7714' },
+  { key: 'Banco de Bogotá', label: 'Banco de Bogotá', boss: 'Banco de Bogotá', creditor: 'Banco de Bogotá', accent: 'blue', code: '9016' }
 ];
+function misTarjetas() {
+  return [...BASE_TARJETAS, ...getCustomCards().map((c, i) => ({
+    key: c.key, label: c.label, boss: c.boss || c.key, creditor: c.creditor || c.key,
+    accent: c.accent || 'violet', code: String(6200 + i).slice(-4), custom: true
+  }))];
+}
 // ===== DAVIVIENDA — TRACKER DE AMORTIZACIÓN REAL =====
 // Se guarda en profile (clave amort_dav) como JSON. No toca la lógica del jefe ni el desglose.
 function getAmortDav() {
@@ -2484,15 +2503,20 @@ function renderMyCards() {
   const cont = document.getElementById('myCards');
   if (!cont) return;
   const pf = S.profile || {};
-  const nombreMes = (S.plan.months || [])[MES] || '';   // sigue el filtro de mes de Inicio
-  cont.innerHTML = MIS_TARJETAS.map(t => {
+  const cards = misTarjetas();
+  const nombreMes = (S.plan.months || [])[MES] || '';
+  const checksSet = new Set(S.checks || []);
+  const mkCard = monthKey(MES);
+  let totalLimit = 0, totalOwed = 0, totalAvailable = 0, totalPaid = 0;
+
+  const rendered = cards.map(t => {
     const bd = (S.debts || []).find(d => d.name === t.boss);
     const comprado = bd ? compradoEn(bd.name) : 0;
-    const abonDet = bd ? abonoDetalleDeUnJefe(bd.name) : 0;   // abonos hechos en el desglose original
-    let totalCard = bd ? bd.initial + comprado : 0;          // deuda total histórica
-    let pagado = bd ? bd.abonado + abonDet : 0;              // pagado = abono al jefe + abonos del desglose
+    const abonDet = bd ? abonoDetalleDeUnJefe(bd.name) : 0;
+    let totalCard = bd ? bd.initial + comprado : 0;
+    let pagado = bd ? bd.abonado + abonDet : 0;
     let saldo = Math.max(totalCard - (bd ? bd.abonado : 0) - abonDet, 0);
-    if (t.key === 'Tarjeta DV') {                          // Davivienda: capital real amortizado
+    if (t.key === 'Tarjeta DV') {
       const st = amortState();
       totalCard = st.A.capital; saldo = st.saldoCapital; pagado = Math.max(totalCard - saldo, 0);
     }
@@ -2501,29 +2525,54 @@ function renderMyCards() {
     const usoPct = cupo ? Math.min((saldo / cupo) * 100, 100) : 0;
     const pagoPct = totalCard ? Math.min((pagado / totalCard) * 100, 100) : 0;
     const pagoMes = cuotaPlanMes(t.creditor, MES) + extraCuota(t.creditor, MES);
-    // ¿la cuota de este mes ya está marcada como pagada en "Debt payments"?
-    const mkCard = monthKey(MES);
-    const checksSet = new Set(S.checks || []);
     const cuotaPagadaMes = checksSet.has(`${t.boss}|${mkCard}`) || checksSet.has(`${t.creditor}|${mkCard}`);
-    return `<div class="card-box">
-      <div class="row-between">
-        <span class="card-name">${t.label}
-          <button class="card-cupo-edit" data-key="${esc(t.key)}" data-cupo="${cupo}" title="Set / raise the limit">✎</button></span>
-        <span class="card-cupo">${cupo ? 'Limit ' + fmt(cupo) : 'Set your limit ✎'}</span>
+    const risk = !cupo ? 'unknown' : usoPct >= 80 ? 'critical' : usoPct >= 60 ? 'high' : usoPct >= 30 ? 'watch' : 'controlled';
+    const riskLabel = { unknown: 'LIMIT NOT SET', critical: 'CRITICAL USE', high: 'HIGH USE', watch: 'UNDER WATCH', controlled: 'CONTROLLED' }[risk];
+    totalLimit += cupo; totalOwed += saldo; totalAvailable += disponible; totalPaid += pagado;
+
+    return `<article class="hunter-card hunter-card--${esc(t.accent || 'violet')} hunter-card--${risk}${saldo <= 0 ? ' is-defeated' : ''}">
+      <div class="hunter-card-art" aria-hidden="true">
+        <span class="hunter-card-shadow"></span><span class="hunter-card-chip"></span>
+        <span class="hunter-card-orbit orbit-a"></span><span class="hunter-card-orbit orbit-b"></span>
+        <span class="hunter-card-number">•••• &nbsp;•••• &nbsp;•••• &nbsp;${esc(t.code || '0000')}</span>
       </div>
-      <div class="card-grid">
-        <div><label>You owe now</label><b class="owe">${fmt(saldo)}</b></div>
-        <div><label>Available</label><b class="avail">${cupo ? fmt(disponible) : '—'}</b></div>
-        <div><label>Paid so far</label><b class="paid">${fmt(pagado)}</b></div>
-        <div><label>${nombreMes || 'This month'}</label><b>${cuotaPagadaMes ? '<span class="paid-chip">✓ paid</span>' : (pagoMes ? fmt(pagoMes) : '—')}</b></div>
+      <div class="hunter-card-content">
+        <header class="hunter-card-head">
+          <div><span class="hunter-card-kicker">HUNTER BANK CARD</span>
+            <h3><span aria-hidden="true">💳</span> ${esc(t.label)}</h3></div>
+          <div class="hunter-card-actions">
+            <span class="hunter-card-risk">${riskLabel}</span>
+            <button class="card-cupo-edit" data-key="${esc(t.key)}" data-cupo="${cupo}" title="Set / raise the limit">✎</button>
+          </div>
+        </header>
+        <div class="hunter-card-limit">${cupo ? `LIMIT <strong>${fmt(cupo)}</strong>` : 'SET YOUR LIMIT WITH ✎'}</div>
+        <div class="card-grid">
+          <div><label>You owe now</label><b class="owe">${fmt(saldo)}</b></div>
+          <div><label>Available</label><b class="avail">${cupo ? fmt(disponible) : '—'}</b></div>
+          <div><label>Paid so far</label><b class="paid">${fmt(pagado)}</b></div>
+          <div><label>${nombreMes || 'This month'}</label><b>${cuotaPagadaMes ? '<span class="paid-chip">✓ paid</span>' : (pagoMes ? fmt(pagoMes) : '—')}</b></div>
+        </div>
+        ${saldo > 0 ? `<button class="card-pay-btn" data-boss="${esc(t.boss)}" data-creditor="${esc(t.creditor)}" data-saldo="${saldo}"><span>💵</span> Pay this card</button>` : '<div class="card-clear"><b>☠ BOSS DEFEATED</b><span>Balance cleared. Your limit is free again.</span></div>'}
+        <div class="hunter-card-meter"><div class="card-bar ${saldo <= 0 ? 'paid' : ''}"><i style="width:${cupo ? usoPct : pagoPct}%"></i></div>
+          <small>${cupo ? `${Math.round(usoPct)}% of your limit used` : `${Math.round(pagoPct)}% paid off · set your limit to see available room`}</small></div>
       </div>
-      ${saldo > 0 ? `<button class="card-pay-btn" data-boss="${esc(t.boss)}" data-creditor="${esc(t.creditor)}" data-saldo="${saldo}">💵 Pay this card</button>` : '<div class="card-clear">✅ Fully paid</div>'}
-      ${cupo
-        ? `<div class="card-bar"><i style="width:${usoPct}%"></i></div><small>${Math.round(usoPct)}% of your limit used</small>`
-        : `<div class="card-bar paid"><i style="width:${pagoPct}%"></i></div><small>${Math.round(pagoPct)}% paid off · set your limit to see available room</small>`}
-    </div>`;
+    </article>`;
   }).join('');
+
+  const globalUse = totalLimit ? Math.min((totalOwed / totalLimit) * 100, 100) : 0;
+  cont.innerHTML = `<section class="credit-command">
+      <div class="credit-command-copy"><span>CREDIT COMMAND</span><strong>${cards.length} active card${cards.length === 1 ? '' : 's'}</strong><small>${totalLimit ? `${Math.round(globalUse)}% global utilization` : 'Set limits to unlock utilization intel'}</small></div>
+      <div class="credit-command-stats">
+        <div><label>Total limit</label><b>${totalLimit ? fmt(totalLimit) : '—'}</b></div>
+        <div><label>Total owed</label><b class="owe">${fmt(totalOwed)}</b></div>
+        <div><label>Available</label><b class="avail">${totalLimit ? fmt(totalAvailable) : '—'}</b></div>
+        <div><label>Paid so far</label><b class="paid">${fmt(totalPaid)}</b></div>
+      </div>
+      <button id="addCreditCard" class="credit-add-btn" type="button" aria-label="Add a new credit card"><span>＋</span><b>Add card</b></button>
+    </section>
+    <div class="credit-card-grid">${rendered}</div>`;
 }
+
 function renderBoss(animate) {
   // init = deuda BRUTA original (sin restar abonos). Suma: base de cada jefe + compras brutas + extra brutos.
   const comprasBrutas = (S.compras || []).reduce((s, c) => {
@@ -2727,6 +2776,35 @@ $('#abonoList').addEventListener('click', async (e) => {
   if (!await confirmModal('Deshacer abono', 'Undo this attack? The damage goes back to the boss.')) return;
   await api('/api/abono/' + e.target.dataset.id, { method: 'DELETE' });
   load();
+});
+
+// Agregar una nueva tarjeta propia. Se integra a Debt Boss y a los medios de pago.
+document.addEventListener('click', async (e) => {
+  const add = e.target.closest('#addCreditCard');
+  if (!add) return;
+  const r = await modal({ icon: '💳', title: 'Add a credit card',
+    text: 'Create another personal card. Its balance will join Debt Boss and it will become available as a credit payment method.',
+    fields: [
+      { type: 'text', placeholder: 'Card name (e.g. Nu Credit)' },
+      { type: 'money', placeholder: 'Total limit (cupo)' },
+      { type: 'money', placeholder: 'What you owe now (optional)' },
+      { type: 'select', label: 'Visual identity', options: [
+        { v: 'violet', t: '🟣 Violet' }, { v: 'blue', t: '🔵 Blue' },
+        { v: 'red', t: '🔴 Red' }, { v: 'amber', t: '🟠 Amber' },
+        { v: 'green', t: '🟢 Green' }, { v: 'cyan', t: '🩵 Cyan' }
+      ] }
+    ], okText: 'Create card' });
+  if (!r) return;
+  const name = String(r[0] || '').trim();
+  const limit = +String(r[1] || '').replace(/[^0-9]/g, '') || 0;
+  const initial = +String(r[2] || '').replace(/[^0-9]/g, '') || 0;
+  if (name.length < 2) { toast('Use a card name with at least 2 characters', 'warn'); return; }
+  if (limit && initial > limit) { toast('The current balance cannot be greater than the limit', 'warn'); return; }
+  await withBusy(add, async () => {
+    await api('/api/card/new', { body: { name, limit, initial, accent: r[3] || 'violet' } });
+    toast(`💳 ${esc(name)} joined your credit command`);
+    await load();
+  });
 });
 
 // Editar / subir el cupo de una de TUS tarjetas
