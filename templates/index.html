@@ -252,7 +252,10 @@
 
 <!-- ============ METAS ============ -->
 <section id="tab-metas" class="tab">
-  <h1>🎯 Goals — what you're going to achieve</h1>
+  <h1>🗺️ Dark Continent Expeditions</h1>
+  <p class="hint">Every goal becomes a living expedition. New goals automatically open a new route; your existing percentage, status and next step remain the source of truth.</p>
+  <div id="expeditionPanel" class="dc-expedition-list"></div>
+  <h1 class="goals-original-title">🎯 Goals — what you're going to achieve</h1>
   <div class="cards" id="goalStats"></div>
   <form id="goalNew" class="abono-form" style="margin-bottom:14px">
     <input id="glName" placeholder="What new goal?" required>
@@ -300,8 +303,13 @@
     <div id="englishPanel"></div>
   </div>
 
+  <div class="panel skill-academy-panel">
+    <div class="row-between"><div><h2>5 · Hunter Skill Academy</h2><p class="hint">Six domains for a complete glow-up. Each domain rotates one practical skill and one mastery tip without duplicating your daily routine.</p></div><span class="skill-academy-seal">TRAIN · ADAPT · MASTER</span></div>
+    <div id="skillAcademy" class="skill-academy-grid"></div>
+  </div>
+
   <div class="panel">
-    <h2>5 · Weekly advice</h2>
+    <h2>6 · Weekly advice</h2>
     <p class="diag" id="lifeTip"></p>
   </div>
 </section>
@@ -408,7 +416,8 @@
 
 <!-- ============ ACHIEVEMENTS ============ -->
 <section id="tab-logros" class="tab">
-  <h1>🏆 Achievements</h1>
+  <div id="hunterLicensePanel"></div>
+  <h1>🏆 Hunter Medals</h1>
   <p class="hint">Medals you unlock by playing the long game. Locked ones show what's next.</p>
   <div class="achievements-grid" id="achievementsGrid"></div>
 </section>
