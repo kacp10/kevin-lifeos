@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 107;
+const FRONT_V = 109;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -3153,51 +3153,123 @@ document.addEventListener('click', (event) => {
 const SKILL_DOMAINS = [
   { key:'wisdom', icon:'◈', name:'Wisdom',
     skills:['Deep reading','Critical thinking','Personal finance','Clear writing','General culture'],
+    facts:[
+      'Knowledge becomes useful when you can explain it, question it and apply it.',
+      'Critical thinking is not doubting everything; it is checking evidence before deciding.',
+      'Writing exposes gaps in understanding that passive reading can hide.',
+      'Financial wisdom begins with knowing where each peso goes before trying to invest.'
+    ],
     tips:[
       'Read one difficult page twice: first for the idea, then for the evidence.',
       'Before accepting a claim, ask: what would prove this wrong?',
       'Explain one concept in five simple sentences without looking at notes.',
       'Keep one decision journal: what you chose, why, and what happened.'
+    ],
+    drills:[
+      'Choose one paragraph and write its main idea in your own words.',
+      'Take one opinion you hold and list evidence for and against it.',
+      'Review one expense and decide whether it bought value, convenience or impulse.',
+      'Write 150 clear words about something you learned today.'
     ] },
   { key:'body', icon:'⬟', name:'Body',
     skills:['Strength','Mobility','Posture','Nutrition','Self-defense'],
+    facts:[
+      'A stronger body improves daily capacity only when movement quality and recovery grow with it.',
+      'Mobility is usable control through a range of motion, not only flexibility.',
+      'Posture changes more through strength and habits than through forcing yourself upright.',
+      'Self-defense starts with awareness, distance and escape—not fighting.'
+    ],
     tips:[
       'Master movement quality before adding weight or speed.',
       'Train posture by strengthening upper back and opening the chest daily.',
       'Build meals around protein, vegetables and one controlled carb source.',
       'Learn one safe escape, guard and distance-control principle at a time.'
+    ],
+    drills:[
+      'Practice five slow perfect repetitions of one basic movement.',
+      'Do a five-minute mobility flow for hips, shoulders and ankles.',
+      'Plan tomorrow’s first high-protein meal before going to sleep.',
+      'Practice a stable stance, hands up and two safe steps backward.'
     ] },
   { key:'communication', icon:'✦', name:'Communication',
     skills:['Conversation','Diction','Negotiation','Public speaking','Listening'],
+    facts:[
+      'People usually remember how clearly and calmly you made them feel understood.',
+      'Good diction depends more on breathing, pace and articulation than on speaking loudly.',
+      'Negotiation improves when you separate the person from the problem.',
+      'Listening is a visible skill: summaries and good questions prove attention.'
+    ],
     tips:[
       'Record a two-minute explanation and remove filler words on the second take.',
       'In conversation, summarize the other person before defending your point.',
       'Negotiate interests, not positions: discover what each side truly needs.',
       'Practice pauses; calm silence sounds more confident than rushed speech.'
+    ],
+    drills:[
+      'Explain one idea aloud for two minutes and listen to the recording once.',
+      'Ask one open question and follow it with a genuine follow-up.',
+      'Rephrase one disagreement as a shared problem to solve.',
+      'Read one paragraph aloud slowly, finishing every word.'
     ] },
   { key:'independence', icon:'⬢', name:'Independence',
     skills:['Driving','Cooking','Basic repairs','First aid','Personal organization'],
+    facts:[
+      'Independence grows through repeatable systems, not heroic one-time effort.',
+      'Driving confidence is built through controlled exposure, not waiting for fear to disappear.',
+      'Five dependable meals create more independence than fifty saved recipes.',
+      'In an emergency, scene safety and a clear call for help come before intervention.'
+    ],
     tips:[
       'Break fear into controlled exposure: parked car, quiet street, then traffic.',
       'Master five reliable meals before chasing complicated recipes.',
       'Learn to shut off water, electricity and gas before attempting repairs.',
       'First aid starts with scene safety, emergency call and bleeding control.'
+    ],
+    drills:[
+      'Spend ten minutes identifying every control in a parked car.',
+      'Cook one basic meal without checking the recipe more than twice.',
+      'Locate the main water, power and gas shutoffs in your home.',
+      'Review the emergency number and basic bleeding-control steps.'
     ] },
   { key:'profession', icon:'◆', name:'Profession',
     skills:['English','Data analysis','Programming','Projects','Portfolio'],
+    facts:[
+      'Professional skill becomes visible when it produces evidence: a project, decision or result.',
+      'English improves faster when input, output and correction happen in the same week.',
+      'Data analysis begins with a precise question, not with a chart.',
+      'A portfolio proves judgment when it explains constraints and trade-offs.'
+    ],
     tips:[
       'Turn every course module into one tiny artifact you can show.',
       'For data work, always state the question before touching the dataset.',
       'Build projects around real constraints, not tutorial-perfect examples.',
       'A portfolio needs context, decisions and results—not only screenshots.'
+    ],
+    drills:[
+      'Create one small output from what you studied today.',
+      'Write the business question before opening a dataset.',
+      'Improve one real project by removing one unnecessary step.',
+      'Document one decision, one obstacle and one result from a project.'
     ] },
   { key:'presence', icon:'✧', name:'Presence',
     skills:['Style','Grooming','Body language','Discipline','Confidence'],
+    facts:[
+      'Presence is the combined signal of care, calm, competence and consistency.',
+      'Fit, cleanliness and coherence usually matter more than expensive clothing.',
+      'Body language looks confident when movements are deliberate rather than rigid.',
+      'Confidence is often remembered evidence that you can rely on yourself.'
+    ],
     tips:[
       'Fit and cleanliness improve style more than expensive brands.',
       'Keep shoulders relaxed, chin neutral and movements deliberate.',
       'Confidence grows from evidence: keep promises small enough to complete.',
       'Choose one grooming standard and make it automatic, not motivational.'
+    ],
+    drills:[
+      'Prepare one complete outfit tonight and remove one distracting element.',
+      'Walk for two minutes with relaxed shoulders and a steady pace.',
+      'Complete one small promise before starting another task.',
+      'Do a five-minute grooming reset and prepare tomorrow’s essentials.'
     ] }
 ];
 function skillRotationIndex(domainIndex) {
@@ -3206,20 +3278,43 @@ function skillRotationIndex(domainIndex) {
   const day = Math.floor((d - start) / 86400000);
   return (day + domainIndex) % 20;
 }
+function academyRecommendation() {
+  const domains = SKILL_DOMAINS;
+  const habits = S.habits || [];
+  const goals = S.goals || [];
+  const books = S.books || [];
+  const courses = S.courses_done || [];
+  const scores = {
+    wisdom: books.filter(b => b.status === 'Leyendo' || b.status === 'Terminado').length,
+    body: habits.filter(h => /exercise|gym|walk|run|entrena|ejercicio/i.test(h.name || '')).length,
+    communication: habits.filter(h => /speak|conversation|dicci|comunica/i.test(h.name || '')).length,
+    independence: goals.filter(g => /driv|licen|cook|cocina|independ|carro/i.test((g.name || '') + ' ' + (g.description || ''))).length,
+    profession: courses.length + goals.filter(g => /english|ingl|career|program|data|profes/i.test((g.name || '') + ' ' + (g.description || ''))).length,
+    presence: habits.filter(h => /groom|skin|posture|style|cuidado|disciplina/i.test(h.name || '')).length
+  };
+  return domains.slice().sort((a,b) => (scores[a.key] || 0) - (scores[b.key] || 0))[0] || domains[0];
+}
 function renderSkillAcademy() {
   const host = document.getElementById('skillAcademy');
   if (!host) return;
-  host.innerHTML = SKILL_DOMAINS.map((d, i) => {
+  const recommended = academyRecommendation();
+  const cards = SKILL_DOMAINS.map((d, i) => {
     const ix = skillRotationIndex(i);
     const skill = d.skills[ix % d.skills.length];
+    const fact = d.facts[ix % d.facts.length];
     const tip = d.tips[ix % d.tips.length];
-    return `<article class="skill-domain skill-${d.key}">
-      <div class="skill-domain-head"><span class="skill-sigil">${d.icon}</span><div><small>TRAINING DOMAIN</small><h3>${d.name}</h3></div></div>
+    const drill = d.drills[ix % d.drills.length];
+    const isRecommended = d.key === recommended.key;
+    return `<article class="skill-domain skill-${d.key}${isRecommended ? ' recommended' : ''}">
+      <div class="skill-domain-head"><span class="skill-sigil">${d.icon}</span><div><small>TRAINING DOMAIN</small><h3>${d.name}</h3></div>${isRecommended ? '<em>RECOMMENDED</em>' : ''}</div>
       <div class="skill-focus"><span>SKILL TO LEARN</span><b>${esc(skill)}</b></div>
-      <p>${esc(tip)}</p>
+      <div class="skill-lesson"><span>WHY IT MATTERS</span><p>${esc(fact)}</p></div>
+      <div class="skill-lesson"><span>MASTERY TIP</span><p>${esc(tip)}</p></div>
+      <div class="skill-drill"><span>TODAY’S PRACTICE</span><b>${esc(drill)}</b></div>
       <div class="skill-pool">${d.skills.map(s => `<span class="${s === skill ? 'active' : ''}">${esc(s)}</span>`).join('')}</div>
     </article>`;
   }).join('');
+  host.innerHTML = `<div class="skill-academy-intro"><div><span>DAILY GROWTH DIRECTIVE</span><b>${esc(recommended.name)} is today’s recommended domain</b></div><p>The recommendation favors areas with less visible support in your current habits, goals, books and completed courses. It does not create or complete tasks.</p></div>${cards}`;
 }
 
 function hunterLicenseState() {
@@ -3283,9 +3378,56 @@ function renderHunterLicense() {
   </section>`;
 }
 
+
+
+/* ====== HUNTER RANK SYSTEM ====== */
+const HUNTER_GLOBAL_RANKS = [
+  { rank:'E', min:0,    title:'Applicant' },
+  { rank:'D', min:100,  title:'Pathfinder' },
+  { rank:'C', min:250,  title:'Field Hunter' },
+  { rank:'B', min:450,  title:'Expedition Hunter' },
+  { rank:'A', min:700,  title:'Elite Hunter' },
+  { rank:'S', min:1000, title:'Dark Continent Hunter' }
+];
+function hunterGlobalRankState() {
+  const goals = S.goals || [];
+  const xp = Math.round(goals.reduce((sum, g) => sum + Math.max(0, Math.min(100, Number(g.pct || 0))), 0));
+  let currentIndex = 0;
+  HUNTER_GLOBAL_RANKS.forEach((r, i) => { if (xp >= r.min) currentIndex = i; });
+  const current = HUNTER_GLOBAL_RANKS[currentIndex];
+  const next = HUNTER_GLOBAL_RANKS[currentIndex + 1] || null;
+  const intoRank = xp - current.min;
+  const span = next ? next.min - current.min : 1;
+  const progress = next ? Math.max(0, Math.min(100, Math.round(intoRank / span * 100))) : 100;
+  return { xp, current, next, progress, goals: goals.length };
+}
+function renderHunterRankSystem() {
+  const host = document.getElementById('hunterRankPanel');
+  if (!host) return;
+  const st = hunterGlobalRankState();
+  host.innerHTML = `<section class="hunter-rank-system">
+    <div class="hunter-rank-summary">
+      <div class="hunter-rank-emblem rank-${st.current.rank}"><small>HUNTER RANK</small><b>${st.current.rank}</b></div>
+      <div class="hunter-rank-copy">
+        <span>GLOBAL EXPEDITION RANK</span>
+        <h2>${esc(st.current.title)}</h2>
+        <p>Your rank grows from the real progress of every Goal. Adding a new goal opens a route but never removes XP already earned.</p>
+      </div>
+      <div class="hunter-rank-xp"><small>EXPEDITION XP</small><strong>${st.xp}</strong><span>${st.goals} routes</span></div>
+    </div>
+    <div class="hunter-rank-meter-head"><span>${st.next ? `${st.current.rank} → ${st.next.rank}` : 'MAXIMUM RANK'}</span><b>${st.next ? `${st.xp} / ${st.next.min} XP` : `${st.xp} XP`}</b></div>
+    <div class="hunter-rank-meter"><i style="width:${st.progress}%"></i></div>
+    <div class="hunter-rank-ladder">${HUNTER_GLOBAL_RANKS.map((r, i) => {
+      const state = i < HUNTER_GLOBAL_RANKS.indexOf(st.current) ? 'cleared' : i === HUNTER_GLOBAL_RANKS.indexOf(st.current) ? 'current' : 'locked';
+      return `<div class="${state}"><span>${state === 'cleared' ? '✓' : state === 'current' ? '◆' : '◇'}</span><b>${r.rank}</b><small>${esc(r.title)}</small><em>${r.min} XP</em></div>`;
+    }).join('')}</div>
+  </section>`;
+}
+
 /* ====== ACHIEVEMENTS ====== */
 function renderAchievements() {
   renderHunterLicense();
+  renderHunterRankSystem();
   const grid = document.getElementById('achievementsGrid');
   if (!grid) return;
   const dmg = (S.debts || []).reduce((s, d) => s + d.abonado, 0);
