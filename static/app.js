@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 111;
+const FRONT_V = 112;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -3258,7 +3258,7 @@ document.addEventListener('click',async(e)=>{
   const skillBtn=e.target.closest('[data-academy-skill]');
   if(skillBtn){const st=academyReadState(), next=academyAllSkills().find(x=>x.id===skillBtn.dataset.academySkill);if(!next)return;st.activeSkillId=next.id;st.domain=next.domain.key;st.sessions=0;st.doneDates=[];st.startedOn=hoyLocal();await academySaveState(st);renderSkillAcademy();toast('New Hunter training selected');return;}
   const complete=e.target.closest('[data-academy-complete]');
-  if(complete){const st=academyReadState(),today=hoyLocal();if(st.doneDates.includes(today))return;st.doneDates.push(today);st.sessions=Math.min((Number(st.sessions)||0)+1,ACADEMY_TARGET);if(st.sessions>=ACADEMY_TARGET&&!st.mastered.includes(st.activeSkillId)){st.mastered.push(st.activeSkillId);toast('Skill mastered · choose your next training');}else toast('Practice registered');await academySaveState(st);renderSkillAcademy();return;}
+  if(complete){const st=academyReadState(),today=hoyLocal();if(st.doneDates.includes(today))return;st.doneDates.push(today);st.sessions=Math.min((Number(st.sessions)||0)+1,ACADEMY_TARGET);if(st.sessions>=ACADEMY_TARGET&&!st.mastered.includes(st.activeSkillId)){st.mastered.push(st.activeSkillId);const masteredSkill=academyAllSkills().find(x=>x.id===st.activeSkillId);celebrate({icon:'◆',title:'SKILL MASTERED',text:`<b>${esc(masteredSkill?.name||'Hunter training')}</b> is now reliable. Choose your next training.`});}else toast('Practice registered');await academySaveState(st);renderSkillAcademy();return;}
 });
 
 function hunterLicenseState() {

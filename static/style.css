@@ -1614,3 +1614,67 @@ details.grp-paid > summary { color: var(--ok, #34d399); }
 @media(max-width:850px){.skill-academy-grid{grid-template-columns:1fr}.academy-intel{grid-column:1}.academy-skill-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.academy-command-card{padding:14px}.academy-command-top{gap:10px}.academy-rank-orb{flex-basis:62px}.academy-skill-list{grid-template-columns:1fr}.academy-complete-btn{width:100%;min-width:0}.academy-catalogue-head{align-items:flex-start;flex-direction:column}.academy-intel{min-height:0}}
 @media(prefers-reduced-motion:reduce){.academy-command-card:before{animation:none}.academy-progress i{transition:none}}
+
+/* v112 — Step 6: controlled motion and visual feedback */
+@keyframes klRevealUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes klSoftPulse{0%,100%{filter:drop-shadow(0 0 0 rgba(169,147,255,0))}50%{filter:drop-shadow(0 0 10px rgba(169,147,255,.38))}}
+@keyframes klRouteGlow{0%,100%{box-shadow:0 0 0 rgba(245,185,66,0)}50%{box-shadow:0 0 20px rgba(245,185,66,.14)}}
+@keyframes klLicenseFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-3px)}}
+@keyframes klMeterWake{from{transform:scaleX(.15);opacity:.45}to{transform:scaleX(1);opacity:1}}
+
+/* Components reveal independently, so the app remains usable if one renderer fails. */
+.dc-expedition-shell,
+.hunter-license-stage,
+.hunter-rank-panel,
+.academy-command-card,
+.academy-catalog,
+.academy-intel-card{
+  animation:klRevealUp .42s cubic-bezier(.2,.8,.2,1) both;
+}
+.dc-expedition-shell{animation-delay:.03s}
+.hunter-license-stage{animation-delay:.05s}
+.hunter-rank-panel{animation-delay:.08s}
+.academy-command-card{animation-delay:.04s}
+.academy-intel-card{animation-delay:.08s}
+.academy-catalog{animation-delay:.12s}
+
+/* Current states glow; locked or inactive content stays still. */
+.dc-route-card.active{animation:klRouteGlow 3.8s ease-in-out infinite}
+.dc-zone.current .dc-zone-dot,
+.hunter-rank-step.current,
+.academy-skill.active{animation:klSoftPulse 3.2s ease-in-out infinite}
+.hunter-license-stage.unlocked .hunter-license-card{animation:klLicenseFloat 5.5s ease-in-out infinite}
+
+/* Progress movement starts from its left edge and never alters stored values. */
+.hunter-license-meter i,
+.hunter-rank-meter i,
+.academy-progress i{
+  transform-origin:left center;
+  animation:klMeterWake .65s cubic-bezier(.2,.8,.2,1) both;
+}
+
+/* Small responsive feedback without shifting the layout. */
+.dc-route-card,
+.academy-skill,
+.hunter-rank-step,
+.hunter-license-card{
+  transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease,filter .2s ease;
+}
+@media (hover:hover){
+  .dc-route-card:hover,.academy-skill:hover{transform:translateY(-2px)}
+  .hunter-license-card:hover{filter:brightness(1.035)}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .dc-expedition-shell,.hunter-license-stage,.hunter-rank-panel,
+  .academy-command-card,.academy-catalog,.academy-intel-card,
+  .dc-route-card.active,.dc-zone.current .dc-zone-dot,
+  .hunter-rank-step.current,.academy-skill.active,
+  .hunter-license-stage.unlocked .hunter-license-card,
+  .hunter-license-meter i,.hunter-rank-meter i,.academy-progress i{
+    animation:none!important;
+  }
+  .dc-route-card,.academy-skill,.hunter-rank-step,.hunter-license-card{
+    transition:none!important;
+  }
+}
