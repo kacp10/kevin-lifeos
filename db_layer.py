@@ -142,6 +142,10 @@ else:
         def commit(self):
             self._con.commit()
 
+        def rollback(self):
+            """Revierte la transacción activa, igual que sqlite3.Connection.rollback()."""
+            self._con.rollback()
+
         def close(self):
             self._con.close()
 
