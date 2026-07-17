@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 113;
+const FRONT_V = 114;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -299,38 +299,63 @@ function localISO(d = new Date()) {
 }
 function hoyLocal() { return localISO(new Date()); }   // debe coincidir con VERSION en app.py
 
+const _inflightMutations = new Map();
+
 async function api(path, opts = null) {
   const cfg = opts || {};
-  const controller = new AbortController();
-  const timeoutMs = cfg.timeout || 20000;
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  let r;
-  try {
-    r = await fetch(path, opts ? {
-      method: cfg.method || 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: cfg.body ? JSON.stringify(cfg.body) : undefined,
-      signal: controller.signal
-    } : { signal: controller.signal });
-  } catch (err) {
-    const timedOut = err && err.name === 'AbortError';
-    if (!cfg.quiet) toast(timedOut
-      ? '⚠ The server took too long and did not confirm the operation. Try again.'
-      : '⚠ Could not reach the server. Check your connection and try again.', 'err');
-    throw err;
-  } finally {
-    clearTimeout(timer);
+  const method = cfg.method || (opts ? 'POST' : 'GET');
+  const isMutation = method !== 'GET' && method !== 'HEAD';
+  const mutationKey = isMutation
+    ? `${method}:${path}:${cfg.body ? JSON.stringify(cfg.body) : ''}`
+    : '';
+
+  // V114: dos clics idénticos mientras la primera petición sigue pendiente comparten
+  // la misma promesa. No añade tráfico ni cambia las operaciones secuenciales normales.
+  if (mutationKey && _inflightMutations.has(mutationKey)) {
+    return _inflightMutations.get(mutationKey);
   }
-  if (!r.ok) {
-    let friendly = 'Something went wrong saving that. Please try again in a moment.';
+
+  const request = (async () => {
+    const controller = new AbortController();
+    const timeoutMs = cfg.timeout || 20000;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let r;
     try {
-      const body = await r.clone().json();
-      if (body && body.error) friendly = String(body.error);
-    } catch { /* respuesta sin JSON */ }
-    if (!cfg.quiet) toast('⚠ ' + esc(friendly), 'err');
-    throw new Error(r.status + ' en ' + path);
+      r = await fetch(path, opts ? {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: cfg.body ? JSON.stringify(cfg.body) : undefined,
+        signal: controller.signal
+      } : { signal: controller.signal });
+    } catch (err) {
+      const timedOut = err && err.name === 'AbortError';
+      if (!cfg.quiet) toast(timedOut
+        ? '⚠ El servidor tardó demasiado y no confirmó la operación. Intenta de nuevo.'
+        : '⚠ No fue posible conectar con el servidor. Revisa tu conexión e intenta de nuevo.', 'err');
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!r.ok) {
+      let friendly = 'No fue posible guardar el cambio. Intenta nuevamente en un momento.';
+      try {
+        const body = await r.clone().json();
+        if (body && body.error) friendly = String(body.error);
+      } catch { /* respuesta sin JSON */ }
+      if (!cfg.quiet) toast('⚠ ' + esc(friendly), 'err');
+      throw new Error(r.status + ' en ' + path);
+    }
+    return r.json();
+  })();
+
+  if (mutationKey) _inflightMutations.set(mutationKey, request);
+  try {
+    return await request;
+  } finally {
+    if (mutationKey && _inflightMutations.get(mutationKey) === request) {
+      _inflightMutations.delete(mutationKey);
+    }
   }
-  return r.json();
 }
 
 // Evita envíos duplicados por doble clic mientras una operación sigue en curso.
@@ -1219,6 +1244,22 @@ document.getElementById('gymHistory')?.addEventListener('click', async (e) => {
   load();
 });
 
+// Convierte las tablas más densas en tarjetas legibles solo en móvil.
+// Los datos, controles y eventos siguen siendo exactamente los mismos.
+function enhanceResponsiveTables() {
+  const selectors = ['#pagosTable', '#goalTable', '#animeTable', '#bookTable', '.fund-tbl', '#gymHistory .table'];
+  document.querySelectorAll(selectors.join(',')).forEach(table => {
+    const headers = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+    if (!headers.length) return;
+    table.classList.add('mobile-cards');
+    table.querySelectorAll('tbody tr').forEach(row => {
+      [...row.children].forEach((cell, index) => {
+        if (cell.tagName === 'TD') cell.dataset.label = headers[index] || '';
+      });
+    });
+  });
+}
+
 let _loadPromise = null;
 let _loadQueued = false;
 let _loadQueuedAnimate = false;
@@ -1256,6 +1297,7 @@ async function load(animate) {
     safeRender('Gym', renderGym);
     safeRender('Haki', renderHaki);
     safeRender('Achievements', renderAchievements);
+    safeRender('Responsive tables', enhanceResponsiveTables);
     document.querySelectorAll('.money-live').forEach(engancharMiles);
     setTimeout(avisosInteligentes, 1200);
     setTimeout(preguntaPagoDelDia, 2000);

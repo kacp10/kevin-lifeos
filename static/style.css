@@ -1611,46 +1611,8 @@ details.grp-paid > summary { color: var(--ok, #34d399); }
 .academy-domain-tabs{display:flex;gap:7px;overflow-x:auto;padding:12px 1px 9px;scrollbar-width:thin}.academy-domain-tab{white-space:nowrap;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.025);color:var(--mut);border-radius:999px;padding:8px 11px;font-size:.7rem;font-weight:800;cursor:pointer}.academy-domain-tab span{margin-right:5px;color:var(--gold)}.academy-domain-tab.active{color:#fff;border-color:rgba(126,91,255,.58);background:rgba(126,91,255,.14);box-shadow:0 0 17px rgba(126,91,255,.12)}
 .academy-skill-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.academy-skill-option{display:flex;gap:9px;text-align:left;align-items:flex-start;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:11px;background:rgba(255,255,255,.022);color:inherit;cursor:pointer;min-height:72px}.academy-skill-option>span{color:var(--mut);font-weight:900}.academy-skill-option b{display:block;font-size:.76rem}.academy-skill-option small{display:block;margin-top:4px;color:var(--mut);font-size:.61rem;line-height:1.35}.academy-skill-option.current{border-color:rgba(126,91,255,.48);background:rgba(126,91,255,.09)}.academy-skill-option.current>span{color:var(--violet)}.academy-skill-option.mastered{border-color:rgba(54,201,167,.35);background:rgba(54,201,167,.055)}.academy-skill-option.mastered>span{color:var(--green)}
 @keyframes academyShine{0%,70%{transform:translateX(-110%)}88%,100%{transform:translateX(110%)}}
-/* Keep horizontal academy controls contained inside their own module. Grid/flex
-   children default to min-width:auto, which can make the mobile page wider than
-   the viewport when the domain tabs contain several non-wrapping labels. */
-.skill-academy-panel,
-.skill-academy-panel .row-between > div,
-.skill-academy-grid,
-.skill-academy-grid > *,
-.academy-command-top > div,
-.academy-catalogue,
-.academy-domain-tabs,
-.academy-skill-option > div{min-width:0;max-width:100%}
-.academy-domain-tabs{width:100%;overscroll-behavior-inline:contain;-webkit-overflow-scrolling:touch}
-.academy-command-top p,.academy-practice strong,.academy-practice p,.academy-intel strong,.academy-intel small,.academy-skill-option b,.academy-skill-option small{overflow-wrap:anywhere}
-@media(max-width:850px){.skill-academy-grid{grid-template-columns:minmax(0,1fr)}.academy-intel{grid-column:1}.academy-skill-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:560px){
-  .skill-academy-panel{padding:14px}
-  .skill-academy-panel>.row-between{align-items:flex-start;gap:8px;margin-bottom:14px}
-  .skill-academy-panel>.row-between>div{flex:1 1 100%}
-  .skill-academy-seal{max-width:100%;white-space:normal;text-align:center;line-height:1.35}
-  .academy-command-card{padding:14px}
-  .academy-command-top{gap:10px;align-items:center}
-  .academy-command-top>div{flex:1 1 auto}
-  .academy-rank-orb{flex:0 0 58px}
-  .academy-meta{gap:6px}
-  .academy-meta span{max-width:100%;white-space:normal}
-  .academy-practice{padding:13px}
-  .academy-skill-list{grid-template-columns:minmax(0,1fr)}
-  .academy-skill-option{width:100%}
-  .academy-complete-btn{width:100%;min-width:0;white-space:normal;line-height:1.3}
-  .academy-catalogue-head{align-items:flex-start;flex-direction:column}
-  .academy-catalogue-head em{max-width:100%;overflow-wrap:anywhere}
-  .academy-domain-tabs{margin-inline:0;padding-bottom:10px}
-  .academy-intel{min-height:0}
-}
-@media(max-width:380px){
-  .academy-command-top{align-items:flex-start}
-  .academy-rank-orb{flex-basis:52px}
-  .academy-rank-orb b{font-size:1.35rem}
-  .academy-command-top h3{font-size:1.15rem;overflow-wrap:anywhere}
-}
+@media(max-width:850px){.skill-academy-grid{grid-template-columns:1fr}.academy-intel{grid-column:1}.academy-skill-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.academy-command-card{padding:14px}.academy-command-top{gap:10px}.academy-rank-orb{flex-basis:62px}.academy-skill-list{grid-template-columns:1fr}.academy-complete-btn{width:100%;min-width:0}.academy-catalogue-head{align-items:flex-start;flex-direction:column}.academy-intel{min-height:0}}
 @media(prefers-reduced-motion:reduce){.academy-command-card:before{animation:none}.academy-progress i{transition:none}}
 
 /* v112 — Step 6: controlled motion and visual feedback */
@@ -1715,4 +1677,95 @@ details.grp-paid > summary { color: var(--ok, #34d399); }
   .dc-route-card,.academy-skill,.hunter-rank-step,.hunter-license-card{
     transition:none!important;
   }
+}
+
+/* ====== v114 · MOBILE TABLES, BUSY STATES & OVERFLOW GUARDS ====== */
+html, body { max-width: 100%; overflow-x: clip; }
+main, .tab, .panel, .card, .grid-2, .cards { min-width: 0; }
+button[aria-busy="true"], input[aria-busy="true"], select[aria-busy="true"] {
+  cursor: progress !important;
+  opacity: .72;
+}
+button[aria-busy="true"]::after {
+  content: "";
+  display: inline-block;
+  width: .75em;
+  height: .75em;
+  margin-left: .55em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: -.08em;
+  animation: v114BusySpin .7s linear infinite;
+}
+@keyframes v114BusySpin { to { transform: rotate(360deg); } }
+
+@media (max-width: 680px) {
+  main { padding: 15px 12px 24px; }
+  .topbar { padding: 12px; gap: 10px; }
+  .tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 9px 12px;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tabs button { flex: 0 0 auto; white-space: nowrap; }
+  .panel { padding: 14px; }
+  .row-between > * { min-width: 0; max-width: 100%; }
+  input, select, textarea, button { max-width: 100%; }
+
+  .table.mobile-cards,
+  .table.mobile-cards tbody,
+  .table.mobile-cards tr,
+  .table.mobile-cards td { display: block; width: 100%; }
+  .table.mobile-cards thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .table.mobile-cards tbody { display: grid; gap: 10px; }
+  .table.mobile-cards tr {
+    padding: 9px 11px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: rgba(10, 8, 20, .28);
+  }
+  .table.mobile-cards td {
+    display: grid;
+    grid-template-columns: minmax(92px, .8fr) minmax(0, 1.2fr);
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 7px 0;
+    border-bottom: 1px solid rgba(255,255,255,.055);
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+  .table.mobile-cards td:last-child { border-bottom: 0; }
+  .table.mobile-cards td::before {
+    content: attr(data-label);
+    color: var(--mut);
+    font-size: .68rem;
+    font-weight: 800;
+    letter-spacing: .05em;
+    text-align: left;
+    text-transform: uppercase;
+  }
+  .table.mobile-cards td.num { text-align: right; }
+  .table.mobile-cards td > input,
+  .table.mobile-cards td > select,
+  .table.mobile-cards td > button { width: 100%; min-width: 0; }
+}
+
+@media (max-width: 380px) {
+  .table.mobile-cards td { grid-template-columns: 1fr; text-align: left; }
+  .table.mobile-cards td.num { text-align: left; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button[aria-busy="true"]::after { animation-duration: 1.4s; }
 }
