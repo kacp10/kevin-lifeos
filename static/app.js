@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 102;
+const FRONT_V = 103;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -2878,11 +2878,15 @@ function renderDesglose() {
       const cuotasPagadas = d.cuota > 0 ? Math.floor(abon / d.cuota) : 0;
       const num = Math.min(cuotasPagadas + 1, d.cuotas);   // la cuota actual a pagar
       const saldo = Math.max(d.total - abon, 0);
+      const antesDeInicio = i < d.start;
       const activa = saldo > 0;
+      const inicioLabel = (S.plan.months && S.plan.months[d.start]) || 'later';
       filas[g] = [{
-        label: (activa ? `Cuota ${num}/${d.cuotas}` : `${d.cuotas} cuotas desde ${S.plan.months[d.start] || '—'}`)
+        label: (antesDeInicio
+          ? `Cuota ${num}/${d.cuotas} · starts ${inicioLabel}`
+          : (activa ? `Cuota ${num}/${d.cuotas}` : `${d.cuotas} cuotas desde ${inicioLabel}`))
           + (abon > 0 ? ` <small class="prepaid">💵 −${fmt(abon)}</small>` : ''),
-        cuota: activa ? Math.min(d.cuota, saldo) : 0,
+        cuota: activa && !antesDeInicio ? Math.min(d.cuota, saldo) : 0,
         saldo,
         done: saldo <= 0,
         redefer: saldo > 0 ? { type: 'extra_debt', id: d.id, cuotas: d.cuotas } : null
@@ -2896,6 +2900,7 @@ function renderDesglose() {
     const g = CRED_TO_GRUPO[c.creditor] || c.creditor;
     const cuotaBase = cuotaDe(c);                              // cuota mensual original
     const abonado = c.abonado || 0;
+    const antesDeInicio = i < c.start;
     const num = i - c.start + 1;                              // qué cuota toca en el mes elegido
     const transcurridas = Math.min(Math.max(num - 1, 0), c.cuotas);
     // cuotas cubiertas por el ABONO (pagos que hiciste), aparte de las del mes
@@ -2906,10 +2911,14 @@ function renderDesglose() {
     const pagadasTotal = transcurridas + cuotasAbonadas;      // cuotas ya cubiertas en total
     const totalOrig = c.cuotas;
     const activa = saldo > 0;
+    const inicioLabel = (S.plan.months && S.plan.months[c.start]) || 'later';
     (filas[g] = filas[g] || []).push({
-      label: `💳 ${c.concepto}` + (activa ? ` · installment ${Math.min(pagadasTotal + 1, totalOrig)}/${totalOrig}` : '')
+      label: `💳 ${c.concepto}`
+        + (antesDeInicio
+          ? ` · installment ${Math.min(cuotasAbonadas + 1, totalOrig)}/${totalOrig} · starts ${inicioLabel}`
+          : (activa ? ` · installment ${Math.min(pagadasTotal + 1, totalOrig)}/${totalOrig}` : ''))
         + (cuotasAbonadas > 0 ? ` <small class="prepaid">✓ ${cuotasAbonadas} paid</small>` : ''),
-      cuota: activa ? Math.min(cuotaBase, saldo) : 0,
+      cuota: activa && !antesDeInicio ? Math.min(cuotaBase, saldo) : 0,
       saldo,
       done: saldo <= 0,
       redefer: saldo > 0 ? { type: 'compra', id: c.id, cuotas: c.cuotas } : null
