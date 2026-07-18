@@ -2828,3 +2828,178 @@ button[aria-busy="true"]::after {
     height:24px;
   }
 }
+
+/* ====== v117.2 · HUNTER ARCHIVE WIDTH + COMPACT RESPONSIVE LAYOUT ====== */
+#achievementsGrid.achievements-grid{
+  display:block;
+  width:100%;
+  min-width:0;
+  max-width:100%;
+}
+
+#achievementsGrid .hunter-archive{
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  box-sizing:border-box;
+}
+
+#achievementsGrid .hunter-archive-hero{
+  padding:20px 22px;
+  gap:18px;
+}
+
+#achievementsGrid .hunter-archive-hero h2{
+  font-size:clamp(1.35rem,3vw,2rem);
+}
+
+#achievementsGrid .hunter-archive-hero p{
+  max-width:680px;
+  font-size:.82rem;
+  line-height:1.5;
+}
+
+#achievementsGrid .hunter-archive-seal{
+  width:118px;
+}
+
+#achievementsGrid .hunter-archive-seal strong{
+  font-size:1.75rem;
+}
+
+#achievementsGrid .hunter-archive-summary{
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:8px;
+  padding:12px 14px 0;
+}
+
+#achievementsGrid .hunter-archive-summary>div{
+  padding:11px 12px;
+  border-radius:12px;
+}
+
+#achievementsGrid .hunter-archive-summary strong{
+  font-size:1.18rem;
+}
+
+#achievementsGrid .hunter-achievement-grid{
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:10px;
+  padding:14px;
+}
+
+#achievementsGrid .hunter-achievement{
+  padding:12px;
+  border-radius:14px;
+}
+
+#achievementsGrid .hunter-achievement header{
+  margin-bottom:9px;
+}
+
+#achievementsGrid .hunter-achievement-medal{
+  width:62px;
+  height:62px;
+  margin-bottom:11px;
+}
+
+#achievementsGrid .hunter-achievement-medal i{
+  font-size:1.35rem;
+}
+
+#achievementsGrid .hunter-achievement-copy h3{
+  font-size:.86rem;
+}
+
+#achievementsGrid .hunter-achievement-copy p{
+  min-height:34px;
+  font-size:.68rem;
+  line-height:1.4;
+}
+
+#achievementsGrid .hunter-achievement-progress{
+  margin-top:10px;
+}
+
+@media (max-width:1100px){
+  #achievementsGrid .hunter-achievement-grid{
+    grid-template-columns:repeat(3,minmax(0,1fr));
+  }
+}
+
+@media (max-width:820px){
+  #achievementsGrid .hunter-archive-summary{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  #achievementsGrid .hunter-achievement-grid{
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+
+@media (max-width:620px){
+  #achievementsGrid .hunter-archive-hero{
+    grid-template-columns:minmax(0,1fr) auto;
+    align-items:start;
+    padding:15px;
+    gap:12px;
+  }
+  #achievementsGrid .hunter-archive-seal{
+    width:82px;
+  }
+  #achievementsGrid .hunter-archive-seal small{
+    font-size:.46rem;
+  }
+  #achievementsGrid .hunter-archive-seal strong{
+    margin:3px 0;
+    font-size:1.35rem;
+  }
+  #achievementsGrid .hunter-archive-seal span{
+    font-size:.5rem;
+  }
+  #achievementsGrid .hunter-archive-summary{
+    padding:10px 10px 0;
+  }
+  #achievementsGrid .hunter-achievement-grid{
+    grid-template-columns:minmax(0,1fr);
+    padding:10px;
+  }
+  #achievementsGrid .hunter-achievement{
+    display:grid;
+    grid-template-columns:58px minmax(0,1fr);
+    column-gap:12px;
+    align-items:start;
+  }
+  #achievementsGrid .hunter-achievement header,
+  #achievementsGrid .hunter-achievement-progress,
+  #achievementsGrid .hunter-achievement-stamp{
+    grid-column:1 / -1;
+  }
+  #achievementsGrid .hunter-achievement-medal{
+    grid-column:1;
+    grid-row:2;
+    width:54px;
+    height:54px;
+    margin:0;
+  }
+  #achievementsGrid .hunter-achievement-copy{
+    grid-column:2;
+    grid-row:2;
+    align-self:center;
+    text-align:left;
+  }
+  #achievementsGrid .hunter-achievement-copy p{
+    min-height:0;
+  }
+}
+
+@media (max-width:390px){
+  #achievementsGrid .hunter-archive-hero{
+    grid-template-columns:minmax(0,1fr);
+  }
+  #achievementsGrid .hunter-archive-seal{
+    justify-self:start;
+  }
+  #achievementsGrid .hunter-archive-summary{
+    grid-template-columns:minmax(0,1fr);
+  }
+}
