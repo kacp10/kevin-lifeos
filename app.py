@@ -19,7 +19,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 118  # V118; must match FRONT_V in static/app.js
+VERSION = 119  # V119; must match FRONT_V in static/app.js
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -423,7 +423,8 @@ def init_db():
          bought_at TEXT DEFAULT '', cost INTEGER DEFAULT 0, method TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS todos (
         id INTEGER PRIMARY KEY AUTOINCREMENT, texto TEXT,
-        done INTEGER DEFAULT 0, created TEXT DEFAULT '');
+        done INTEGER DEFAULT 0, created TEXT DEFAULT '',
+        completed_at TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS detalle_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT, grupo TEXT, nombre TEXT,
         cuota INTEGER DEFAULT 0, pagadas INTEGER DEFAULT 0, total INTEGER DEFAULT 0,
@@ -922,6 +923,19 @@ def init_db():
         con.execute("INSERT OR IGNORE INTO config VALUES ('services_v1','1')")
         con.commit()
         print('  + servicios editables activados')
+    # Migración V119: fecha de finalización para retirar To-do completados al día siguiente.
+    if not con.execute("SELECT 1 FROM config WHERE key='todos_completed_at_v1'").fetchone():
+        try:
+            con.execute("ALTER TABLE todos ADD COLUMN completed_at TEXT DEFAULT ''")
+        except Exception:
+            pass
+        # Los completados previos reciben la fecha de hoy para no desaparecer al actualizar.
+        con.execute("UPDATE todos SET completed_at=? WHERE done=1 AND (completed_at IS NULL OR completed_at='')",
+                    (date.today().isoformat(),))
+        con.execute("INSERT OR IGNORE INTO config VALUES ('todos_completed_at_v1','1')")
+        con.commit()
+        print('  + ciclo diario de To-do activado')
+
     # ── CONSOLIDACIÓN v2 (al final: todas las tablas viejas ya están pobladas) ──
     # Reconstruye debts_v2 + payments desde las 5 fuentes viejas, preservando exacto.
     # Idempotente: se re-ejecuta cada arranque durante la transición (Fase 1-2).
@@ -1324,6 +1338,15 @@ def state():
     piggy = [dict(r) for r in d.execute('SELECT * FROM piggy ORDER BY id')]
     piggy_moves = [dict(r) for r in d.execute('SELECT * FROM piggy_moves ORDER BY id DESC')]
     shopping = [dict(r) for r in d.execute('SELECT * FROM shopping ORDER BY done, id')]
+    # V119: una sola limpieza por día. Los To-do marcados ayer o antes se retiran;
+    # los completados hoy permanecen visibles y tachados durante el resto del día.
+    today_iso = date.today().isoformat()
+    todo_cleanup = d.execute("SELECT value FROM config WHERE key='todo_cleanup_day'").fetchone()
+    last_cleanup = dict(todo_cleanup).get('value', '') if todo_cleanup else ''
+    if last_cleanup != today_iso:
+        d.execute("DELETE FROM todos WHERE done=1 AND completed_at<>'' AND completed_at<?", (today_iso,))
+        d.execute("INSERT OR REPLACE INTO config (key,value) VALUES ('todo_cleanup_day',?)", (today_iso,))
+        d.commit()
     todos = [dict(r) for r in d.execute('SELECT * FROM todos ORDER BY done, id DESC')]
     extra_debts = [dict(r) for r in d.execute('SELECT * FROM extra_debts')]
     # 'abonado' de una deuda registrada = abono guardado en su columna (checks nuevos + abonos parciales)
@@ -2072,8 +2095,8 @@ def todo_new():
     texto = (j.get('texto') or '').strip()
     if not texto:
         return jsonify(error='Write something first'), 400
-    db().execute('INSERT INTO todos (texto, done, created) VALUES (?,?,?)',
-                 (texto, 0, date.today().isoformat()))
+    db().execute('INSERT INTO todos (texto, done, created, completed_at) VALUES (?,?,?,?)',
+                 (texto, 0, date.today().isoformat(), ''))
     db().commit()
     return jsonify(ok=True)
 
@@ -2085,7 +2108,10 @@ def todo_toggle():
     row = db().execute('SELECT done FROM todos WHERE id=?', (tid,)).fetchone()
     if not row:
         return jsonify(error='no encontrado'), 404
-    db().execute('UPDATE todos SET done=? WHERE id=?', (0 if dict(row)['done'] else 1, tid))
+    next_done = 0 if dict(row)['done'] else 1
+    completed_at = date.today().isoformat() if next_done else ''
+    db().execute('UPDATE todos SET done=?, completed_at=? WHERE id=?',
+                 (next_done, completed_at, tid))
     db().commit()
     return jsonify(ok=True)
 
