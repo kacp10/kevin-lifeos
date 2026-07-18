@@ -3003,3 +3003,54 @@ button[aria-busy="true"]::after {
     grid-template-columns:minmax(0,1fr);
   }
 }
+
+
+/* ====== V118 · SECRET HUNTER PROFILE + COURSE SKILLS ====== */
+.brand-profile-entry{border:0;background:transparent;color:inherit;text-align:left;cursor:pointer;display:flex;align-items:baseline;gap:4px;position:relative;padding:6px 10px;border-radius:12px}
+.brand-profile-entry:hover,.brand-profile-entry:focus-visible{background:rgba(255,255,255,.06);outline:1px solid rgba(255,215,90,.28)}
+.brand-profile-entry small{font:700 8px/1 Inter,sans-serif;letter-spacing:1.6px;color:var(--gold);opacity:.72;margin-left:8px}
+.hunter-profile-screen{display:none;position:fixed;inset:0;z-index:800;background:radial-gradient(circle at 15% 10%,rgba(119,78,255,.16),transparent 30%),linear-gradient(145deg,#090b14,#101522 58%,#0a0d16);overflow:auto;padding:20px}
+.hunter-profile-screen.open{display:block}.hunter-profile-open{overflow:hidden}
+.hunter-profile-shell{width:min(1180px,100%);margin:0 auto}.hunter-profile-back{border:1px solid rgba(255,215,90,.32);background:rgba(12,15,27,.9);color:#f7dc7a;border-radius:12px;padding:10px 15px;font-weight:800;cursor:pointer;margin-bottom:16px}
+.hunter-profile-hero{display:flex;justify-content:space-between;gap:20px;align-items:center;padding:24px;border:1px solid rgba(255,215,90,.25);border-radius:22px;background:linear-gradient(135deg,rgba(31,35,57,.96),rgba(14,18,31,.96));box-shadow:0 22px 70px rgba(0,0,0,.35)}
+.hunter-profile-hero>div:first-child>span,.profile-kicker,.hunter-profile-mission>span,.hunter-profile-onepiece span{font-size:10px;letter-spacing:2px;color:#f5ce63;font-weight:900}.hunter-profile-hero h1{margin:7px 0 5px;font-size:clamp(24px,4vw,44px)}.hunter-profile-hero p{margin:0;color:var(--muted)}
+.hunter-profile-rank{width:130px;min-width:130px;aspect-ratio:1;border-radius:50%;display:grid;place-items:center;align-content:center;border:2px solid rgba(255,215,90,.45);background:radial-gradient(circle,rgba(255,215,90,.15),rgba(10,12,22,.95));box-shadow:0 0 35px rgba(255,215,90,.15)}.hunter-profile-rank small{font-size:8px;letter-spacing:1.4px}.hunter-profile-rank b{font:900 46px/1 'Russo One',sans-serif;color:#f5d76d}.hunter-profile-rank span{font-size:10px;text-align:center;color:var(--muted)}
+.hunter-profile-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(280px,.75fr);gap:14px;margin-top:14px}.hunter-profile-license,.hunter-profile-mission,.hunter-profile-section,.hunter-profile-onepiece{min-width:0;border:1px solid rgba(255,255,255,.08);border-radius:18px;background:rgba(15,19,33,.9);padding:16px}.hunter-profile-license .hunter-license{margin:0}.hunter-profile-mission h2{margin:7px 0}.hunter-profile-mission p{color:var(--muted);min-height:48px}.hunter-profile-mission small{display:block;margin-top:8px;color:#bfc6d8}
+.hunter-profile-stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px;margin:14px 0}.hunter-profile-stats div{padding:13px;border-radius:14px;background:rgba(19,24,41,.94);border:1px solid rgba(255,255,255,.07);text-align:center}.hunter-profile-stats b{display:block;font-size:22px;color:#f5d76d}.hunter-profile-stats span{font-size:10px;color:var(--muted)}
+.hunter-profile-section{margin-top:14px}.hunter-profile-section h2{margin:4px 0 12px}.profile-skill-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.profile-skill-card{padding:12px;border-radius:14px;background:linear-gradient(135deg,rgba(109,78,255,.12),rgba(18,23,39,.95));border:1px solid rgba(151,126,255,.2)}.profile-skill-card>div{display:flex;justify-content:space-between;gap:8px}.profile-skill-card b{font-size:14px}.profile-skill-card span{font-size:9px;letter-spacing:1px;color:#a994ff;font-weight:900}.profile-skill-card p{margin:7px 0 0;color:var(--muted);font-size:11px}.profile-empty{padding:18px;border:1px dashed rgba(255,255,255,.14);border-radius:14px;color:var(--muted)}
+.profile-review-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.profile-review-list button{display:grid;grid-template-columns:1fr auto;text-align:left;gap:3px 10px;padding:11px;border-radius:12px;border:1px solid rgba(255,193,79,.2);background:rgba(255,193,79,.06);color:var(--text);cursor:pointer}.profile-review-list button span{font-weight:800}.profile-review-list button small{color:var(--muted)}.profile-review-list button b{grid-row:1/3;grid-column:2;align-self:center;color:#f5ce63;font-size:10px}.profile-featured-achievements{display:flex;gap:8px;flex-wrap:wrap}.profile-featured-achievements span{padding:8px 10px;border-radius:999px;background:rgba(255,215,90,.08);border:1px solid rgba(255,215,90,.18);font-size:11px;text-transform:capitalize}
+.hunter-profile-onepiece{margin:14px 0 30px;display:flex;justify-content:space-between;gap:18px;align-items:center;border-color:rgba(224,65,99,.25);background:linear-gradient(135deg,rgba(117,18,45,.18),rgba(15,19,33,.95))}.hunter-profile-onepiece h2{margin:5px 0}.hunter-profile-onepiece p{margin:0;color:var(--muted);max-width:760px}.hunter-profile-onepiece>b{white-space:nowrap;color:#ff809a}
+.course-chip{display:grid!important;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:3px 6px}.course-chip>span{font-weight:800;min-width:0;overflow-wrap:anywhere}.course-chip>small{grid-column:1;color:var(--muted);font-size:9px}.course-chip.skills-pending>small{color:#f0b74a}.course-skill-review{grid-row:1/3;grid-column:2;border:1px solid rgba(155,126,255,.28);background:rgba(123,91,255,.1);color:#b8a7ff;border-radius:8px;width:28px;height:28px;cursor:pointer}.course-chip>.del-x{grid-row:1/3;grid-column:3}
+.course-skill-modal{width:min(720px,calc(100vw - 24px))}.skill-choice-grid{display:flex;flex-wrap:wrap;gap:8px;max-height:310px;overflow:auto;padding:4px 1px 8px}.skill-choice{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.035);color:var(--text);border-radius:999px;padding:8px 11px;font-size:12px;cursor:pointer}.skill-choice.selected{border-color:rgba(91,218,156,.55);background:rgba(61,196,130,.13);color:#8be7b6}.skill-choice span{font-weight:900;margin-right:5px}.skill-custom-row{display:grid;grid-template-columns:1fr auto;gap:8px}.skill-custom-row button{border:1px solid rgba(255,215,90,.25);background:rgba(255,215,90,.08);color:#f5d76d;border-radius:10px;padding:0 13px;font-weight:800}.course-skill-modal .m-skip{background:transparent;color:var(--muted);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:10px}
+@media(max-width:850px){.brand-profile-entry small{display:none}.hunter-profile-screen{padding:10px}.hunter-profile-grid{grid-template-columns:1fr}.hunter-profile-stats{grid-template-columns:repeat(3,1fr)}.profile-skill-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:560px){.hunter-profile-hero{align-items:flex-start;padding:16px}.hunter-profile-rank{width:88px;min-width:88px}.hunter-profile-rank b{font-size:34px}.hunter-profile-rank span{display:none}.hunter-profile-stats{grid-template-columns:repeat(2,1fr)}.profile-skill-grid,.profile-review-list{grid-template-columns:1fr}.hunter-profile-onepiece{align-items:flex-start;flex-direction:column}.hunter-profile-onepiece>b{white-space:normal}.course-skill-modal .modal-btns{display:grid;grid-template-columns:1fr}.skill-choice-grid{max-height:260px}.skill-choice{font-size:11px;padding:7px 9px}}
+
+/* ====== v118.1 · HUNTER PROFILE SINGLE-SCROLL FIX ====== */
+html:has(.hunter-profile-screen.open),
+html:has(.hunter-profile-screen.open) body,
+body.hunter-profile-open {
+  width: 100%;
+  height: 100%;
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+
+.hunter-profile-screen {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+}
+
+.hunter-profile-shell {
+  min-height: 100%;
+  overflow: visible;
+}
+
+@media (max-width: 850px) {
+  .hunter-profile-screen {
+    min-height: 100dvh;
+    max-height: 100dvh;
+  }
+}

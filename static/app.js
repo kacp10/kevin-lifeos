@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 117;
+const FRONT_V = 118;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -343,14 +343,14 @@ async function api(path, opts = null) {
     } catch (err) {
       const timedOut = err && err.name === 'AbortError';
       if (!cfg.quiet) toast(timedOut
-        ? '⚠ El servidor tardó demasiado y no confirmó la operación. Intenta de nuevo.'
-        : '⚠ No fue posible conectar con el servidor. Revisa tu conexión e intenta de nuevo.', 'err');
+        ? '⚠ The server took too long and did not confirm the operation. Try again.'
+        : '⚠ Could not connect to the server. Check your connection and try again.', 'err');
       throw err;
     } finally {
       clearTimeout(timer);
     }
     if (!r.ok) {
-      let friendly = 'No fue posible guardar el cambio. Intenta nuevamente en un momento.';
+      let friendly = 'The change could not be saved. Try again in a moment.';
       try {
         const body = await r.clone().json();
         if (body && body.error) friendly = String(body.error);
@@ -478,7 +478,7 @@ function snapshotDeudasVivas() {
   return set;
 }
 
-function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Confirmar', danger = false, extraBtn = null, cancelText = null }) {
+function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Confirm', danger = false, extraBtn = null, cancelText = null }) {
   return new Promise((resolve) => {
     const previousFocus = document.activeElement;
     const back = document.createElement('div');
@@ -559,8 +559,8 @@ function checkVersion() {
   if (S.version === FRONT_V) return;
   document.body.insertAdjacentHTML('afterbegin',
     '<div style="background:#e0445c;color:#fff;padding:10px 16px;text-align:center;font-weight:700">' +
-    '⚠ Archivos desparejados: servidor v' + (S.version || 1) + ' / navegador v' + FRONT_V +
-    '. Reemplaza app.py y reinicia el servidor (Ctrl+C → python app.py), luego Ctrl+F5.</div>');
+    '⚠ Version mismatch: server v' + (S.version || 1) + ' / browser v' + FRONT_V +
+    '. Replace app.py, restart the server, then press Ctrl+F5.</div>');
 }
 
 /* ---------- GYM & FITNESS ---------- */
@@ -1310,6 +1310,7 @@ async function load(animate) {
     safeRender('Gym', renderGym);
     safeRender('Haki', renderHaki);
     safeRender('Achievements', renderAchievements);
+    safeRender('Hunter Profile', renderHunterProfile);
     safeRender('Responsive tables', enhanceResponsiveTables);
     document.querySelectorAll('.money-live').forEach(engancharMiles);
     setTimeout(avisosInteligentes, 1200);
@@ -3527,6 +3528,42 @@ document.addEventListener('click',async(e)=>{
   if(complete){const st=academyReadState(),today=hoyLocal();if(st.doneDates.includes(today))return;st.doneDates.push(today);st.sessions=Math.min((Number(st.sessions)||0)+1,ACADEMY_TARGET);if(st.sessions>=ACADEMY_TARGET&&!st.mastered.includes(st.activeSkillId)){st.mastered.push(st.activeSkillId);const masteredSkill=academyAllSkills().find(x=>x.id===st.activeSkillId);celebrate({icon:'◆',title:'SKILL MASTERED',text:`<b>${esc(masteredSkill?.name||'Hunter training')}</b> is now reliable. Choose your next training.`});}else toast('Practice registered');await academySaveState(st);renderSkillAcademy();return;}
 });
 
+
+function hunterProfileSkillStats() {
+  const skillMap=new Map((S.skills||[]).map(x=>[String(x.id),x]));
+  const bySkill=new Map();
+  (S.course_skills||[]).forEach(link=>{const skill=skillMap.get(String(link.skill_id));if(!skill)return;const key=String(skill.id);if(!bySkill.has(key))bySkill.set(key,{...skill,courses:new Set()});bySkill.get(key).courses.add(String(link.course_id));});
+  let academy={mastered:[],sessions:0,activeSkillId:''};try{academy=academyReadState();}catch(_){}
+  const academySkills=academyAllSkills();
+  return [...bySkill.values()].map(item=>{const evidence=item.courses.size;const academyMatch=academySkills.find(x=>x.name.toLowerCase()===String(item.name).toLowerCase());const practiced=academyMatch&&academy.mastered.includes(academyMatch.id);const level=practiced&&evidence>=2?'Reliable':evidence>=5?'Reliable':evidence>=3?'Practiced':evidence>=2?'Developing':'Introduced';return {...item,evidence,practiced,level};}).sort((a,b)=>b.evidence-a.evidence||a.name.localeCompare(b.name));
+}
+function renderHunterProfile() {
+  const host=document.getElementById('hunterProfileContent'); if(!host)return;
+  const rank=hunterGlobalRankState(), license=hunterLicenseState(), skills=hunterProfileSkillStats();
+  const activeCareer=(S.careers||[]).find(x=>x.active)||(S.careers||[])[0];
+  const activeGoal=activeCareer?(S.goals||[]).find(g=>String(g.id)===String(activeCareer.goal_id)):null;
+  const unlocked=(S.achievement_unlocks||[]).length;
+  const finished=(S.courses_done||[]).length;
+  const pending=(S.courses_done||[]).filter(c=>!courseSkillNames(c.id).length);
+  const books=(S.books||[]).filter(b=>b.status==='Terminado').length;
+  const defeated=(S.debts||[]).filter(d=>(Number(d.initial||0)+compradoEn(d.name)-Number(d.abonado||0))<=0).length;
+  const featured=(S.achievement_unlocks||[]).slice(0,4);
+  host.innerHTML=`<div class="hunter-profile-hero"><div><span>HUNTER ASSOCIATION · PRIVATE FILE</span><h1>KEVIN · HUNTER PROFILE</h1><p>A private record of the person your daily systems are building.</p></div><div class="hunter-profile-rank rank-${rank.current.rank}"><small>GLOBAL RANK</small><b>${rank.current.rank}</b><span>${esc(rank.current.title)}</span></div></div>
+  <div class="hunter-profile-grid">
+    <section class="hunter-profile-license"><div id="hunterProfileLicense"></div></section>
+    <section class="hunter-profile-mission"><span>CURRENT EXPEDITION</span><h2>${esc(activeGoal?.name||activeCareer?.name||'Choose an active career')}</h2><p>${esc(activeGoal?.next_step||activeCareer?.course||'Set the next field action in Goals or Life.')}</p><div class="mini-bar green"><i style="width:${activeGoal?.pct||progresoCareer(activeCareer||{})||0}%"></i></div><small>${activeGoal?.pct||progresoCareer(activeCareer||{})||0}% expedition progress</small></section>
+  </div>
+  <section class="hunter-profile-stats"><div><b>${rank.xp}</b><span>Expedition XP</span></div><div><b>${finished}</b><span>Finished courses</span></div><div><b>${skills.length}</b><span>Professional skills</span></div><div><b>${unlocked}</b><span>Archive records</span></div><div><b>${defeated}</b><span>Debts defeated</span></div><div><b>${books}</b><span>Books finished</span></div></section>
+  <section class="hunter-profile-section"><div class="row-between"><div><span class="profile-kicker">PROFESSIONAL SKILLS</span><h2>Training evidence</h2></div><small>Backed by finished courses${skills.some(x=>x.practiced)?' and Skill Academy practice':''}.</small></div>${skills.length?`<div class="profile-skill-grid">${skills.map(x=>`<article class="profile-skill-card"><div><b>${esc(x.name)}</b><span>${esc(x.level)}</span></div><p>${x.evidence} completed course${x.evidence===1?'':'s'}${x.practiced?' · Skill Academy mastered':''}</p></article>`).join('')}</div>`:'<div class="profile-empty">Finish a course and record its skills to build your professional profile.</div>'}</section>
+  ${pending.length?`<section class="hunter-profile-section pending-review"><div><span class="profile-kicker">SKILLS PENDING REVIEW</span><h2>${pending.length} finished course${pending.length===1?' has':'s have'} no registered skills</h2></div><div class="profile-review-list">${pending.map(c=>`<button data-course-skills="${c.id}"><span>✓ ${esc(c.title)}</span><small>${esc(c.career||'Career')}</small><b>Review skills →</b></button>`).join('')}</div></section>`:''}
+  <section class="hunter-profile-section"><div><span class="profile-kicker">FEATURED ARCHIVE</span><h2>Permanent records</h2></div><div class="profile-featured-achievements">${featured.length?featured.map(x=>`<span>◆ ${esc(String(x.akey||'').replace(/-/g,' '))}</span>`).join(''):'<span>No permanent records unlocked yet.</span>'}</div></section>
+  <section class="hunter-profile-onepiece"><div><span>ONE PIECE SYSTEM · SEPARATE IDENTITY</span><h2>Haki remains connected to Habits</h2><p>This profile can acknowledge your Haki status, but it never converts Haki into Hunter XP or mixes its One Piece progression with Hunter Association ranks.</p></div><b>${esc(document.getElementById('hakiBadge')?.textContent||'Haki system')}</b></section>`;
+  renderHunterLicense('hunterProfileLicense');
+}
+function openHunterProfile(){const screen=document.getElementById('hunterProfileScreen');if(!screen)return;renderHunterProfile();screen.classList.add('open');screen.setAttribute('aria-hidden','false');document.body.classList.add('hunter-profile-open');window.scrollTo({top:0,behavior:'smooth'});}
+function closeHunterProfile(){const screen=document.getElementById('hunterProfileScreen');if(!screen)return;screen.classList.remove('open');screen.setAttribute('aria-hidden','true');document.body.classList.remove('hunter-profile-open');}
+document.addEventListener('click',e=>{if(e.target.closest('#openHunterProfile'))openHunterProfile();if(e.target.closest('#closeHunterProfile'))closeHunterProfile();});
+
 function hunterLicenseState() {
   const months = (S.history || []).filter(h => h.pct >= 0.7).length;
   const goals = (S.goals || []).filter(g => g.status === 'Lograda 🏆' || (g.pct || 0) >= 100).length;
@@ -3541,8 +3578,8 @@ function hunterLicenseState() {
   ];
   return { unlocked: requirements.every(r => r.done), requirements, months, goals, streak, courses, books };
 }
-function renderHunterLicense() {
-  const host = document.getElementById('hunterLicensePanel');
+function renderHunterLicense(targetId='hunterLicensePanel') {
+  const host = document.getElementById(targetId);
   if (!host) return;
   const st = hunterLicenseState();
   const unlockedOn = (S.profile || {}).hunter_license_unlocked_on || '';
@@ -3550,7 +3587,7 @@ function renderHunterLicense() {
     renderHunterLicense._saving = true;
     const day = hoyLocal();
     api('/api/profile', { body:{ key:'hunter_license_unlocked_on', value:day }, quiet:true })
-      .then(() => { S.profile = S.profile || {}; S.profile.hunter_license_unlocked_on = day; renderHunterLicense(); })
+      .then(() => { S.profile = S.profile || {}; S.profile.hunter_license_unlocked_on = day; renderHunterLicense(targetId); })
       .catch(() => {})
       .finally(() => { renderHunterLicense._saving = false; });
   }
@@ -3652,8 +3689,6 @@ function achievementProgress(current, target) {
 }
 
 function renderAchievements() {
-  renderHunterLicense();
-  renderHunterRankSystem();
   const grid = document.getElementById('achievementsGrid');
   if (!grid) return;
 
@@ -3672,11 +3707,14 @@ function renderAchievements() {
   const completedCheckpoints = (S.goal_checkpoints || []).filter(checkpoint => Number(checkpoint.done || 0) === 1).length;
   let masteredSkills = 0;
   try { masteredSkills = (academyReadState().mastered || []).length; } catch (_) {}
+  const professionalSkills = hunterProfileSkillStats();
+  const reliableProfessionalSkills = professionalSkills.filter(skill => skill.level === 'Reliable').length;
+  const combinedMasterySkills = professionalSkills.filter(skill => skill.practiced).length;
 
   const savedUnlocks = new Map((S.achievement_unlocks || []).map(item => [String(item.akey), item.unlocked_at || '']));
 
   const achievements = [
-    { id:'first-payment', category:'FINANCE', rarity:'Common', icon:'⚔', name:'First Blood', desc:'Registra tu primer abono.', current:payments, target:1 },
+    { id:'first-payment', category:'FINANCE', rarity:'Common', icon:'⚔', name:'First Blood', desc:'Record your first debt payment.', current:payments, target:1 },
     { id:'debt-slayer', category:'FINANCE', rarity:'Rare', icon:'☠', name:'Slayer', desc:'Defeat your first debt.', current:defeated, target:1 },
     { id:'debt-hunter', category:'FINANCE', rarity:'Epic', icon:'💀', name:'Hunter', desc:'Defeat three debts.', current:defeated, target:3 },
     { id:'warlord', category:'FINANCE', rarity:'Legendary', icon:'⚔', name:'Warlord', desc:'Pay 10M in total debt damage.', current:dmg, target:10000000, format:'money' },
@@ -3697,6 +3735,10 @@ function renderAchievements() {
     { id:'reader', category:'KNOWLEDGE', rarity:'Common', icon:'📚', name:'Reader', desc:'Finish your first book.', current:completedBooks, target:1 },
     { id:'archivist', category:'KNOWLEDGE', rarity:'Rare', icon:'📖', name:'Bookworm', desc:'Finish five books.', current:completedBooks, target:5 },
     { id:'skill-master', category:'KNOWLEDGE', rarity:'Legendary', icon:'◈', name:'Skill Master', desc:'Master three Hunter Skill Academy paths.', current:masteredSkills, target:3 },
+    { id:'first-professional-skill', category:'PROFESSIONAL', rarity:'Common', icon:'✦', name:'First Skill Acquired', desc:'Record your first skill from a finished course.', current:professionalSkills.length, target:1 },
+    { id:'skill-collector', category:'PROFESSIONAL', rarity:'Rare', icon:'◆', name:'Skill Collector', desc:'Build evidence for ten distinct professional skills.', current:professionalSkills.length, target:10 },
+    { id:'reliable-specialist', category:'PROFESSIONAL', rarity:'Epic', icon:'⬡', name:'Reliable Specialist', desc:'Reach Reliable level in one course-backed skill.', current:reliableProfessionalSkills, target:1 },
+    { id:'proof-of-mastery', category:'PROFESSIONAL', rarity:'Legendary', icon:'◉', name:'Proof of Mastery', desc:'Back the same skill with completed training and Skill Academy practice.', current:combinedMasterySkills, target:1, secret:true },
 
     { id:'training-arc', category:'BODY', rarity:'Uncommon', icon:'🏋', name:'Training Arc', desc:'Log gym training on seven different days.', current:gymSessions, target:7 },
     { id:'anime-archive', category:'LIFE', rarity:'Rare', icon:'★', name:'Anime Archivist', desc:'Complete ten anime series.', current:completedAnime, target:10, secret:true },
@@ -4274,6 +4316,52 @@ function progresoCareer(c) {
   const porNivel = (c.step || 0) * 25 + ((c.pct || 0) / 100) * 25;
   return Math.min(Math.round(Math.max(c.bank || 0, porNivel)), 100);
 }
+
+const COURSE_SKILL_CATALOG = [
+  { keys:['sql','query','database'], skills:['SQL','Data Querying','Data Filtering','Joins','Data Aggregation','Relational Databases','Data Validation'], category:'Data' },
+  { keys:['excel','spreadsheet','sheets'], skills:['Microsoft Excel','Spreadsheets','Pivot Tables','Data Cleaning','Data Analysis','Data Validation'], category:'Data' },
+  { keys:['power bi','dashboard','visualization','tableau'], skills:['Data Visualization','Dashboard Design','Business Intelligence','Data Storytelling','Data Modeling','Microsoft Power BI'], category:'Data' },
+  { keys:['ask questions','data-driven','requirements','stakeholder'], skills:['Analytical Thinking','Problem Framing','Data-Driven Decision Making','Stakeholder Communication','Requirements Gathering','Business Analysis'], category:'Business' },
+  { keys:['python','pandas','numpy'], skills:['Python','Pandas','Data Cleaning','Exploratory Data Analysis','Data Automation'], category:'Technology' },
+  { keys:['statistics','probability','regression'], skills:['Statistics','Probability','Hypothesis Testing','Regression Analysis','Quantitative Analysis'], category:'Data' },
+  { keys:['web','javascript','html','css','frontend'], skills:['Web Development','JavaScript','HTML','CSS','Responsive Design','Debugging'], category:'Technology' },
+  { keys:['communication','presentation','storytelling'], skills:['Communication','Structured Communication','Presentation Skills','Data Storytelling'], category:'Communication' },
+  { keys:['project','portfolio','capstone'], skills:['Project Planning','Problem Solving','Documentation','Portfolio Development'], category:'Professional' },
+  { keys:['leadership','management'], skills:['Leadership','Team Coordination','Decision Making','Conflict Resolution'], category:'Professional' }
+];
+function courseSkillsFor(course, careerName='', step=0) {
+  const text = `${course || ''} ${careerName || ''} ${PELDANOS[Number(step)||0] || ''}`.toLowerCase();
+  const out = new Map();
+  COURSE_SKILL_CATALOG.forEach(group => {
+    if (group.keys.some(k => text.includes(k))) group.skills.forEach(name => out.set(name.toLowerCase(), {name, category:group.category, source:'suggested'}));
+  });
+  if (!out.size) ['Analytical Thinking','Problem Solving','Self-Directed Learning','Knowledge Application'].forEach(name => out.set(name.toLowerCase(), {name, category:'General', source:'suggested'}));
+  return [...out.values()].slice(0, 12);
+}
+function courseSkillNames(courseId) {
+  const links=(S.course_skills||[]).filter(x=>String(x.course_id)===String(courseId));
+  const map=new Map((S.skills||[]).map(x=>[String(x.id),x]));
+  return links.map(x=>map.get(String(x.skill_id))).filter(Boolean);
+}
+function courseSkillsModal({title, career, step=0, selected=[]}) {
+  return new Promise(resolve => {
+    const suggestions=courseSkillsFor(title,career,step);
+    const chosen=new Map(selected.map(x=>[String(x.name||x).toLowerCase(), {name:x.name||x, category:x.category||'General', source:x.source||'manual'}]));
+    const all=new Map(); [...suggestions,...selected].forEach(x=>all.set(String(x.name||x).toLowerCase(),x));
+    const back=document.createElement('div'); back.className='modal-back';
+    const draw=()=>{
+      const chips=[...all.values()].map(x=>{const key=String(x.name||x).toLowerCase();const on=chosen.has(key);return `<button type="button" class="skill-choice ${on?'selected':''}" data-skill-key="${esc(key)}"><span>${on?'✓':'+'}</span>${esc(x.name||x)}</button>`}).join('');
+      back.innerHTML=`<div class="modal-card course-skill-modal"><div class="modal-icon">✦</div><h3>Course skills</h3><p><b>${esc(title)}</b><br><small>${esc(career)} · ${esc(PELDANOS[Number(step)||0]||'Training')}</small></p><div class="skill-choice-grid">${chips}</div><label class="mfield-lab">Add a custom skill</label><div class="skill-custom-row"><input id="customSkillInput" placeholder="e.g. Data Governance"><button type="button" id="addCustomSkill">＋ Add</button></div><div class="modal-btns"><button class="m-cancel">Cancel</button><button class="m-skip">Finish without skills</button><button class="m-ok">Save skills & finish course</button></div></div>`;
+      back.querySelectorAll('[data-skill-key]').forEach(btn=>btn.onclick=()=>{const key=btn.dataset.skillKey; if(chosen.has(key)) chosen.delete(key); else {const item=all.get(key); chosen.set(key,{name:item.name||item,category:item.category||'General',source:item.source||'suggested'});} draw();});
+      const add=()=>{const inp=back.querySelector('#customSkillInput');const name=(inp.value||'').trim();if(!name)return;const key=name.toLowerCase();const item={name,category:'General',source:'manual'};all.set(key,item);chosen.set(key,item);draw();};
+      back.querySelector('#addCustomSkill').onclick=add; back.querySelector('#customSkillInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();add();}};
+      back.querySelector('.m-cancel').onclick=()=>close(null); back.querySelector('.m-skip').onclick=()=>close([]); back.querySelector('.m-ok').onclick=()=>close([...chosen.values()]);
+    };
+    const close=val=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');},220);resolve(val);};
+    document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));back.onclick=e=>{if(e.target===back)close(null);};
+  });
+}
+
 function renderCareer() {
   const wrap = document.getElementById('careerPanel');
   if (!wrap) return;
@@ -4285,10 +4373,14 @@ function renderCareer() {
     const diasIng = esIngles ? diasInglesHechos() : 0;
     const dots = PELDANOS.map((p, i) =>
       `<span class="peldano ${i < c.step ? 'done' : i === c.step ? 'now' : ''}">${i < c.step ? '✓' : i + 1}. ${p}</span>`).join('');
-    const myCourses = done.filter(d => d.career === c.name);
+    const myCourses = done.filter(d => String(d.career_id || '') === String(c.id) || d.career === c.name);
+    const skillLinks = S.course_skills || [];
+    const skillMap = new Map((S.skills || []).map(x => [String(x.id), x]));
     const coursesHtml = myCourses.length
-      ? `<div class="courses-done">${myCourses.map(d =>
-          `<span class="course-chip">✓ ${esc(d.title)} <button class="del-x" data-type="course" data-id="${d.id}">✕</button></span>`).join('')}</div>`
+      ? `<div class="courses-done">${myCourses.map(d => {
+          const names = skillLinks.filter(x => String(x.course_id) === String(d.id)).map(x => skillMap.get(String(x.skill_id))?.name).filter(Boolean);
+          return `<span class="course-chip ${names.length ? 'has-skills' : 'skills-pending'}"><span>✓ ${esc(d.title)}</span><small>${names.length ? `${names.length} skill${names.length === 1 ? '' : 's'} recorded` : 'Skills pending review'}</small><button class="course-skill-review" data-course-skills="${d.id}" title="Review course skills">✦</button><button class="del-x" data-type="course" data-id="${d.id}">✕</button></span>`;
+        }).join('')}</div>`
       : '<p class="hint" style="margin:4px 0">No finished courses yet.</p>';
     return `<div class="career-card ${c.active ? 'career-active' : ''}">
       <div class="career-head">
@@ -4560,9 +4652,11 @@ document.addEventListener('click', async (e) => {
     const c = (S.careers || []).find(x => x.id === id);
     if (!c) return;
     const stepName = PELDANOS[c.step || 0];
-    // 1) registrar el curso terminado en el historial (si tiene nombre)
+    // 1) register the finished course and its real skills before moving the path forward.
     if ((c.course || '').trim()) {
-      await api('/api/course/done', { body: { career: c.name, title: c.course.trim() } });
+      const skills = await courseSkillsModal({ title:c.course.trim(), career:c.name, step:c.step || 0 });
+      if (skills === null) return;
+      await api('/api/course/done', { body: { career_id:c.id, career:c.name, step:c.step || 0, title:c.course.trim(), skills } });
     }
     // 2) banquear el 25% de este nivel (nunca baja, aunque el próximo curso empiece en 0%)
     const newBank = Math.min(100, ((c.step || 0) + 1) * 25);
@@ -4599,8 +4693,25 @@ document.addEventListener('click', async (e) => {
       text: `Add a finished course to <b>${addC.dataset.name}</b>. This is your record of what you complete.`,
       fields: [{ type: 'text', placeholder: 'Course name' }], okText: 'Save course' });
     if (!r || !r[0].trim()) return;
-    await api('/api/course/done', { body: { career: addC.dataset.name, title: r[0] } });
-    toast('🎓 Course logged!');
+    const career = (S.careers || []).find(x => String(x.id) === String(addC.dataset.career));
+    const skills = await courseSkillsModal({ title:r[0].trim(), career:addC.dataset.name, step:career?.step || 0 });
+    if (skills === null) return;
+    await api('/api/course/done', { body: { career_id:career?.id || null, career:addC.dataset.name, step:career?.step || 0, title:r[0].trim(), skills } });
+    toast('🎓 Course and skills logged!');
+    load();
+    return;
+  }
+
+  const skillReview = e.target.closest('[data-course-skills]');
+  if (skillReview) {
+    const course = (S.courses_done || []).find(x => String(x.id) === String(skillReview.dataset.courseSkills));
+    if (!course) return;
+    const career = (S.careers || []).find(x => String(x.id) === String(course.career_id)) || (S.careers || []).find(x => x.name === course.career);
+    const selected = courseSkillNames(course.id);
+    const skills = await courseSkillsModal({ title:course.title, career:course.career, step:course.step || career?.step || 0, selected });
+    if (skills === null) return;
+    await api('/api/course/skills', { body:{ course_id:course.id, skills } });
+    toast('✦ Course skills updated');
     load();
     return;
   }
@@ -5294,7 +5405,7 @@ document.addEventListener('click', async (e) => {
   const b = e.target.closest('.del-x');
   if (!b || !b.dataset.type) return;   // ignora botones .del-x propios de otros módulos (ej. historial gym)
   e.stopPropagation();
-  if (!await confirmModal('Confirmar', DEL_MSG[b.dataset.type])) return;
+  if (!await confirmModal('Confirm deletion', DEL_MSG[b.dataset.type])) return;
   await api(`/api/${b.dataset.type}/${b.dataset.id}`, { method: 'DELETE' });
   load();
 });
@@ -5331,7 +5442,7 @@ $('#compraNew').addEventListener('submit', async (e) => {
 
 $('#debtNew').addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!await confirmModal('Registrar deuda', 'Remember your promise: nothing new on installments. Only log it if it already exists in real life, so the boss shows its true HP.')) return;
+  if (!await confirmModal('Register debt', 'Remember your promise: nothing new on installments. Only log it if it already exists in real life, so the boss shows its true HP.')) return;
   const _val = numVal('#ndValor');
   const _cuotas = +$('#ndCuotas').value || 0;
   const _start = +$('#ndStart').value || 0;
