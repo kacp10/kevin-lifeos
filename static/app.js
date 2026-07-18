@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 115;
+const FRONT_V = 117;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -3197,6 +3197,51 @@ function expeditionZoneIndex(pctValue, achieved=false) {
   return Math.min(EXPEDITION_ZONES.length - 1, Math.floor(p / 20));
 }
 let activeExpeditionId = null;
+function goalFieldDate(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return esc(String(value).slice(0, 16).replace('T', ' '));
+  return d.toLocaleString('es-CO', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+function goalLifeSignals(goal) {
+  const careers = (S.careers || []).filter(c => String(c.goal_id || '') === String(goal.id));
+  const today = S.today || hoyLocal();
+  const routines = (S.rdone || []).filter(x => String(x).startsWith(today + '|')).length;
+  const marks = (S.marks || []).filter(x => String(x).endsWith('|' + today)).length;
+  const courses = (S.courses_done || []).filter(c => careers.some(k => String(k.id) === String(c.career_id))).length;
+  return { careers, routines, marks, courses };
+}
+
+function expeditionOperations(goal) {
+  const checkpoints = (S.goal_checkpoints || []).filter(x => String(x.goal_id) === String(goal.id));
+  const logs = (S.goal_logs || []).filter(x => String(x.goal_id) === String(goal.id)).slice(0, 8);
+  const strategy = (S.goal_strategy || []).find(x => String(x.goal_id) === String(goal.id)) || {};
+  const done = checkpoints.filter(x => +x.done).length;
+  const signals = goalLifeSignals(goal);
+  const checkpointHtml = checkpoints.length ? checkpoints.map(cp => `<div class="gx-checkpoint ${+cp.done ? 'done' : ''}">
+      <label class="gx-check-control" title="${+cp.done ? 'Reabrir hito' : 'Completar hito'}">
+        <input id="gx-check-${cp.id}" type="checkbox" data-goal-check-toggle="${cp.id}" ${+cp.done ? 'checked' : ''} aria-label="${+cp.done ? 'Reabrir' : 'Completar'} hito: ${esc(cp.title)}">
+        <span class="gx-check-box" aria-hidden="true">${+cp.done ? '✓' : ''}</span>
+      </label>
+      <label class="gx-check-title" for="gx-check-${cp.id}">${esc(cp.title)}</label>
+      <button type="button" class="gx-mini-delete" data-goal-check-delete="${cp.id}" aria-label="Delete checkpoint">×</button>
+    </div>`).join('') : '<div class="gx-empty">No checkpoints yet. Break the expedition into concrete field objectives.</div>';
+  const logHtml = logs.length ? logs.map(log => `<article class="gx-log"><span>${goalFieldDate(log.created)}</span><p>${esc(log.note)}</p><button type="button" data-goal-log-delete="${log.id}" aria-label="Delete field note">×</button></article>`).join('') : '<div class="gx-empty">No field notes yet. Record progress, evidence or a blocker.</div>';
+  const threat = strategy.threat || 'Stable';
+  return `<section class="gx-operations" data-goal-ops="${goal.id}">
+    <div class="gx-ops-head"><div><span>EXPEDITION OPERATIONS</span><h3>Field execution layer</h3></div><div class="gx-completion"><b>${done}/${checkpoints.length}</b><small>checkpoints cleared</small></div></div>
+    <div class="gx-ops-grid">
+      <article class="gx-panel gx-checkpoints"><header><div><span>CHECKPOINTS</span><h4>Mission objectives</h4></div><b>${done}/${checkpoints.length}</b></header><p class="gx-retention-note">Los hitos completados permanecen 30 días y luego se retiran automáticamente.</p><div class="gx-check-list">${checkpointHtml}</div><form class="gx-inline-form" data-goal-check-form="${goal.id}"><input name="title" maxlength="180" placeholder="Add a concrete checkpoint" required><button type="submit">＋ Add</button></form></article>
+      <article class="gx-panel gx-threat"><header><div><span>THREAT ANALYSIS</span><h4>Obstacle & countermeasure</h4></div><em class="gx-threat-badge threat-${threat.toLowerCase().replace(/\s+/g,'-')}">${esc(threat)}</em></header>
+        <form data-goal-strategy-form="${goal.id}" class="gx-strategy-form"><label>Primary obstacle<input name="obstacle" value="${esc(strategy.obstacle || '')}" placeholder="What is slowing this route?"></label><label>Threat level<select name="threat">${['Stable','Under watch','High risk','Critical'].map(x=>`<option ${x===threat?'selected':''}>${x}</option>`).join('')}</select></label><label class="wide">Countermeasure<textarea name="strategy" rows="2" placeholder="How will you neutralize it?">${esc(strategy.strategy || '')}</textarea></label><label class="wide">Next field action<input name="next_action" value="${esc(strategy.next_action || '')}" placeholder="The next action you can execute"></label><button type="submit">Save field strategy</button></form>
+      </article>
+      <article class="gx-panel gx-signals"><header><div><span>CONNECTED SIGNALS</span><h4>Life systems feeding this route</h4></div></header><div class="gx-signal-grid"><div><strong>${signals.careers.length}</strong><span>linked careers</span></div><div><strong>${signals.courses}</strong><span>completed courses</span></div><div><strong>${signals.routines}</strong><span>Life checks today</span></div><div><strong>${signals.marks}</strong><span>Habit checks today</span></div></div><p>Career progress linked from Life continues syncing automatically. Habit activity is shown as context only; Haki remains its independent One Piece system.</p></article>
+      <article class="gx-panel gx-journal"><header><div><span>FIELD LOG</span><h4>Expedition chronicle</h4></div></header><form class="gx-log-form" data-goal-log-form="${goal.id}"><textarea name="note" maxlength="600" rows="2" placeholder="What changed, what did you learn, and what happens next?" required></textarea><button type="submit">Record field note</button></form><div class="gx-log-list">${logHtml}</div></article>
+    </div>
+  </section>`;
+}
+
 function renderExpeditions() {
   const host = document.getElementById('expeditionPanel');
   if (!host) return;
@@ -3206,7 +3251,10 @@ function renderExpeditions() {
   });
   if (!goals.length) {
     activeExpeditionId = null;
-    host.innerHTML = '<div class="dc-empty">Create your first Goal to open an expedition route.</div>';
+    host.innerHTML = `<div class="dc-empty dc-empty-dossier">
+      <span class="dc-empty-mark">◇</span>
+      <div><b>NO EXPEDITION DOSSIERS</b><p>Create your first Goal to reveal a route on the Dark Continent.</p></div>
+    </div>`;
     return;
   }
   if (!goals.some(g => String(g.id) === String(activeExpeditionId))) activeExpeditionId = goals[0].id;
@@ -3215,11 +3263,16 @@ function renderExpeditions() {
   const achieved = active.status === 'Lograda 🏆' || p >= 100;
   const zoneIx = expeditionZoneIndex(p, achieved);
   const rank = hunterRankFor(p, achieved);
+  const currentZone = EXPEDITION_ZONES[zoneIx].name;
+  const statusKey = achieved ? 'conquered' : active.status === 'Pendiente' ? 'dormant' : p >= 80 ? 'final' : p >= 60 ? 'advanced' : p >= 40 ? 'trial' : 'active';
+  const statusLabel = achieved ? 'TERRITORY CONQUERED' : active.status === 'Pendiente' ? 'DORMANT ROUTE' : p >= 80 ? 'FINAL APPROACH' : p >= 60 ? 'ADVANCED EXPEDITION' : p >= 40 ? 'TRIAL IN PROGRESS' : 'ACTIVE EXPEDITION';
+  const target = String(active.target || '').trim();
   const zones = EXPEDITION_ZONES.map((z, i) => {
     const conquered = achieved || i < zoneIx;
     const current = !achieved && i === zoneIx;
     const locked = !conquered && !current;
     return `<div class="dc-zone ${conquered ? 'conquered' : ''} ${current ? 'current' : ''} ${locked ? 'locked' : ''}">
+      <span class="dc-zone-index">0${i + 1}</span>
       <span class="dc-zone-dot">${conquered ? '✓' : current ? '◆' : '◇'}</span>
       <small>${esc(z.name)}</small>
     </div>`;
@@ -3229,38 +3282,50 @@ function renderExpeditions() {
     const ga = g.status === 'Lograda 🏆' || gp >= 100;
     const gr = hunterRankFor(gp, ga);
     const selected = String(g.id) === String(active.id);
+    const routeState = ga ? 'CONQUERED' : g.status === 'Pendiente' ? 'DORMANT' : 'ACTIVE';
     return `<button type="button" class="dc-route-card ${selected ? 'active' : ''} ${ga ? 'completed' : ''}" data-expedition-select="${esc(String(g.id))}" aria-pressed="${selected}">
       <span class="dc-route-number">${String(i + 1).padStart(2,'0')}</span>
-      <span class="dc-route-copy"><b>${esc(g.name)}</b><small>${gp}% · Rank ${gr}</small></span>
-      <span class="dc-route-status">${ga ? '✓' : selected ? '◆' : '→'}</span>
+      <span class="dc-route-copy"><b>${esc(g.name)}</b><small>${routeState} · ${gp}%</small></span>
+      <span class="dc-route-rank rank-${gr}">${gr}</span>
     </button>`;
   }).join('');
-  host.innerHTML = `<div class="dc-shell">
-    <aside class="dc-route-selector" aria-label="Expedition routes">
-      <div class="dc-selector-title"><span>AVAILABLE ROUTES</span><b>${goals.length}</b></div>
-      <div class="dc-route-scroll">${routes}</div>
-    </aside>
-    <article class="dc-expedition-feature ${achieved ? 'completed' : ''}" data-goal-id="${active.id}">
-      <div class="dc-map-art" aria-hidden="true"></div>
-      <div class="dc-map-overlay"></div>
-      <div class="dc-feature-content">
-        <div class="dc-expedition-head">
-          <div><span class="dc-eyebrow">ACTIVE EXPEDITION</span>
-            <h2>${esc(active.name)}</h2><p>${esc(active.why || 'A territory worth conquering.')}</p></div>
-          <div class="dc-rank rank-${rank}"><small>RANK</small><b>${rank}</b></div>
-        </div>
-        <div class="dc-feature-stats">
-          <div><small>PROGRESS</small><strong>${p}%</strong></div>
-          <div><small>CURRENT TERRITORY</small><strong>${esc(EXPEDITION_ZONES[zoneIx].name)}</strong></div>
-          <div><small>STATUS</small><strong>${achieved ? 'Conquered' : 'In progress'}</strong></div>
-        </div>
-        <div class="dc-progress-row"><div class="dc-progress"><i style="width:${p}%"></i></div><strong>${p}%</strong></div>
-        <div class="dc-map" aria-label="Expedition territories">${zones}</div>
-        <div class="dc-critical"><span>CRITICAL MISSION</span><b>${esc(expeditionMission(active))}</b></div>
-        ${achieved ? '<div class="dc-seal">EXPEDITION CONQUERED</div>' : ''}
+  const completedCount = goals.filter(g => g.status === 'Lograda 🏆' || Number(g.pct || 0) >= 100).length;
+  host.innerHTML = `<div class="dc-command-header">
+      <div class="dc-command-title"><span>DARK CONTINENT OPERATIONS</span><h2>Expedition Command Center</h2><p>Every Goal becomes a live route. Select a dossier, inspect its territory and execute the next critical mission.</p></div>
+      <div class="dc-command-overview" aria-label="Expedition overview">
+        <div><small>ROUTES</small><strong>${goals.length}</strong></div>
+        <div><small>ACTIVE</small><strong>${goals.length - completedCount}</strong></div>
+        <div><small>CONQUERED</small><strong>${completedCount}</strong></div>
       </div>
-    </article>
-  </div>`;
+    </div>
+    <div class="dc-shell">
+      <aside class="dc-route-selector" aria-label="Expedition routes">
+        <div class="dc-selector-title"><span>ROUTE DOSSIERS</span><b>${goals.length}</b></div>
+        <div class="dc-route-scroll">${routes}</div>
+      </aside>
+      <article class="dc-expedition-feature ${achieved ? 'completed' : ''} status-${statusKey}" data-goal-id="${active.id}">
+        <div class="dc-map-art" aria-hidden="true"></div>
+        <div class="dc-map-overlay"></div>
+        <div class="dc-feature-grid" aria-hidden="true"></div>
+        <div class="dc-feature-content">
+          <div class="dc-dossier-strip"><span>HUNTER ASSOCIATION · FIELD DOSSIER</span><b>${statusLabel}</b></div>
+          <div class="dc-expedition-head">
+            <div class="dc-expedition-copy"><span class="dc-eyebrow">SELECTED ROUTE</span><h2>${esc(active.name)}</h2><p>${esc(active.why || 'A territory worth conquering.')}</p></div>
+            <div class="dc-rank rank-${rank}"><small>RANK</small><b>${rank}</b><span>${achieved ? 'CLEARED' : 'MISSION'}</span></div>
+          </div>
+          <div class="dc-feature-stats">
+            <div><small>PROGRESS</small><strong>${p}%</strong><span>${100-p}% remaining</span></div>
+            <div><small>CURRENT TERRITORY</small><strong>${esc(currentZone)}</strong><span>Phase ${zoneIx + 1} of ${EXPEDITION_ZONES.length}</span></div>
+            <div><small>TARGET DATE</small><strong>${target ? esc(target) : 'Open timeline'}</strong><span>${achieved ? 'Mission archived' : 'Field objective'}</span></div>
+          </div>
+          <div class="dc-progress-block"><div class="dc-progress-meta"><span>ROUTE COMPLETION</span><strong>${p}%</strong></div><div class="dc-progress"><i style="width:${p}%"></i></div></div>
+          <div class="dc-map" aria-label="Expedition territories">${zones}</div>
+          <div class="dc-critical"><span>CRITICAL MISSION</span><b>${esc(expeditionMission(active))}</b><small>Complete this action to move the expedition forward.</small></div>
+          ${achieved ? '<div class="dc-seal">EXPEDITION CONQUERED</div>' : ''}
+        </div>
+      </article>
+    </div>
+    ${expeditionOperations(active)}`;
 }
 
 document.addEventListener('click', (event) => {
@@ -3268,6 +3333,87 @@ document.addEventListener('click', (event) => {
   if (!route) return;
   activeExpeditionId = route.dataset.expeditionSelect;
   renderExpeditions();
+});
+
+document.addEventListener('submit', async (event) => {
+  const checkForm = event.target.closest('[data-goal-check-form]');
+  const logForm = event.target.closest('[data-goal-log-form]');
+  const strategyForm = event.target.closest('[data-goal-strategy-form]');
+  if (!checkForm && !logForm && !strategyForm) return;
+  event.preventDefault();
+  const form = checkForm || logForm || strategyForm;
+  await withBusy(form.querySelector('button[type="submit"]') || form, async () => {
+    const fd = new FormData(form);
+    if (checkForm) await api('/api/goal/checkpoint', { body:{ goal_id:+checkForm.dataset.goalCheckForm, title:String(fd.get('title') || '').trim() } });
+    if (logForm) await api('/api/goal/log', { body:{ goal_id:+logForm.dataset.goalLogForm, note:String(fd.get('note') || '').trim() } });
+    if (strategyForm) await api('/api/goal/strategy', { body:{ goal_id:+strategyForm.dataset.goalStrategyForm, obstacle:fd.get('obstacle'), threat:fd.get('threat'), strategy:fd.get('strategy'), next_action:fd.get('next_action') } });
+    await load();
+    toast(checkForm ? 'Checkpoint added.' : logForm ? 'Field note recorded.' : 'Field strategy saved.');
+  });
+});
+
+document.addEventListener('change', async (event) => {
+  const toggle = event.target.closest('input[data-goal-check-toggle]');
+  if (!toggle || toggle.disabled) return;
+
+  // V116 final: los checkpoints son hitos visuales y persistentes.
+  // No alteran porcentajes; Life, cursos, carreras o la edición manual del Goal
+  // continúan siendo las únicas fuentes de progreso de la expedición.
+  const done = toggle.checked ? 1 : 0;
+  const previousDone = !done;
+  toggle.checked = Boolean(previousDone);
+  toggle.disabled = true;
+  try {
+    await api('/api/goal/checkpoint/toggle', {
+      body: { id: +toggle.dataset.goalCheckToggle, done }
+    });
+    await load();
+    toast(done ? '✓ Hito completado · visible durante 30 días.' : '◇ Hito reabierto.');
+  } catch (error) {
+    toggle.checked = Boolean(previousDone);
+    throw error;
+  } finally {
+    toggle.disabled = false;
+  }
+});
+
+document.addEventListener('click', async (event) => {
+  const delCheck = event.target.closest('[data-goal-check-delete]');
+  const delLog = event.target.closest('[data-goal-log-delete]');
+  if (!delCheck && !delLog) return;
+
+  if (delCheck) {
+    const accepted = await modal({
+      icon: '◇',
+      title: 'Eliminar checkpoint',
+      text: 'Este hito desaparecerá de la expedición seleccionada.<br><small>La meta, su porcentaje y los demás checkpoints no serán modificados.</small>',
+      okText: 'Eliminar checkpoint',
+      cancelText: 'Conservar',
+      danger: true
+    });
+    if (!accepted) return;
+    await withBusy(delCheck, async () => {
+      await api('/api/goal/checkpoint/' + delCheck.dataset.goalCheckDelete, { method:'DELETE' });
+      await load();
+      toast('Checkpoint eliminado.');
+    });
+    return;
+  }
+
+  const accepted = await modal({
+    icon: '✦',
+    title: 'Eliminar nota de campo',
+    text: 'Esta entrada se eliminará únicamente de la bitácora de la expedición seleccionada.',
+    okText: 'Eliminar nota',
+    cancelText: 'Conservar',
+    danger: true
+  });
+  if (!accepted) return;
+  await withBusy(delLog, async () => {
+    await api('/api/goal/log/' + delLog.dataset.goalLogDelete, { method:'DELETE' });
+    await load();
+    toast('Nota de campo eliminada.');
+  });
 });
 
 const ACADEMY_DOMAINS = [
@@ -3488,47 +3634,122 @@ function renderHunterRankSystem() {
   </section>`;
 }
 
-/* ====== ACHIEVEMENTS ====== */
+/* ====== V117 · HUNTER ARCHIVE / ACHIEVEMENTS ====== */
+const achievementUnlockPending = new Set();
+const HUNTER_ARCHIVE_RARITIES = {
+  Common:    { rank:1, label:'COMMON' },
+  Uncommon:  { rank:2, label:'UNCOMMON' },
+  Rare:      { rank:3, label:'RARE' },
+  Epic:      { rank:4, label:'EPIC' },
+  Legendary: { rank:5, label:'LEGENDARY' },
+  Mythic:    { rank:6, label:'MYTHIC' }
+};
+
+function achievementProgress(current, target) {
+  const safeTarget = Math.max(1, Number(target || 1));
+  const safeCurrent = Math.max(0, Number(current || 0));
+  return Math.max(0, Math.min(100, Math.round(safeCurrent / safeTarget * 100)));
+}
+
 function renderAchievements() {
   renderHunterLicense();
   renderHunterRankSystem();
   const grid = document.getElementById('achievementsGrid');
   if (!grid) return;
-  const dmg = (S.debts || []).reduce((s, d) => s + d.abonado, 0);
-  const enemigosMuertos = (S.debts || []).filter(d => (d.initial + compradoEn(d.name) - d.abonado) <= 0).length;
-  const mesesGanados = (S.history || []).filter(h => h.pct >= 0.7).length;
-  const metasLogradas = (S.goals || []).filter(g => g.status === 'Lograda 🏆').length;
-  const abonos = (S.abonos || []).length;
-  const cursosFin = (S.courses_done || []).length;
-  const maxRacha = Math.max(0, ...(S.habits || []).map(h => rachaHabito(h.id, new Set(S.marks), h.name === 'Exercise' ? [6] : [])));
-  const librosFin = (S.books || []).filter(b => b.status === 'Terminado').length;
-  const ahorroTotal = (S.dreams || []).reduce((s, d) => s + (d.saved || 0), 0);
-  const totalDebts = (S.debts || []).length;
 
-  const LOGROS = [
-    { icon: '⚔', name: 'First Blood', desc: 'Log your first payment', got: abonos >= 1 },
-    { icon: '☠', name: 'Slayer', desc: 'Defeat your first debt', got: enemigosMuertos >= 1 },
-    { icon: '💀', name: 'Hunter', desc: 'Defeat 3 debts', got: enemigosMuertos >= 3 },
-    { icon: '⚔', name: 'Warlord', desc: 'Pay 10M in total damage', got: dmg >= 10000000 },
-    { icon: '👑', name: 'Liberator', desc: 'Defeat ALL debts — total freedom', got: enemigosMuertos >= totalDebts && totalDebts > 0 },
-    { icon: '🔥', name: 'On Fire', desc: '7-day habit streak', got: maxRacha >= 7 },
-    { icon: '⚡', name: 'Unstoppable', desc: '30-day habit streak', got: maxRacha >= 30 },
-    { icon: '🛡', name: 'Disciplined', desc: 'Conquer your first month (≥70%)', got: mesesGanados >= 1 },
-    { icon: '👁', name: 'Haki Master', desc: 'Conquer 6 months', got: mesesGanados >= 6 },
-    { icon: '🎓', name: 'Student', desc: 'Finish your first course', got: cursosFin >= 1 },
-    { icon: '🎯', name: 'Achiever', desc: 'Complete a goal', got: metasLogradas >= 1 },
-    { icon: '📚', name: 'Reader', desc: 'Finish your first book', got: librosFin >= 1 },
-    { icon: '📖', name: 'Bookworm', desc: 'Finish 5 books', got: librosFin >= 5 },
-    { icon: '🐷', name: 'Saver', desc: 'Save 500K toward your dreams', got: ahorroTotal >= 500000 },
-    { icon: '💎', name: 'Big Saver', desc: 'Save 2M toward your dreams', got: ahorroTotal >= 2000000 }
-  ];
-  const got = LOGROS.filter(l => l.got).length;
-  grid.innerHTML = `<div class="ach-count">${got} / ${LOGROS.length} unlocked</div>` +
-    LOGROS.map(l => `<div class="ach-card ${l.got ? 'got' : 'locked'}">
-      <div class="ach-icon">${l.got ? '<span class="hunter-medal-core">' + l.icon + '</span>' : '<span class="hunter-medal-lock">◇</span>'}</div>
-      <div class="ach-name">${l.name}</div>
-      <div class="ach-desc">${l.desc}</div>
-    </div>`).join('');
+  const debts = S.debts || [];
+  const dmg = debts.reduce((sum, debt) => sum + Number(debt.abonado || 0), 0);
+  const defeated = debts.filter(debt => (Number(debt.initial || 0) + compradoEn(debt.name) - Number(debt.abonado || 0)) <= 0).length;
+  const conqueredMonths = (S.history || []).filter(month => Number(month.pct || 0) >= 0.7).length;
+  const completedGoals = (S.goals || []).filter(goal => goal.status === 'Lograda 🏆' || Number(goal.pct || 0) >= 100).length;
+  const payments = (S.abonos || []).length;
+  const completedCourses = (S.courses_done || []).length;
+  const maxStreak = Math.max(0, ...(S.habits || []).map(habit => rachaHabito(habit.id, new Set(S.marks), habit.name === 'Exercise' ? [6] : [])));
+  const completedBooks = (S.books || []).filter(book => book.status === 'Terminado').length;
+  const completedAnime = (S.animes || []).filter(anime => /Terminado|Completado|Completed/i.test(String(anime.estado || ''))).length;
+  const savedForDreams = (S.dreams || []).reduce((sum, dream) => sum + Number(dream.saved || 0), 0);
+  const gymSessions = new Set((S.gym_sets || []).map(set => set.date).filter(Boolean)).size;
+  const completedCheckpoints = (S.goal_checkpoints || []).filter(checkpoint => Number(checkpoint.done || 0) === 1).length;
+  let masteredSkills = 0;
+  try { masteredSkills = (academyReadState().mastered || []).length; } catch (_) {}
+
+  const savedUnlocks = new Map((S.achievement_unlocks || []).map(item => [String(item.akey), item.unlocked_at || '']));
+
+  const achievements = [
+    { id:'first-payment', category:'FINANCE', rarity:'Common', icon:'⚔', name:'First Blood', desc:'Registra tu primer abono.', current:payments, target:1 },
+    { id:'debt-slayer', category:'FINANCE', rarity:'Rare', icon:'☠', name:'Debt Slayer', desc:'Derrota tu primera deuda.', current:defeated, target:1 },
+    { id:'debt-hunter', category:'FINANCE', rarity:'Epic', icon:'💀', name:'Debt Hunter III', desc:'Derrota tres deudas.', current:defeated, target:3 },
+    { id:'warlord', category:'FINANCE', rarity:'Legendary', icon:'⚔', name:'Warlord', desc:'Acumula 10 millones en daño financiero.', current:dmg, target:10000000, format:'money' },
+    { id:'liberator', category:'FINANCE', rarity:'Mythic', icon:'👑', name:'Liberator', desc:'Derrota todas las deudas registradas.', current:defeated, target:Math.max(1, debts.length), secret:debts.length===0 },
+
+    { id:'month-conqueror', category:'DISCIPLINE', rarity:'Uncommon', icon:'🛡', name:'Month Conqueror', desc:'Conquista un mes con al menos 70%.', current:conqueredMonths, target:1 },
+    { id:'iron-streak', category:'DISCIPLINE', rarity:'Rare', icon:'🔥', name:'Iron Streak', desc:'Mantén una racha de siete días.', current:maxStreak, target:7 },
+    { id:'unstoppable', category:'DISCIPLINE', rarity:'Legendary', icon:'⚡', name:'Unstoppable', desc:'Alcanza una racha de treinta días.', current:maxStreak, target:30 },
+    { id:'year-veteran', category:'DISCIPLINE', rarity:'Mythic', icon:'◉', name:'Year Veteran', desc:'Conquista doce meses.', current:conqueredMonths, target:12, secret:true },
+
+    { id:'first-goal', category:'EXPEDITIONS', rarity:'Uncommon', icon:'🎯', name:'First Conquest', desc:'Completa tu primera expedición.', current:completedGoals, target:1 },
+    { id:'triple-conquest', category:'EXPEDITIONS', rarity:'Epic', icon:'◆', name:'Territory Hunter', desc:'Conquista tres Goals.', current:completedGoals, target:3 },
+    { id:'field-operator', category:'EXPEDITIONS', rarity:'Rare', icon:'◇', name:'Field Operator', desc:'Completa cinco checkpoints de expedición.', current:completedCheckpoints, target:5 },
+
+    { id:'student', category:'KNOWLEDGE', rarity:'Common', icon:'🎓', name:'Student', desc:'Finaliza tu primer curso.', current:completedCourses, target:1 },
+    { id:'specialist', category:'KNOWLEDGE', rarity:'Epic', icon:'✦', name:'Specialist', desc:'Finaliza cinco cursos.', current:completedCourses, target:5 },
+    { id:'reader', category:'KNOWLEDGE', rarity:'Common', icon:'📚', name:'Reader', desc:'Termina tu primer libro.', current:completedBooks, target:1 },
+    { id:'archivist', category:'KNOWLEDGE', rarity:'Rare', icon:'📖', name:'Archivist', desc:'Termina cinco libros.', current:completedBooks, target:5 },
+    { id:'skill-master', category:'KNOWLEDGE', rarity:'Legendary', icon:'◈', name:'Skill Master', desc:'Domina tres rutas de Hunter Skill Academy.', current:masteredSkills, target:3 },
+
+    { id:'training-arc', category:'BODY', rarity:'Uncommon', icon:'🏋', name:'Training Arc', desc:'Registra siete días diferentes de gimnasio.', current:gymSessions, target:7 },
+    { id:'anime-archive', category:'LIFE', rarity:'Rare', icon:'★', name:'Anime Archivist', desc:'Completa diez animes.', current:completedAnime, target:10, secret:true },
+    { id:'dream-saver', category:'DREAMS', rarity:'Uncommon', icon:'🐷', name:'Dream Saver', desc:'Ahorra 500 mil para tus sueños.', current:savedForDreams, target:500000, format:'money' },
+    { id:'big-saver', category:'DREAMS', rarity:'Epic', icon:'💎', name:'Big Saver', desc:'Ahorra 2 millones para tus sueños.', current:savedForDreams, target:2000000, format:'money' }
+  ].map(item => {
+    const liveGot = Number(item.current || 0) >= Number(item.target || 1);
+    const unlockedAt = savedUnlocks.get(item.id) || '';
+    const got = liveGot || Boolean(unlockedAt);
+    if (liveGot && !unlockedAt && !achievementUnlockPending.has(item.id)) {
+      achievementUnlockPending.add(item.id);
+      api('/api/achievement/unlock', { body:{ key:item.id } }).then(() => {
+        S.achievement_unlocks = S.achievement_unlocks || [];
+        S.achievement_unlocks.push({ akey:item.id, unlocked_at:new Date().toISOString() });
+      }).catch(() => {}).finally(() => achievementUnlockPending.delete(item.id));
+    }
+    return { ...item, liveGot, got, unlockedAt };
+  });
+
+  const unlocked = achievements.filter(item => item.got).length;
+  const rarityScore = achievements.filter(item => item.got).reduce((sum, item) => sum + HUNTER_ARCHIVE_RARITIES[item.rarity].rank, 0);
+  const next = achievements.filter(item => !item.got).sort((a,b) => achievementProgress(b.current,b.target)-achievementProgress(a.current,a.target))[0];
+  const categories = [...new Set(achievements.map(item => item.category))];
+
+  const cards = achievements.map(item => {
+    const pct = achievementProgress(item.current, item.target);
+    const hidden = item.secret && !item.got;
+    const unlockedLabel = item.unlockedAt ? goalFieldDate(item.unlockedAt) : item.got ? 'Unlocked now' : '';
+    const value = item.format === 'money'
+      ? `${money(Math.min(item.current,item.target))} / ${money(item.target)}`
+      : `${Math.min(item.current,item.target)} / ${item.target}`;
+    return `<article class="hunter-achievement rarity-${item.rarity.toLowerCase()} ${item.got?'unlocked':'locked'} ${hidden?'secret':''}" data-achievement-id="${item.id}">
+      <div class="hunter-achievement-aura" aria-hidden="true"></div>
+      <header><span>${item.category}</span><b>${HUNTER_ARCHIVE_RARITIES[item.rarity].label}</b></header>
+      <div class="hunter-achievement-medal"><i>${item.got ? item.icon : hidden ? '?' : '◇'}</i><em>${item.got ? 'UNLOCKED' : hidden ? 'SECRET' : `${pct}%`}</em></div>
+      <div class="hunter-achievement-copy"><h3>${hidden ? 'Hidden Achievement' : esc(item.name)}</h3><p>${hidden ? 'Cumple una condición especial para revelar este registro.' : esc(item.desc)}</p></div>
+      <div class="hunter-achievement-progress"><div><span>${item.got ? 'ARCHIVED' : 'PROGRESS'}</span><strong>${item.got ? 'COMPLETED' : value}</strong></div><div class="hunter-achievement-meter"><i style="width:${pct}%"></i></div></div>
+      ${item.got ? `<div class="hunter-achievement-stamp">HUNTER ARCHIVE · ${esc(unlockedLabel)}</div>` : ''}
+    </article>`;
+  }).join('');
+
+  grid.innerHTML = `<section class="hunter-archive">
+    <div class="hunter-archive-hero">
+      <div><span>HUNTER ASSOCIATION · PERMANENT RECORD</span><h2>Hunter Archive</h2><p>Achievements are generated from real activity across Finance, Goals, Life, Books, Gym and Skill Academy. Haki remains a separate One Piece system connected only to Habits.</p></div>
+      <div class="hunter-archive-seal"><small>ARCHIVE SCORE</small><strong>${rarityScore}</strong><span>${unlocked}/${achievements.length} unlocked</span></div>
+    </div>
+    <div class="hunter-archive-summary">
+      <div><small>UNLOCKED</small><strong>${unlocked}</strong><span>permanent records</span></div>
+      <div><small>LOCKED</small><strong>${achievements.length-unlocked}</strong><span>trials remaining</span></div>
+      <div><small>CATEGORIES</small><strong>${categories.length}</strong><span>connected systems</span></div>
+      <div><small>NEXT RECORD</small><strong>${next ? achievementProgress(next.current,next.target)+'%' : '100%'}</strong><span>${next ? esc(next.name) : 'Archive complete'}</span></div>
+    </div>
+    <div class="hunter-achievement-grid">${cards}</div>
+  </section>`;
 }
 
 const HAKI_LEVELS = [
@@ -3629,28 +3850,32 @@ function renderHakiChart() {
 
 /* ---------- METAS ---------- */
 function renderGoals() {
-  const won = S.goals.filter(g => g.status === 'Lograda 🏆').length;
-  const fuego = S.goals.filter(g => g.status === 'En proceso 🔥').length;
+  const goals = S.goals || [];
+  const won = goals.filter(g => g.status === 'Lograda 🏆').length;
+  const fuego = goals.filter(g => g.status === 'En proceso 🔥').length;
+  const pending = goals.filter(g => g.status === 'Pendiente').length;
+  const avg = goals.length ? Math.round(goals.reduce((sum, g) => sum + Math.max(0, Math.min(100, Number(g.pct || 0))), 0) / goals.length) : 0;
   $('#goalStats').innerHTML = `
-    <div class="card gold"><label>Goals achieved</label><strong>${won} / ${S.goals.length}</strong></div>
-    <div class="card"><label>In progress 🔥</label><strong>${fuego}</strong></div>`;
+    <div class="card gold goal-stat-card"><span class="goal-stat-icon">◆</span><div><label>Territories conquered</label><strong>${won} / ${goals.length}</strong><small>Completed expeditions</small></div></div>
+    <div class="card goal-stat-card"><span class="goal-stat-icon">◈</span><div><label>Routes in progress</label><strong>${fuego}</strong><small>Active field missions</small></div></div>
+    <div class="card goal-stat-card"><span class="goal-stat-icon">◇</span><div><label>Dormant routes</label><strong>${pending}</strong><small>Waiting for deployment</small></div></div>
+    <div class="card goal-stat-card"><span class="goal-stat-icon">◎</span><div><label>Average completion</label><strong>${avg}%</strong><small>Across every route</small></div></div>`;
   const estados = ['Pendiente', 'En proceso 🔥', 'Lograda 🏆'];
   const estLbl = { 'Pendiente': 'Pending', 'En proceso 🔥': 'In progress 🔥', 'Lograda 🏆': 'Achieved 🏆' };
   $('#goalTable').innerHTML =
     '<tr><th>Goal</th><th>Why do you want it?</th><th>Date</th><th>Status</th><th>%</th><th>Progress</th><th>Next step</th><th></th></tr>' +
-    S.goals.map(g => {
+    goals.map(g => {
       const p = Math.min(Math.max(g.pct || 0, 0), 100);
-      const bar = '█'.repeat(Math.round(p / 5)) + '░'.repeat(20 - Math.round(p / 5));
+      const bar = `<span class="goal-table-meter"><i style="width:${p}%"></i></span><small>${p}%</small>`;
       return `<tr class="${g.status === 'Lograda 🏆' ? 'goal-won' : ''}">
-        <td><input class="g-edit wide" data-id="${g.id}" data-f="name" value="${esc(g.name)}"></td>
-        <td><input class="g-edit wide" data-id="${g.id}" data-f="why" value="${esc(g.why)}" placeholder="your reason in one line"></td>
-        <td><input class="g-edit" data-id="${g.id}" data-f="target" value="${esc(g.target)}" style="width:84px"></td>
-        <td><select class="g-edit" data-id="${g.id}" data-f="status">
-          ${estados.map(s => `<option value="${s}" ${s === g.status ? 'selected' : ''}>${estLbl[s]}</option>`).join('')}</select></td>
-        <td><input class="g-edit" type="number" min="0" max="100" data-id="${g.id}" data-f="pct" value="${p}" style="width:64px"></td>
-        <td class="bar-cell">${bar}</td>
-        <td><input class="g-edit wide" data-id="${g.id}" data-f="next_step" value="${esc(g.next_step)}" placeholder="next small action"></td>
-        <td><button class="del-x" data-type="goal" data-id="${g.id}">✕</button></td></tr>`;
+        <td data-label="Goal"><input class="g-edit wide" data-id="${g.id}" data-f="name" value="${esc(g.name)}"></td>
+        <td data-label="Why"><input class="g-edit wide" data-id="${g.id}" data-f="why" value="${esc(g.why)}" placeholder="your reason in one line"></td>
+        <td data-label="Target"><input class="g-edit" data-id="${g.id}" data-f="target" value="${esc(g.target)}" style="width:84px"></td>
+        <td data-label="Status"><select class="g-edit" data-id="${g.id}" data-f="status">${estados.map(s => `<option value="${s}" ${s === g.status ? 'selected' : ''}>${estLbl[s]}</option>`).join('')}</select></td>
+        <td data-label="Progress %"><input class="g-edit" type="number" min="0" max="100" data-id="${g.id}" data-f="pct" value="${p}" style="width:64px"></td>
+        <td data-label="Route progress" class="bar-cell">${bar}</td>
+        <td data-label="Critical mission"><input class="g-edit wide" data-id="${g.id}" data-f="next_step" value="${esc(g.next_step)}" placeholder="next small action"></td>
+        <td data-label="Remove"><button class="del-x" data-type="goal" data-id="${g.id}" aria-label="Delete ${esc(g.name)}">✕</button></td></tr>`;
     }).join('');
   renderExpeditions();
 }
