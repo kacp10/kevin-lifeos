@@ -12,14 +12,16 @@ import re
 import secrets
 import sqlite3
 from datetime import date
-from datetime import datetime
+from datetime import datetime, timedelta
 from contextlib import contextmanager
 from flask import Flask, jsonify, render_template, request, g, Response
 import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 115  # must match FRONT_V in static/app.js
+VERSION = 117  # V117; must match FRONT_V in static/app.js
+CHECKPOINT_RETENTION_DAYS = 1
+_last_checkpoint_cleanup_day = None
 app = Flask(__name__)
 
 # Logging útil tanto en local como en Render. No imprime contraseñas ni cuerpos JSON.
@@ -435,10 +437,32 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, why TEXT DEFAULT '',
         target TEXT DEFAULT '', status TEXT DEFAULT 'Pendiente',
         pct INTEGER DEFAULT 0, next_step TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS goal_checkpoints (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, goal_id INTEGER NOT NULL,
+        title TEXT NOT NULL, done INTEGER DEFAULT 0, position INTEGER DEFAULT 0,
+        created TEXT DEFAULT '', completed_at TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS goal_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, goal_id INTEGER NOT NULL,
+        note TEXT NOT NULL, created TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS goal_strategy (
+        goal_id INTEGER PRIMARY KEY, obstacle TEXT DEFAULT '',
+        threat TEXT DEFAULT 'Stable', strategy TEXT DEFAULT '',
+        next_action TEXT DEFAULT '', updated TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS achievement_unlocks (
+        akey TEXT PRIMARY KEY, unlocked_at TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS compras (
         id INTEGER PRIMARY KEY AUTOINCREMENT, creditor TEXT, concepto TEXT,
         valor INTEGER, cuotas INTEGER, start INTEGER, abonado INTEGER DEFAULT 0);
     ''')
+    # V117: fecha de finalización para retirar hitos completados después de 24 horas.
+    try:
+        con.execute("SELECT completed_at FROM goal_checkpoints LIMIT 1")
+    except Exception:
+        try:
+            con.execute("ALTER TABLE goal_checkpoints ADD COLUMN completed_at TEXT DEFAULT ''")
+        except Exception as e:
+            print('  (aviso) no se pudo añadir goal_checkpoints.completed_at:', e)
+
     # Índices: gym_sets/abonos/payment_checks crecen indefinidamente con el uso;
     # estos evitan que las consultas se vuelvan lentas cuando haya mucho historial.
     # IF NOT EXISTS los hace seguros de correr en cada arranque, en SQLite y Postgres.
@@ -447,6 +471,9 @@ def init_db():
         'CREATE INDEX IF NOT EXISTS idx_payment_checks_month ON payment_checks(month)',
         'CREATE INDEX IF NOT EXISTS idx_abonos_fecha ON abonos(fecha)',
         'CREATE INDEX IF NOT EXISTS idx_abonos_debt_id ON abonos(debt_id)',
+        'CREATE INDEX IF NOT EXISTS idx_goal_checkpoints_goal ON goal_checkpoints(goal_id, position, id)',
+        'CREATE INDEX IF NOT EXISTS idx_goal_checkpoints_completed ON goal_checkpoints(done, completed_at)',
+        'CREATE INDEX IF NOT EXISTS idx_goal_logs_goal_created ON goal_logs(goal_id, created, id)',
     ):
         try:
             con.execute(idx_sql)
@@ -1170,8 +1197,29 @@ def v2check():
     return html
 
 
+def cleanup_completed_goal_checkpoints():
+    """Retira hitos completados hace más de 24 horas, como máximo una vez al día."""
+    global _last_checkpoint_cleanup_day
+    today = date.today().isoformat()
+    if _last_checkpoint_cleanup_day == today:
+        return
+    cutoff = (datetime.now() - timedelta(days=CHECKPOINT_RETENTION_DAYS)).isoformat(timespec='seconds')
+    d = db()
+    # Los hitos completados antes de V117 no tenían completed_at; usamos su fecha de creación.
+    d.execute(
+        "UPDATE goal_checkpoints SET completed_at=created WHERE done=1 AND (completed_at='' OR completed_at IS NULL)"
+    )
+    d.execute(
+        "DELETE FROM goal_checkpoints WHERE done=1 AND completed_at<>'' AND completed_at<?",
+        (cutoff,),
+    )
+    d.commit()
+    _last_checkpoint_cleanup_day = today
+
+
 @app.get('/api/state')
 def state():
+    cleanup_completed_goal_checkpoints()
     d = db()
     month = request.args.get('month', date.today().strftime('%Y-%m'))
     plan = json.loads(d.execute(
@@ -1225,6 +1273,12 @@ def state():
     _sync_carrera_ingles(d)
     _sync_metas_carreras(d)
     goals = [dict(r) for r in d.execute('SELECT * FROM goals')]
+    goal_checkpoints = [dict(r) for r in d.execute(
+        'SELECT * FROM goal_checkpoints ORDER BY goal_id, position, id')]
+    goal_logs = [dict(r) for r in d.execute(
+        'SELECT * FROM goal_logs ORDER BY created DESC, id DESC')]
+    goal_strategy = [dict(r) for r in d.execute('SELECT * FROM goal_strategy')]
+    achievement_unlocks = [dict(r) for r in d.execute('SELECT * FROM achievement_unlocks ORDER BY unlocked_at DESC')]
     shifts = {r['weekday']: r['shift'] for r in d.execute('SELECT * FROM week_shifts')}
     profile = {r['key']: r['value'] for r in d.execute('SELECT * FROM study_profile')}
     rdone = [f"{r['day']}|{r['activity']}" for r in d.execute('SELECT day, activity FROM routine_done')]
@@ -1268,7 +1322,7 @@ def state():
     for ed in extra_debts:
         ed['abonado'] = (ed.get('abonado') or 0) + historicos_extra.get(ed['id'], 0)
     core = [x[0] for x in _SEED['debts']]
-    return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
+    return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, goal_checkpoints=goal_checkpoints, goal_logs=goal_logs, goal_strategy=goal_strategy, achievement_unlocks=achievement_unlocks, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
                         marks=marks, history=history, dreams=dreams,
                         animes=animes, books=books, gym_sets=gym_sets,
                         servicios=services, fund=fund, piggy=piggy, piggy_moves=piggy_moves, shopping=shopping, todos=todos, detalle=_detalle_actual(d),
@@ -1661,8 +1715,119 @@ def goal_update():
 
 @app.delete('/api/goal/<int:i>')
 def goal_del(i):
-    db().execute('DELETE FROM goals WHERE id=?', (i,))
+    d = db()
+    d.execute('DELETE FROM goal_checkpoints WHERE goal_id=?', (i,))
+    d.execute('DELETE FROM goal_logs WHERE goal_id=?', (i,))
+    d.execute('DELETE FROM goal_strategy WHERE goal_id=?', (i,))
+    d.execute('DELETE FROM goals WHERE id=?', (i,))
+    d.commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/goal/checkpoint')
+def goal_checkpoint_new():
+    j = request.json or {}
+    goal_id = to_int(j.get('goal_id'))
+    title = str(j.get('title') or '').strip()[:180]
+    if goal_id <= 0 or not title:
+        return jsonify(error='Goal and checkpoint title are required.'), 400
+    d = db()
+    if not d.execute('SELECT 1 FROM goals WHERE id=?', (goal_id,)).fetchone():
+        return jsonify(error='Goal not found.'), 404
+    row = d.execute('SELECT COALESCE(MAX(position), -1) AS p FROM goal_checkpoints WHERE goal_id=?', (goal_id,)).fetchone()
+    pos = (dict(row).get('p') if row else -1) or -1
+    d.execute('INSERT INTO goal_checkpoints (goal_id,title,position,created,completed_at) VALUES (?,?,?,?,?)',
+              (goal_id, title, pos + 1, datetime.now().isoformat(timespec='seconds'), ''))
+    d.commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/goal/checkpoint/toggle')
+def goal_checkpoint_toggle():
+    j = request.json or {}
+    checkpoint_id = to_int(j.get('id'))
+    done = 1 if to_int(j.get('done')) else 0
+    d = db()
+    row = d.execute('SELECT goal_id, done FROM goal_checkpoints WHERE id=?', (checkpoint_id,)).fetchone()
+    if not row:
+        return jsonify(error='Checkpoint not found.'), 404
+    completed_at = datetime.now().isoformat(timespec='seconds') if done else ''
+    d.execute(
+        'UPDATE goal_checkpoints SET done=?, completed_at=? WHERE id=?',
+        (done, completed_at, checkpoint_id),
+    )
+    d.commit()
+    return jsonify(ok=True, retention_days=CHECKPOINT_RETENTION_DAYS)
+
+
+@app.delete('/api/goal/checkpoint/<int:i>')
+def goal_checkpoint_del(i):
+    db().execute('DELETE FROM goal_checkpoints WHERE id=?', (i,))
     db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/goal/log')
+def goal_log_new():
+    j = request.json or {}
+    goal_id = to_int(j.get('goal_id'))
+    note = str(j.get('note') or '').strip()[:600]
+    if goal_id <= 0 or not note:
+        return jsonify(error='Goal and field note are required.'), 400
+    d = db()
+    if not d.execute('SELECT 1 FROM goals WHERE id=?', (goal_id,)).fetchone():
+        return jsonify(error='Goal not found.'), 404
+    d.execute('INSERT INTO goal_logs (goal_id,note,created) VALUES (?,?,?)',
+              (goal_id, note, datetime.now().isoformat(timespec='seconds')))
+    d.commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/achievement/unlock')
+def achievement_unlock():
+    j = request.json or {}
+    akey = re.sub(r'[^a-z0-9_-]', '', str(j.get('key') or '').lower())[:80]
+    if not akey:
+        return jsonify(error='Achievement key is required.'), 400
+    d = db()
+    if not d.execute('SELECT 1 FROM achievement_unlocks WHERE akey=?', (akey,)).fetchone():
+        d.execute(
+            'INSERT INTO achievement_unlocks (akey, unlocked_at) VALUES (?,?)',
+            (akey, datetime.now().isoformat(timespec='seconds')),
+        )
+        d.commit()
+    return jsonify(ok=True)
+
+
+@app.delete('/api/goal/log/<int:i>')
+def goal_log_del(i):
+    db().execute('DELETE FROM goal_logs WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/goal/strategy')
+def goal_strategy_save():
+    j = request.json or {}
+    goal_id = to_int(j.get('goal_id'))
+    if goal_id <= 0:
+        return jsonify(error='Goal is required.'), 400
+    threat = str(j.get('threat') or 'Stable').strip()[:30]
+    allowed = {'Stable', 'Under watch', 'High risk', 'Critical'}
+    if threat not in allowed:
+        threat = 'Stable'
+    values = (
+        goal_id,
+        str(j.get('obstacle') or '').strip()[:240],
+        threat,
+        str(j.get('strategy') or '').strip()[:400],
+        str(j.get('next_action') or '').strip()[:240],
+        datetime.now().isoformat(timespec='seconds'),
+    )
+    d = db()
+    d.execute('DELETE FROM goal_strategy WHERE goal_id=?', (goal_id,))
+    d.execute('INSERT INTO goal_strategy (goal_id,obstacle,threat,strategy,next_action,updated) VALUES (?,?,?,?,?,?)', values)
+    d.commit()
     return jsonify(ok=True)
 
 
