@@ -3054,3 +3054,139 @@ body.hunter-profile-open {
     max-height: 100dvh;
   }
 }
+
+
+/* ====== v118 · HAKI ARCHIVE MOVED TO SECRET HUNTER PROFILE ====== */
+.hunter-profile-haki {
+  min-width: 0;
+  margin: 14px 0 30px;
+  padding: 14px;
+  overflow: hidden;
+  border: 1px solid rgba(224,65,99,.25);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 88% 8%, rgba(224,65,99,.12), transparent 30%),
+    linear-gradient(135deg,rgba(117,18,45,.15),rgba(15,19,33,.96));
+}
+.hunter-profile-haki-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+.hunter-profile-haki-head > div { min-width: 0; }
+.hunter-profile-haki-head span {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: #f5ce63;
+  font-weight: 900;
+}
+.hunter-profile-haki-head h2 { margin: 5px 0; }
+.hunter-profile-haki-head p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.hunter-profile-haki-head > b {
+  max-width: 220px;
+  color: #ff809a;
+  font-size: .78rem;
+  line-height: 1.25;
+  text-align: right;
+}
+.hunter-profile-haki .haki-showcase { margin-bottom: 14px; }
+.hunter-profile-haki .haki-hero {
+  grid-template-columns: minmax(110px, 160px) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+  padding: 10px;
+}
+.hunter-profile-haki .haki-hero-art {
+  width: 100%;
+  max-width: 160px;
+  min-height: 110px;
+  aspect-ratio: 1.25 / 1;
+}
+.hunter-profile-haki .haki-hero-info h3 {
+  margin: 5px 0;
+  font-size: clamp(1.05rem, 2.2vw, 1.45rem);
+}
+.hunter-profile-haki .haki-hero-info p {
+  margin-bottom: 8px;
+  font-size: .78rem;
+}
+.hunter-profile-haki .haki-next {
+  margin-bottom: 7px;
+  font-size: .76rem;
+}
+.hunter-profile-haki .haki-progress { height: 8px; }
+.hunter-profile-haki .haki-evolution-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+.hunter-profile-haki .haki-evolution { padding: 6px; }
+.hunter-profile-haki .haki-evolution b {
+  margin-top: 5px;
+  font-size: .68rem;
+}
+.hunter-profile-haki .haki-evolution small { font-size: .56rem; }
+.hunter-profile-haki-history {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255,255,255,.07);
+}
+.hunter-profile-haki-history h3 {
+  margin: 0 0 8px;
+  font-size: .84rem;
+}
+.hunter-profile-haki-history .haki-month {
+  padding: 5px 8px;
+  font-size: .66rem;
+}
+.hunter-profile-haki-history canvas {
+  width: 100% !important;
+  max-height: 150px;
+  margin-top: 10px;
+}
+@media (max-width: 760px) {
+  .hunter-profile-haki .haki-evolution-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .hunter-profile-haki .haki-evolution:last-child {
+    grid-column: auto;
+    max-width: none;
+  }
+}
+@media (max-width: 560px) {
+  .hunter-profile-haki { padding: 11px; }
+  .hunter-profile-haki-head { flex-direction: column; gap: 7px; }
+  .hunter-profile-haki-head > b { max-width: none; text-align: left; }
+  .hunter-profile-haki .haki-hero {
+    grid-template-columns: 92px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+  }
+  .hunter-profile-haki .haki-hero-art {
+    max-width: 92px;
+    min-height: 82px;
+    margin: 0;
+  }
+  .hunter-profile-haki .haki-rank { font-size: .58rem; }
+  .hunter-profile-haki .haki-hero-info h3 { font-size: 1rem; }
+  .hunter-profile-haki .haki-hero-info p { font-size: .7rem; line-height: 1.35; }
+  .hunter-profile-haki .haki-next { font-size: .68rem; line-height: 1.35; }
+  .hunter-profile-haki .haki-evolution-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .hunter-profile-haki .haki-evolution:last-child {
+    grid-column: 1 / -1;
+    width: calc(50% - 4px);
+    justify-self: center;
+  }
+}
+@media (max-width: 360px) {
+  .hunter-profile-haki .haki-hero { grid-template-columns: 76px minmax(0, 1fr); }
+  .hunter-profile-haki .haki-hero-art { max-width: 76px; min-height: 70px; }
+}
