@@ -3558,7 +3558,6 @@ function renderHunterProfile() {
   ${pending.length?`<section class="hunter-profile-section pending-review"><div><span class="profile-kicker">SKILLS PENDING REVIEW</span><h2>${pending.length} finished course${pending.length===1?' has':'s have'} no registered skills</h2></div><div class="profile-review-list">${pending.map(c=>`<button data-course-skills="${c.id}"><span>✓ ${esc(c.title)}</span><small>${esc(c.career||'Career')}</small><b>Review skills →</b></button>`).join('')}</div></section>`:''}
   <section class="hunter-profile-section"><div><span class="profile-kicker">FEATURED ARCHIVE</span><h2>Permanent records</h2></div><div class="profile-featured-achievements">${featured.length?featured.map(x=>`<span>◆ ${esc(String(x.akey||'').replace(/-/g,' '))}</span>`).join(''):'<span>No permanent records unlocked yet.</span>'}</div></section>
   <section class="hunter-profile-haki haki-panel">
-    <div class="hunter-profile-haki-head"><div><span>ONE PIECE SYSTEM · HABITS LINKED</span><h2>Haki evolution</h2><p>Your monthly Habit performance still controls every Haki unlock. This record remains separate from Hunter ranks and Hunter XP.</p></div><b>${esc(document.getElementById('hakiBadge')?.textContent||'Haki system')}</b></div>
     <div id="hakiShowcase" class="haki-showcase" aria-live="polite"></div>
     <div class="hunter-profile-haki-history"><h3>Haki history · conquered months (≥70%)</h3><div id="hakiHistory" class="haki-history"></div><canvas id="hakiChart" height="150"></canvas></div>
   </section>`;
@@ -3865,10 +3864,13 @@ function renderHaki() {
     <div class="haki-evolution-grid">${gallery}</div>`;
   }
 
-  $('#hakiHistory').innerHTML = (S.history || []).map(h =>
-    `<span class="haki-month ${h.pct >= 0.7 ? 'win' : 'lose'}">
-     ${esc(h.label)}: ${pct(h.pct)} ${h.pct >= 0.7 ? '✔' : '✘'}</span>`
-  ).join('') || '<span class="hint">Close your first month to start earning Haki. The King demands 6 months ≥70%.</span>';
+  const historyHost = $('#hakiHistory');
+  if (historyHost) {
+    historyHost.innerHTML = (S.history || []).map(h =>
+      `<span class="haki-month ${h.pct >= 0.7 ? 'win' : 'lose'}">
+       ${esc(h.label)}: ${pct(h.pct)} ${h.pct >= 0.7 ? '✔' : '✘'}</span>`
+    ).join('') || '<span class="hint">Close your first month to start earning Haki. The King demands 6 months ≥70%.</span>';
+  }
   renderHakiChart();
 }
 
