@@ -3190,3 +3190,331 @@ body.hunter-profile-open {
   .hunter-profile-haki .haki-hero { grid-template-columns: 76px minmax(0, 1fr); }
   .hunter-profile-haki .haki-hero-art { max-width: 76px; min-height: 70px; }
 }
+
+/* ====== V119 · HOME VISUAL REFINEMENT ====== */
+/* Financial summary: balanced 3 × 2 composition on desktop, compact on mobile. */
+#tab-inicio #kpis.cards-5 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+#tab-inicio #kpis .card {
+  position: relative;
+  min-height: 96px;
+  padding: 16px 17px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-radius: 15px;
+  background:
+    linear-gradient(135deg, rgba(255,255,255,.035), transparent 58%),
+    linear-gradient(145deg, #211a3b, #171328);
+}
+#tab-inicio #kpis .card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--accent, #806dff);
+  opacity: .9;
+}
+#tab-inicio #kpis .card.red::before { background: var(--bad, #e15b73); }
+#tab-inicio #kpis .card.green::before { background: var(--ok, #36c9a7); }
+#tab-inicio #kpis .card label {
+  max-width: 100%;
+  font-size: .71rem;
+  line-height: 1.35;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+  color: var(--mut);
+}
+#tab-inicio #kpis .card strong {
+  margin-top: 9px;
+  font-size: clamp(1rem, 2vw, 1.28rem);
+  line-height: 1.05;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* Shopping: Hunter supply requisition, still the same modal and logic. */
+.hunter-supply-modal.as-modal {
+  width: min(650px, 94vw);
+  max-height: min(86vh, 820px);
+  padding: 0;
+  overflow-x: hidden;
+  border: 1px solid rgba(245,185,66,.55);
+  background:
+    radial-gradient(circle at 90% 0%, rgba(245,185,66,.13), transparent 34%),
+    linear-gradient(155deg, #211a38, #12101f 72%);
+}
+.hunter-supply-modal::before {
+  content: '';
+  display: block;
+  height: 5px;
+  background: linear-gradient(90deg, transparent, var(--gold), #ffefad, var(--gold), transparent);
+}
+.supply-modal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  padding: 22px 24px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.supply-modal-head h2 { margin: 4px 0 5px; }
+.supply-modal-head p {
+  margin: 0;
+  max-width: 470px;
+  color: var(--mut);
+  font-size: .78rem;
+  line-height: 1.5;
+}
+.supply-eyebrow,
+.notebook-eyebrow {
+  display: inline-block;
+  color: var(--gold);
+  font-family: 'Russo One', sans-serif;
+  font-size: .63rem;
+  letter-spacing: .16em;
+}
+.supply-entry-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 82px auto;
+  gap: 10px;
+  align-items: end;
+  margin: 0;
+  padding: 17px 24px;
+  background: rgba(0,0,0,.13);
+}
+.supply-entry-form label { display: grid; gap: 5px; }
+.supply-entry-form label > span {
+  color: var(--mut);
+  font-size: .66rem;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.supply-entry-form input { width: 100% !important; min-width: 0; }
+.supply-list-frame { padding: 4px 24px 18px; }
+.hunter-supply-modal #shoppingHistory { padding: 0 24px 22px; }
+.hunter-supply-modal .shop-item {
+  margin-top: 7px;
+  padding: 10px 11px;
+  border: 1px solid rgba(255,255,255,.075);
+  border-radius: 11px;
+  background: rgba(255,255,255,.025);
+}
+.hunter-supply-modal .shop-item:hover { border-color: rgba(245,185,66,.35); }
+.hunter-supply-modal .shop-modal-close,
+.hunter-notebook-modal .shop-modal-close {
+  z-index: 3;
+  top: 13px;
+  right: 15px;
+  width: 31px;
+  height: 31px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 50%;
+  background: rgba(10,8,18,.62);
+}
+
+/* To-do only: compact Hunter field notebook. */
+.hunter-notebook-modal.as-modal {
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(610px, 94vw);
+  max-height: 86vh;
+  padding: 0;
+  overflow-x: hidden;
+  border: 1px solid rgba(111,208,181,.38);
+  background: #171525;
+  box-shadow: 0 26px 80px rgba(0,0,0,.58);
+}
+.notebook-head {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 22px 24px 17px;
+  background:
+    linear-gradient(100deg, rgba(45,152,128,.15), transparent 58%),
+    linear-gradient(180deg, rgba(255,255,255,.025), transparent);
+  border-bottom: 1px solid rgba(111,208,181,.22);
+}
+.notebook-head h2 { margin: 4px 0 5px; }
+.notebook-head p {
+  margin: 0;
+  color: var(--mut);
+  font-size: .76rem;
+  line-height: 1.45;
+}
+.notebook-entry-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+  margin: 0;
+  padding: 15px 24px;
+  background: #11101d;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+}
+.notebook-entry-form input {
+  width: 100%;
+  min-width: 0;
+  border-color: rgba(111,208,181,.3);
+}
+.notebook-paper {
+  position: relative;
+  min-height: 180px;
+  padding: 12px 24px 22px 53px;
+  background-color: #1c1a2a;
+  background-image:
+    linear-gradient(90deg, transparent 0, transparent 34px, rgba(226,99,119,.22) 35px, transparent 36px),
+    repeating-linear-gradient(180deg, transparent 0, transparent 35px, rgba(128,117,167,.16) 36px, transparent 37px);
+}
+.notebook-paper::before {
+  content: 'FIELD NOTES · ' attr(data-date);
+  position: absolute;
+  left: 16px;
+  top: 19px;
+  color: rgba(255,255,255,.2);
+  font-size: .56rem;
+  letter-spacing: .12em;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+.todo-note-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 25px minmax(0, 1fr) 26px;
+  align-items: center;
+  gap: 9px;
+  min-height: 36px;
+  padding: 4px 2px;
+}
+.todo-check {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border: 1.5px solid rgba(111,208,181,.55);
+  border-radius: 50%;
+  background: rgba(17,16,29,.85);
+  color: #0d231d;
+  font-size: .75rem;
+  transition: transform .18s ease, background .18s ease, border-color .18s ease;
+}
+.todo-check:hover { transform: scale(1.08); border-color: #72d4b9; }
+.todo-note-row.is-complete .todo-check {
+  background: #72d4b9;
+  border-color: #72d4b9;
+  box-shadow: 0 0 12px rgba(114,212,185,.25);
+}
+.todo-note-text {
+  position: relative;
+  min-width: 0;
+  color: #eeeaf8;
+  font-size: .86rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  transition: color .22s ease, opacity .22s ease;
+}
+.todo-note-row.is-complete .todo-note-text {
+  color: var(--mut);
+  opacity: .7;
+  text-decoration: line-through;
+  text-decoration-color: #72d4b9;
+  text-decoration-thickness: 2px;
+}
+.todo-note-row.is-complete::after {
+  content: 'CLEARED';
+  position: absolute;
+  right: 34px;
+  top: 2px;
+  color: rgba(114,212,185,.42);
+  font-family: 'Russo One', sans-serif;
+  font-size: .48rem;
+  letter-spacing: .1em;
+  transform: rotate(-4deg);
+}
+.todo-remove {
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(255,255,255,.28);
+  cursor: pointer;
+  transition: color .18s ease, background .18s ease;
+}
+.todo-remove:hover { color: #ff8498; background: rgba(225,91,115,.1); }
+.todo-empty-note {
+  min-height: 130px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  color: var(--mut);
+  text-align: left;
+}
+.todo-empty-note > span { color: var(--gold); font-size: 1.15rem; }
+.todo-empty-note p { margin: 0; line-height: 1.45; }
+.todo-empty-note small { opacity: .75; }
+
+@media (max-width: 860px) {
+  #tab-inicio #kpis.cards-5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  #tab-inicio #kpis.cards-5 { gap: 8px; }
+  #tab-inicio #kpis .card { min-height: 83px; padding: 13px 12px; }
+  #tab-inicio #kpis .card strong { font-size: .98rem; }
+  .supply-modal-head,
+  .notebook-head { padding: 19px 17px 14px; padding-right: 47px; }
+  .supply-modal-head { display: block; }
+  .supply-modal-head .btn-ghost,
+  .notebook-head .btn-ghost { margin-top: 10px; }
+  .supply-entry-form {
+    grid-template-columns: minmax(0, 1fr) 68px;
+    padding: 14px 17px;
+  }
+  .supply-entry-form .btn-gold { grid-column: 1 / -1; width: 100%; }
+  .supply-list-frame { padding: 4px 17px 15px; }
+  .hunter-supply-modal #shoppingHistory { padding: 0 17px 18px; }
+  .notebook-entry-form { grid-template-columns: 1fr; padding: 13px 17px; }
+  .notebook-entry-form .btn-gold { width: 100%; }
+  .notebook-paper { padding: 10px 15px 18px 40px; }
+  .todo-note-row { grid-template-columns: 24px minmax(0, 1fr) 24px; gap: 7px; }
+  .todo-note-text { font-size: .81rem; }
+}
+@media (max-width: 350px) {
+  #tab-inicio #kpis.cards-5 { grid-template-columns: 1fr; }
+}
+
+/* ====== V119 FIX · CLEAR DONE BUTTON SPACING ====== */
+/* Reserve the close-button corner and place Clear done lower in both modals. */
+.supply-modal-head,
+.notebook-head {
+  padding-right: 68px;
+}
+
+.supply-modal-head > .btn-ghost,
+.notebook-head > .btn-ghost {
+  align-self: center;
+  margin-top: 22px;
+  margin-right: 2px;
+}
+
+@media (max-width: 560px) {
+  .supply-modal-head,
+  .notebook-head {
+    padding-right: 54px;
+  }
+
+  .supply-modal-head > .btn-ghost,
+  .notebook-head > .btn-ghost {
+    margin-top: 16px;
+    margin-right: 0;
+  }
+}

@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 118;
+const FRONT_V = 119;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1487,24 +1487,31 @@ document.getElementById('openTodoBtn')?.addEventListener('click', openTodoModal)
 
 function renderTodos() {
   const cont = document.getElementById('todoList');
+  const paper = cont?.closest('.notebook-paper');
+  if (paper) paper.dataset.date = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase();
   const todos = S.todos || [];
   const pendientes = todos.filter(t => !t.done);
-  // botón del header: se ilumina con el nº de pendientes (igual que Shopping)
   const btn = document.getElementById('openTodoBtn');
   if (btn) btn.innerHTML = '📝 To-do' + (pendientes.length ? ` <span class="shop-count">${pendientes.length}</span>` : '');
   if (!cont) return;
   if (!todos.length) {
-    cont.innerHTML = '<p class="hint">Nothing pending. Write down anything you don\'t want to forget. 📝</p>';
+    cont.innerHTML = `<div class="todo-empty-note">
+      <span>✦</span>
+      <p>No field notes yet.<br><small>Write down the next thing you cannot afford to forget.</small></p>
+    </div>`;
     return;
   }
   cont.innerHTML = todos.map(t => `
-    <div class="shop-item ${t.done ? 'shop-done' : ''}">
-      <button class="todo-check" data-id="${t.id}" title="${t.done ? 'Mark as pending' : 'Mark as done'}">${t.done ? '✅' : '⬜'}</button>
-      <span class="shop-name">${esc(t.texto)}</span>
-      <button class="del-x" data-todo="${t.id}" title="Delete">✕</button>
+    <div class="todo-note-row ${t.done ? 'is-complete' : ''}" data-todo-row="${t.id}">
+      <button class="todo-check" data-id="${t.id}" type="button"
+        aria-pressed="${t.done ? 'true' : 'false'}"
+        title="${t.done ? 'Reopen field note' : 'Complete field note'}">
+        <span>${t.done ? '✓' : ''}</span>
+      </button>
+      <span class="todo-note-text">${esc(t.texto)}</span>
+      <button class="todo-remove" data-todo="${t.id}" type="button" title="Delete field note">✕</button>
     </div>`).join('');
 }
-
 document.getElementById('todoNew')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.currentTarget;
@@ -1523,9 +1530,17 @@ document.getElementById('todoNew')?.addEventListener('submit', async (e) => {
 document.getElementById('todoClearBtn')?.addEventListener('click', async (e) => {
   const hechos = (S.todos || []).filter(t => t.done);
   if (!hechos.length) return;
+  const ok = await modal({
+    icon: '📜',
+    title: 'Clear completed field notes?',
+    text: `${hechos.length} completed ${hechos.length === 1 ? 'note' : 'notes'} will be removed now. Otherwise, they disappear automatically tomorrow.`,
+    okText: 'Clear completed',
+    cancelText: 'Keep them'
+  });
+  if (ok === null) return;
   await withBusy(e.currentTarget, async () => {
     await api('/api/todo/clear_done', { body: {} });
-    toast('🧹 Done items cleared');
+    toast('✓ Completed field notes cleared');
     await load();
   });
 });
@@ -1533,15 +1548,28 @@ document.getElementById('todoClearBtn')?.addEventListener('click', async (e) => 
 document.addEventListener('click', async (e) => {
   const tchk = e.target.closest('.todo-check');
   if (tchk) {
-    await api('/api/todo/toggle', { body: { id: +tchk.dataset.id } });
-    load();
+    await withBusy(tchk, async () => {
+      await api('/api/todo/toggle', { body: { id: +tchk.dataset.id } });
+      await load();
+    });
     return;
   }
-  const tdel = e.target.closest('[data-todo]');
-  if (tdel && tdel.classList.contains('del-x')) {
-    await api('/api/todo/' + tdel.dataset.todo, { method: 'DELETE' });
-    toast('✕ Removed');
-    load();
+  const tdel = e.target.closest('.todo-remove');
+  if (tdel) {
+    const item = (S.todos || []).find(t => +t.id === +tdel.dataset.todo);
+    const ok = await modal({
+      icon: '🗑️',
+      title: 'Delete field note?',
+      text: `<b>${esc(item?.texto || 'This note')}</b> will be removed from today’s notebook.`,
+      okText: 'Delete note',
+      cancelText: 'Keep it'
+    });
+    if (ok === null) return;
+    await withBusy(tdel, async () => {
+      await api('/api/todo/' + tdel.dataset.todo, { method: 'DELETE' });
+      toast('✕ Field note removed');
+      await load();
+    });
     return;
   }
 });
