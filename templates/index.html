@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,7 +12,7 @@
 <body>
 
 <header class="topbar">
-  <div class="brand">KEVIN · <span>LIFE OS</span></div>
+  <button class="brand brand-profile-entry" id="openHunterProfile" type="button" aria-label="Open Hunter Profile">KEVIN · <span>LIFE OS</span><small>OPEN HUNTER FILE</small></button>
   <div class="haki-badge" id="hakiBadge">😴 Haki asleep</div>
 </header>
 
@@ -29,7 +29,14 @@
   <button data-tab="logros">🏆 Achievements</button>
 </nav>
 
-<main>
+<section id="hunterProfileScreen" class="hunter-profile-screen" aria-hidden="true">
+  <div class="hunter-profile-shell">
+    <button class="hunter-profile-back" id="closeHunterProfile" type="button">← Back to Life OS</button>
+    <div id="hunterProfileContent"></div>
+  </div>
+</section>
+
+<main id="lifeOsMain">
 
 <!-- ============ INICIO ============ -->
 <section id="tab-inicio" class="tab active">
@@ -416,8 +423,6 @@
 
 <!-- ============ ACHIEVEMENTS ============ -->
 <section id="tab-logros" class="tab">
-  <div id="hunterLicensePanel"></div>
-  <div id="hunterRankPanel"></div>
   <h1>🏆 Hunter Medals</h1>
   <p class="hint">Medals you unlock by playing the long game. Locked ones show what's next.</p>
   <div class="achievements-grid" id="achievementsGrid"></div>
