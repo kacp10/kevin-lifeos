@@ -19,7 +19,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 117  # V117; must match FRONT_V in static/app.js
+VERSION = 118  # V118; must match FRONT_V in static/app.js
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -450,6 +450,14 @@ def init_db():
         next_action TEXT DEFAULT '', updated TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS achievement_unlocks (
         akey TEXT PRIMARY KEY, unlocked_at TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS skills (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL,
+        normalized_name TEXT NOT NULL UNIQUE, category TEXT DEFAULT 'General',
+        created_at TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS course_skills (
+        course_id INTEGER NOT NULL, skill_id INTEGER NOT NULL,
+        source TEXT DEFAULT 'suggested', created_at TEXT DEFAULT '',
+        PRIMARY KEY (course_id, skill_id));
     CREATE TABLE IF NOT EXISTS compras (
         id INTEGER PRIMARY KEY AUTOINCREMENT, creditor TEXT, concepto TEXT,
         valor INTEGER, cuotas INTEGER, start INTEGER, abonado INTEGER DEFAULT 0);
@@ -463,6 +471,21 @@ def init_db():
         except Exception as e:
             print('  (aviso) no se pudo añadir goal_checkpoints.completed_at:', e)
 
+
+    # V118: link finished courses to their career/stage while preserving old rows.
+    for column_sql in (
+        "ALTER TABLE courses_done ADD COLUMN career_id INTEGER DEFAULT NULL",
+        "ALTER TABLE courses_done ADD COLUMN step INTEGER DEFAULT 0",
+    ):
+        try:
+            con.execute(column_sql)
+        except Exception:
+            pass
+    try:
+        con.execute("UPDATE courses_done SET career_id=(SELECT c.id FROM careers c WHERE c.name=courses_done.career LIMIT 1) WHERE career_id IS NULL")
+    except Exception as e:
+        print('  (notice) finished-course career links could not be backfilled:', e)
+
     # Índices: gym_sets/abonos/payment_checks crecen indefinidamente con el uso;
     # estos evitan que las consultas se vuelvan lentas cuando haya mucho historial.
     # IF NOT EXISTS los hace seguros de correr en cada arranque, en SQLite y Postgres.
@@ -474,6 +497,8 @@ def init_db():
         'CREATE INDEX IF NOT EXISTS idx_goal_checkpoints_goal ON goal_checkpoints(goal_id, position, id)',
         'CREATE INDEX IF NOT EXISTS idx_goal_checkpoints_completed ON goal_checkpoints(done, completed_at)',
         'CREATE INDEX IF NOT EXISTS idx_goal_logs_goal_created ON goal_logs(goal_id, created, id)',
+        'CREATE INDEX IF NOT EXISTS idx_course_skills_course ON course_skills(course_id, skill_id)',
+        'CREATE INDEX IF NOT EXISTS idx_courses_done_career_id ON courses_done(career_id, id)',
     ):
         try:
             con.execute(idx_sql)
@@ -1284,6 +1309,8 @@ def state():
     rdone = [f"{r['day']}|{r['activity']}" for r in d.execute('SELECT day, activity FROM routine_done')]
     careers = [dict(r) for r in d.execute('SELECT * FROM careers')]
     courses_done = [dict(r) for r in d.execute('SELECT * FROM courses_done ORDER BY id DESC')]
+    skills = [dict(r) for r in d.execute('SELECT * FROM skills ORDER BY name')]
+    course_skills = [dict(r) for r in d.execute('SELECT * FROM course_skills ORDER BY course_id, skill_id')]
     routine_extra = [dict(r) for r in d.execute('SELECT * FROM routine_extra')]
     routine_hidden = [f"{r['weekday']}|{r['akey']}" for r in d.execute('SELECT weekday, akey FROM routine_hidden')]
     routine_hidden_day = [f"{r['day']}|{r['akey']}" for r in d.execute('SELECT day, akey FROM routine_hidden_day')]
@@ -1322,7 +1349,7 @@ def state():
     for ed in extra_debts:
         ed['abonado'] = (ed.get('abonado') or 0) + historicos_extra.get(ed['id'], 0)
     core = [x[0] for x in _SEED['debts']]
-    return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, goal_checkpoints=goal_checkpoints, goal_logs=goal_logs, goal_strategy=goal_strategy, achievement_unlocks=achievement_unlocks, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
+    return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, goal_checkpoints=goal_checkpoints, goal_logs=goal_logs, goal_strategy=goal_strategy, achievement_unlocks=achievement_unlocks, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, skills=skills, course_skills=course_skills, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
                         marks=marks, history=history, dreams=dreams,
                         animes=animes, books=books, gym_sets=gym_sets,
                         servicios=services, fund=fund, piggy=piggy, piggy_moves=piggy_moves, shopping=shopping, todos=todos, detalle=_detalle_actual(d),
@@ -1523,7 +1550,9 @@ BACKUP_TABLES = (
     'careers', 'courses_done', 'routine_extra', 'routine_hidden',
     'routine_hidden_day', 'journal', 'assets', 'expenses', 'month_income',
     'services', 'fund', 'piggy', 'piggy_moves', 'shopping', 'todos',
-    'detalle_items', 'extra_debts', 'goals', 'compras', 'debts_v2', 'payments'
+    'detalle_items', 'extra_debts', 'goals', 'goal_checkpoints', 'goal_logs',
+    'goal_strategy', 'achievement_unlocks', 'skills', 'course_skills',
+    'compras', 'debts_v2', 'payments'
 )
 
 
@@ -1880,19 +1909,110 @@ def career_del(i):
     return jsonify(ok=True)
 
 
+def _skill_normalized_name(value):
+    value = re.sub(r'[^a-z0-9+#. ]+', ' ', str(value or '').strip().lower())
+    return re.sub(r'\s+', ' ', value).strip()
+
+
+def _save_course_skills(con, course_id, items, replace=False):
+    if replace:
+        con.execute('DELETE FROM course_skills WHERE course_id=?', (course_id,))
+    seen = set()
+    for raw in items or []:
+        if isinstance(raw, dict):
+            name = str(raw.get('name') or '').strip()
+            source = str(raw.get('source') or 'suggested').strip() or 'suggested'
+            category = str(raw.get('category') or 'General').strip() or 'General'
+        else:
+            name, source, category = str(raw or '').strip(), 'manual', 'General'
+        normalized = _skill_normalized_name(name)
+        if not name or not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        row = con.execute('SELECT id FROM skills WHERE normalized_name=?', (normalized,)).fetchone()
+        if row:
+            skill_id = dict(row)['id']
+        else:
+            con.execute(
+                'INSERT INTO skills (name,normalized_name,category,created_at) VALUES (?,?,?,?)',
+                (name[:120], normalized[:140], category[:80], datetime.now().isoformat(timespec='seconds'))
+            )
+            row = con.execute('SELECT id FROM skills WHERE normalized_name=?', (normalized,)).fetchone()
+            skill_id = dict(row)['id']
+        if not con.execute(
+            'SELECT 1 FROM course_skills WHERE course_id=? AND skill_id=?',
+            (course_id, skill_id)
+        ).fetchone():
+            con.execute(
+                'INSERT INTO course_skills (course_id,skill_id,source,created_at) VALUES (?,?,?,?)',
+                (course_id, skill_id, source[:30], datetime.now().isoformat(timespec='seconds'))
+            )
+
+
 @app.post('/api/course/done')
 def course_done():
-    j = request.json
-    db().execute('INSERT INTO courses_done (career, title, finished_on) VALUES (?,?,?)',
-                 (j.get('career', ''), j['title'].strip(), j.get('finished_on', date.today().isoformat())))
-    db().commit()
+    j = request.json or {}
+    title = str(j.get('title') or '').strip()
+    if not title:
+        return jsonify(error='Course name is required'), 400
+    d = db()
+    try:
+        career_id = int(j.get('career_id')) if j.get('career_id') not in ('', None) else None
+    except (TypeError, ValueError):
+        career_id = None
+    try:
+        step = max(0, min(3, int(j.get('step') or 0)))
+    except (TypeError, ValueError):
+        step = 0
+    career_name = str(j.get('career') or '').strip()
+    if career_id and not career_name:
+        row = d.execute('SELECT name FROM careers WHERE id=?', (career_id,)).fetchone()
+        if row:
+            career_name = dict(row)['name']
+    try:
+        d.execute(
+            'INSERT INTO courses_done (career,title,finished_on,career_id,step) VALUES (?,?,?,?,?)',
+            (career_name, title, j.get('finished_on') or date.today().isoformat(), career_id, step)
+        )
+        row = d.execute('SELECT id FROM courses_done ORDER BY id DESC LIMIT 1').fetchone()
+        course_id = dict(row)['id']
+        _save_course_skills(d, course_id, j.get('skills') or [], replace=True)
+        d.commit()
+    except Exception:
+        d.rollback()
+        raise
+    return jsonify(ok=True, id=course_id)
+
+
+@app.post('/api/course/skills')
+def course_skills_save():
+    j = request.json or {}
+    try:
+        course_id = int(j.get('course_id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid course'), 400
+    d = db()
+    if not d.execute('SELECT 1 FROM courses_done WHERE id=?', (course_id,)).fetchone():
+        return jsonify(error='Course not found'), 404
+    try:
+        _save_course_skills(d, course_id, j.get('skills') or [], replace=True)
+        d.commit()
+    except Exception:
+        d.rollback()
+        raise
     return jsonify(ok=True)
 
 
 @app.delete('/api/course/<int:i>')
 def course_del(i):
-    db().execute('DELETE FROM courses_done WHERE id=?', (i,))
-    db().commit()
+    d = db()
+    try:
+        d.execute('DELETE FROM course_skills WHERE course_id=?', (i,))
+        d.execute('DELETE FROM courses_done WHERE id=?', (i,))
+        d.commit()
+    except Exception:
+        d.rollback()
+        raise
     return jsonify(ok=True)
 
 
