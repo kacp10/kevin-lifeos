@@ -131,31 +131,37 @@
   </div>
 
   <!-- 🛒 SHOPPING: oculto por defecto, se abre desde el botón de arriba como modal -->
-  <div class="panel shopping-panel" id="shoppingPanel" style="display:none">
-    <div class="row-between">
-      <h2>🛒 Shopping & to-buy</h2>
+  <div class="panel shopping-panel hunter-supply-modal" id="shoppingPanel" style="display:none">
+    <div class="supply-modal-head">
+      <div>
+        <span class="supply-eyebrow">HUNTER SUPPLY REQUEST</span>
+        <h2>🛒 Shopping & to-buy</h2>
+        <p>Track supplies, purchases and multi-step errands without losing the financial trail.</p>
+      </div>
       <button class="btn-ghost" id="clearDoneBtn" title="Remove checked items">Clear done</button>
     </div>
-    <p class="hint">Quick list so you don't forget. Tap to cross out. Checked items clear at the end of the day.</p>
-    <form id="shopNew" class="shop-form">
-      <input id="shName" placeholder="What to buy / do? (e.g. Eye drops)" required>
-      <input id="shSlots" type="number" min="1" max="9" value="1" title="How many sub-tasks?" style="width:70px">
-      <button class="btn-gold" type="submit">+ Add</button>
+    <form id="shopNew" class="shop-form supply-entry-form">
+      <label class="supply-main-field"><span>Supply or errand</span><input id="shName" placeholder="e.g. Eye drops" required></label>
+      <label class="supply-slots-field"><span>Steps</span><input id="shSlots" type="number" min="1" max="9" value="1" title="How many sub-tasks?"></label>
+      <button class="btn-gold" type="submit">＋ Add request</button>
     </form>
-    <div id="shoppingList"></div>
+    <div class="supply-list-frame"><div id="shoppingList"></div></div>
     <div id="shoppingHistory"></div>
   </div>
-  <div class="panel shopping-panel" id="todoPanel" style="display:none">
-    <div class="row-between">
-      <h2>📝 To-do list</h2>
-      <button class="btn-ghost" id="todoClearBtn" title="Remove checked items">Clear done</button>
+  <div class="panel shopping-panel hunter-notebook-modal" id="todoPanel" style="display:none">
+    <div class="notebook-head">
+      <div>
+        <span class="notebook-eyebrow">HUNTER FIELD NOTEBOOK</span>
+        <h2>📝 Today’s field notes</h2>
+        <p>Completed notes stay crossed out for today and retire automatically tomorrow.</p>
+      </div>
+      <button class="btn-ghost" id="todoClearBtn" title="Remove completed notes now">Clear done</button>
     </div>
-    <p class="hint">Your notepad for activities and things not to forget. Tap to cross out.</p>
-    <form id="todoNew" class="shop-form">
-      <input id="tdText" placeholder="What do you need to do? (e.g. Call the bank)" required>
-      <button class="btn-gold" type="submit">+ Add</button>
+    <form id="todoNew" class="shop-form notebook-entry-form">
+      <input id="tdText" placeholder="Write the next thing you cannot forget…" required autocomplete="off">
+      <button class="btn-gold" type="submit">＋ Add note</button>
     </form>
-    <div id="todoList"></div>
+    <div class="notebook-paper"><div id="todoList"></div></div>
   </div>
 </section>
 
