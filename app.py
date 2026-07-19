@@ -19,7 +19,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 119  # V119; must match FRONT_V in static/app.js
+VERSION = 120  # V120; must match FRONT_V in static/app.js
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -384,6 +384,10 @@ def init_db():
     CREATE TABLE IF NOT EXISTS courses_done (
         id INTEGER PRIMARY KEY AUTOINCREMENT, career TEXT, title TEXT,
         finished_on TEXT);
+    CREATE TABLE IF NOT EXISTS career_courses (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, career_id INTEGER NOT NULL,
+        step INTEGER DEFAULT 0, title TEXT NOT NULL, platform TEXT DEFAULT 'Other',
+        pct INTEGER DEFAULT 0, created_at TEXT DEFAULT '', updated_at TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS routine_extra (
         id INTEGER PRIMARY KEY AUTOINCREMENT, time TEXT, title TEXT, descr TEXT,
         weekday INTEGER DEFAULT -1, day TEXT DEFAULT '', habit TEXT DEFAULT '',
@@ -477,6 +481,7 @@ def init_db():
     for column_sql in (
         "ALTER TABLE courses_done ADD COLUMN career_id INTEGER DEFAULT NULL",
         "ALTER TABLE courses_done ADD COLUMN step INTEGER DEFAULT 0",
+        "ALTER TABLE courses_done ADD COLUMN platform TEXT DEFAULT 'Other'",
     ):
         try:
             con.execute(column_sql)
@@ -732,6 +737,34 @@ def init_db():
             pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('career_bank_v1','1')")
         con.commit()
+
+    # V120: migrate the single legacy course slot into the multi-course system once.
+    try:
+        if not con.execute("SELECT 1 FROM config WHERE key='career_courses_v120'").fetchone():
+            for row in con.execute("SELECT id, step, course, pct FROM careers WHERE TRIM(COALESCE(course,''))<>''").fetchall():
+                item = dict(row)
+                exists = con.execute(
+                    'SELECT 1 FROM career_courses WHERE career_id=? AND step=? AND LOWER(title)=LOWER(?)',
+                    (item['id'], item.get('step') or 0, item.get('course') or '')
+                ).fetchone()
+                if not exists:
+                    con.execute(
+                        '''INSERT INTO career_courses
+                           (career_id,step,title,platform,pct,created_at,updated_at)
+                           VALUES (?,?,?,?,?,?,?)''',
+                        (item['id'], max(0, min(3, int(item.get('step') or 0))),
+                         item.get('course') or '', 'Other', max(0, min(100, int(item.get('pct') or 0))),
+                         datetime.now().isoformat(timespec='seconds'), datetime.now().isoformat(timespec='seconds'))
+                    )
+            con.execute("INSERT OR REPLACE INTO config (key,value) VALUES ('career_courses_v120','1')")
+            con.commit()
+    except Exception as e:
+        print('  (warning) career course migration deferred:', e)
+        try:
+            con.rollback()
+        except Exception:
+            pass
+
     if not con.execute("SELECT 1 FROM config WHERE key='career_goal_link_v1'").fetchone():
         try:
             con.execute("ALTER TABLE careers ADD COLUMN goal_id INTEGER DEFAULT NULL")
@@ -996,9 +1029,9 @@ def _sync_metas_carreras(d):
         careers = [dict(r) for r in d.execute('SELECT * FROM careers').fetchall()]
         goals = [dict(r) for r in d.execute('SELECT * FROM goals').fetchall()]
         for c in careers:
-            # progreso real: lo banqueado (nunca baja) o nivel+curso actual, el que sea mayor
-            prog = min(round(max((c.get('bank') or 0),
-                                  (c.get('step') or 0) * 25 + ((c.get('pct') or 0) / 100) * 25)), 100)
+            # V120: career progress is conquered stages only. Course percentages are evidence,
+            # never extra career progress. The user advances the stage explicitly.
+            prog = min(max(int(c.get('bank') or 0), int(c.get('step') or 0) * 25), 100)
             best = None
             if c.get('goal_id'):
                 best = next((g for g in goals if g['id'] == c['goal_id']), None)
@@ -1322,6 +1355,8 @@ def state():
     profile = {r['key']: r['value'] for r in d.execute('SELECT * FROM study_profile')}
     rdone = [f"{r['day']}|{r['activity']}" for r in d.execute('SELECT day, activity FROM routine_done')]
     careers = [dict(r) for r in d.execute('SELECT * FROM careers')]
+    career_courses = [dict(r) for r in d.execute(
+        'SELECT * FROM career_courses ORDER BY career_id, step, id')]
     courses_done = [dict(r) for r in d.execute('SELECT * FROM courses_done ORDER BY id DESC')]
     skills = [dict(r) for r in d.execute('SELECT * FROM skills ORDER BY name')]
     course_skills = [dict(r) for r in d.execute('SELECT * FROM course_skills ORDER BY course_id, skill_id')]
@@ -1372,7 +1407,7 @@ def state():
     for ed in extra_debts:
         ed['abonado'] = (ed.get('abonado') or 0) + historicos_extra.get(ed['id'], 0)
     core = [x[0] for x in _SEED['debts']]
-    return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, goal_checkpoints=goal_checkpoints, goal_logs=goal_logs, goal_strategy=goal_strategy, achievement_unlocks=achievement_unlocks, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, courses_done=courses_done, skills=skills, course_skills=course_skills, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
+    return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, goal_checkpoints=goal_checkpoints, goal_logs=goal_logs, goal_strategy=goal_strategy, achievement_unlocks=achievement_unlocks, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, career_courses=career_courses, courses_done=courses_done, skills=skills, course_skills=course_skills, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
                         marks=marks, history=history, dreams=dreams,
                         animes=animes, books=books, gym_sets=gym_sets,
                         servicios=services, fund=fund, piggy=piggy, piggy_moves=piggy_moves, shopping=shopping, todos=todos, detalle=_detalle_actual(d),
@@ -1570,7 +1605,7 @@ BACKUP_TABLES = (
     'config', 'schema_migrations', 'debts', 'abonos', 'habits', 'gym_sets',
     'habit_marks', 'months_history', 'dreams', 'animes', 'books',
     'payment_checks', 'week_shifts', 'routine_done', 'study_profile',
-    'careers', 'courses_done', 'routine_extra', 'routine_hidden',
+    'careers', 'career_courses', 'courses_done', 'routine_extra', 'routine_hidden',
     'routine_hidden_day', 'journal', 'assets', 'expenses', 'month_income',
     'services', 'fund', 'piggy', 'piggy_moves', 'shopping', 'todos',
     'detalle_items', 'extra_debts', 'goals', 'goal_checkpoints', 'goal_logs',
@@ -1927,6 +1962,7 @@ def career_update():
 
 @app.delete('/api/career/<int:i>')
 def career_del(i):
+    db().execute('DELETE FROM career_courses WHERE career_id=?', (i,))
     db().execute('DELETE FROM careers WHERE id=?', (i,))
     db().commit()
     return jsonify(ok=True)
@@ -1972,6 +2008,132 @@ def _save_course_skills(con, course_id, items, replace=False):
             )
 
 
+@app.post('/api/career/course/new')
+def career_course_new():
+    j = request.json or {}
+    title = str(j.get('title') or '').strip()
+    platform = str(j.get('platform') or 'Other').strip()[:80] or 'Other'
+    try:
+        career_id = int(j.get('career_id'))
+        step = max(0, min(3, int(j.get('step') or 0)))
+        pct = max(0, min(100, int(j.get('pct') or 0)))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid course data'), 400
+    if not title:
+        return jsonify(error='Course name is required'), 400
+    if not db().execute('SELECT 1 FROM careers WHERE id=?', (career_id,)).fetchone():
+        return jsonify(error='Career not found'), 404
+    now = datetime.now().isoformat(timespec='seconds')
+    db().execute(
+        '''INSERT INTO career_courses (career_id,step,title,platform,pct,created_at,updated_at)
+           VALUES (?,?,?,?,?,?,?)''',
+        (career_id, step, title[:180], platform, pct, now, now)
+    )
+    db().commit()
+    row = db().execute('SELECT id FROM career_courses ORDER BY id DESC LIMIT 1').fetchone()
+    return jsonify(ok=True, id=dict(row)['id'] if row else None)
+
+
+@app.post('/api/career/course')
+def career_course_update():
+    j = request.json or {}
+    field = str(j.get('field') or '')
+    if field not in ('title', 'platform', 'pct', 'step'):
+        return jsonify(error='Field not allowed'), 400
+    try:
+        course_id = int(j.get('id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid course id'), 400
+    row = db().execute('SELECT * FROM career_courses WHERE id=?', (course_id,)).fetchone()
+    if not row:
+        return jsonify(error='Course not found'), 404
+    value = j.get('value')
+    if field == 'pct':
+        try:
+            value = max(0, min(100, int(value or 0)))
+        except (TypeError, ValueError):
+            return jsonify(error='Progress must be between 0 and 100'), 400
+    elif field == 'step':
+        try:
+            value = max(0, min(3, int(value or 0)))
+        except (TypeError, ValueError):
+            return jsonify(error='Invalid stage'), 400
+    else:
+        value = str(value or '').strip()
+        if field == 'title' and not value:
+            return jsonify(error='Course name is required'), 400
+        value = value[:180 if field == 'title' else 80]
+    db().execute(
+        f'UPDATE career_courses SET {field}=?, updated_at=? WHERE id=?',
+        (value, datetime.now().isoformat(timespec='seconds'), course_id)
+    )
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete('/api/career/course/<int:i>')
+def career_course_del(i):
+    db().execute('DELETE FROM career_courses WHERE id=?', (i,))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/career/course/complete')
+def career_course_complete():
+    j = request.json or {}
+    try:
+        active_id = int(j.get('course_id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid course'), 400
+    d = db()
+    row = d.execute(
+        '''SELECT cc.*, c.name AS career_name FROM career_courses cc
+           JOIN careers c ON c.id=cc.career_id WHERE cc.id=?''',
+        (active_id,)
+    ).fetchone()
+    if not row:
+        return jsonify(error='Course not found'), 404
+    course = dict(row)
+    try:
+        d.execute(
+            '''INSERT INTO courses_done
+               (career,title,finished_on,career_id,step,platform)
+               VALUES (?,?,?,?,?,?)''',
+            (course['career_name'], course['title'], date.today().isoformat(),
+             course['career_id'], course['step'], course.get('platform') or 'Other')
+        )
+        done_row = d.execute('SELECT id FROM courses_done ORDER BY id DESC LIMIT 1').fetchone()
+        done_id = dict(done_row)['id']
+        _save_course_skills(d, done_id, j.get('skills') or [], replace=True)
+        d.execute('DELETE FROM career_courses WHERE id=?', (active_id,))
+        d.commit()
+    except Exception:
+        d.rollback()
+        raise
+    return jsonify(ok=True, id=done_id)
+
+
+@app.post('/api/career/advance-stage')
+def career_advance_stage():
+    j = request.json or {}
+    try:
+        career_id = int(j.get('career_id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid career'), 400
+    row = db().execute('SELECT * FROM careers WHERE id=?', (career_id,)).fetchone()
+    if not row:
+        return jsonify(error='Career not found'), 404
+    career = dict(row)
+    current = max(0, min(3, int(career.get('step') or 0)))
+    target = min(4, current + 1)
+    bank = target * 25
+    # step stays at 3 when the whole path is conquered; bank carries 100%.
+    db().execute('UPDATE careers SET step=?, bank=?, course=?, pct=? WHERE id=?',
+                 (min(target, 3), bank, '', 0, career_id))
+    db().commit()
+    return jsonify(ok=True, step=min(target, 3), bank=bank, completed=target >= 4)
+
+
 @app.post('/api/course/done')
 def course_done():
     j = request.json or {}
@@ -1988,14 +2150,15 @@ def course_done():
     except (TypeError, ValueError):
         step = 0
     career_name = str(j.get('career') or '').strip()
+    platform = str(j.get('platform') or 'Other').strip()[:80] or 'Other'
     if career_id and not career_name:
         row = d.execute('SELECT name FROM careers WHERE id=?', (career_id,)).fetchone()
         if row:
             career_name = dict(row)['name']
     try:
         d.execute(
-            'INSERT INTO courses_done (career,title,finished_on,career_id,step) VALUES (?,?,?,?,?)',
-            (career_name, title, j.get('finished_on') or date.today().isoformat(), career_id, step)
+            'INSERT INTO courses_done (career,title,finished_on,career_id,step,platform) VALUES (?,?,?,?,?,?)',
+            (career_name, title, j.get('finished_on') or date.today().isoformat(), career_id, step, platform)
         )
         row = d.execute('SELECT id FROM courses_done ORDER BY id DESC LIMIT 1').fetchone()
         course_id = dict(row)['id']
