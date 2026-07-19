@@ -1029,9 +1029,25 @@ def _sync_metas_carreras(d):
         careers = [dict(r) for r in d.execute('SELECT * FROM careers').fetchall()]
         goals = [dict(r) for r in d.execute('SELECT * FROM goals').fetchall()]
         for c in careers:
-            # V120: career progress is conquered stages only. Course percentages are evidence,
-            # never extra career progress. The user advances the stage explicitly.
-            prog = min(max(int(c.get('bank') or 0), int(c.get('step') or 0) * 25), 100)
+            career_name = str(c.get('name') or '')
+            step = min(max(int(c.get('step') or 0), 0), 4)
+
+            # V120 English fix: English is not a manually conquered multi-course path.
+            # Its saved pct is the partial progress inside the current 30-day immersion block,
+            # so Goals must receive the same gradual percentage shown in Life.
+            if _re.search(r'ingl|english', career_name, _re.IGNORECASE):
+                if step >= 4:
+                    prog = 100
+                else:
+                    partial = min(max(int(c.get('pct') or 0), 0), 100)
+                    # Match JavaScript Math.round(step * 25 + partial * 0.25) exactly
+                    # without Python's banker's rounding at .5 boundaries.
+                    prog = min(step * 25 + ((partial + 2) // 4), 100)
+            else:
+                # Regular V120 careers advance only through explicitly conquered stages.
+                # Course percentages remain independent evidence and never add extra progress.
+                prog = min(max(int(c.get('bank') or 0), step * 25), 100)
+
             best = None
             if c.get('goal_id'):
                 best = next((g for g in goals if g['id'] == c['goal_id']), None)
