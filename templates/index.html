@@ -275,49 +275,59 @@
 </section>
 
 <!-- ============ LIFE (rutina inteligente) ============ -->
-<section id="tab-life" class="tab">
-  <h1>📅 Life — your smart daily routine</h1>
-  <p class="hint">Tell me your work shift per day and I'll build your routine from 6am to reach your goals. Check off what you complete; if you couldn't do something, say why.</p>
-
-  <div class="panel">
-    <h2>1 · Your work week</h2>
-    <div id="shiftGrid" class="shift-grid"></div>
+<section id="tab-life" class="tab life-minimal">
+  <div class="life-title-row">
+    <h1>📅 Life</h1>
+    <button class="life-help-btn" data-life-help="overview" aria-label="About Life">?</button>
   </div>
 
-  <div class="panel">
-    <h2>2 · Your career path</h2>
-    <p class="hint">Each career has 4 steps (25% each): Fundamentals → Intermediate → Projects → Professional. Your current course adds its % to the step you're on. Finishing one course does NOT complete the goal — only its slice. 100% comes with the strong certificate at the end. One active focus at a time.</p>
-    <div id="careerPanel"></div>
-  </div>
-
-  <div class="panel">
-    <div class="row-between">
-      <h2>3 · Your routine</h2>
+  <div class="panel life-daily-panel">
+    <div class="row-between life-panel-head">
+      <div class="life-heading"><span>01</span><h2>Today</h2><button class="life-help-btn" data-life-help="routine" aria-label="About Today">?</button></div>
       <select id="dayPick" class="month-select"></select>
     </div>
     <div id="routineDay"></div>
-    <button class="btn-gold" id="addRoutineBtn" style="margin-top:10px">+ Add activity to this day</button>
-    <button class="btn-gold" id="scheduleApptBtn" style="margin-top:10px">📅 Schedule an appointment / course</button>
-    <p class="hint" id="freeTimeHint" style="margin-top:8px"></p>
+    <div class="life-action-row">
+      <button class="btn-gold" id="addRoutineBtn">+ Add activity</button>
+      <button class="btn-gold" id="scheduleApptBtn">📅 Schedule</button>
+      <button class="life-help-btn life-tip-trigger" id="freeTimeHelpBtn" aria-label="Free-time suggestion">?</button>
+    </div>
+    <p class="hint life-hidden-copy" id="freeTimeHint"></p>
     <div id="apptList"></div>
   </div>
 
-  <div class="panel">
-    <div class="row-between">
-      <h2>4 · English mastery — the real system</h2>
-      <button class="btn-ghost" id="engHelpBtn">Why this works</button>
-    </div>
-    <div id="englishPanel"></div>
+  <div class="panel life-career-panel">
+    <div class="life-heading"><span>02</span><h2>Career paths</h2><button class="life-help-btn" data-life-help="careers" aria-label="About career paths">?</button></div>
+    <div id="careerPanel"></div>
   </div>
 
   <div class="panel skill-academy-panel">
-    <div class="row-between"><div><h2>5 · Hunter Skill Academy</h2><p class="hint">Train one practical skill at a time until it becomes reliable. Includes 42 skill paths, 294 progressive practices and 84 rotating field notes without duplicating Life, Goals or Habits.</p></div><span class="skill-academy-seal">TRAIN · ADAPT · MASTER</span></div>
+    <div class="row-between life-panel-head">
+      <div class="life-heading"><span>03</span><h2>Hunter Skill Academy</h2><button class="life-help-btn" data-life-help="skills" aria-label="About Skill Academy">?</button></div>
+      <span class="skill-academy-seal">TRAIN · ADAPT · MASTER</span>
+    </div>
     <div id="skillAcademy" class="skill-academy-grid"></div>
   </div>
 
   <div class="panel">
-    <h2>6 · Weekly advice</h2>
-    <p class="diag" id="lifeTip"></p>
+    <div class="row-between life-panel-head">
+      <div class="life-heading"><span>04</span><h2>English mastery</h2></div>
+      <button class="life-help-btn" id="engHelpBtn" aria-label="Why this works">?</button>
+    </div>
+    <div id="englishPanel"></div>
+  </div>
+
+  <div class="panel life-planning-panel">
+    <div class="life-heading"><span>05</span><h2>Work week</h2><button class="life-help-btn" data-life-help="workweek" aria-label="About work week">?</button></div>
+    <div id="shiftGrid" class="shift-grid"></div>
+  </div>
+
+  <div class="panel life-advice-panel">
+    <div class="row-between">
+      <div class="life-heading"><span>06</span><h2>Weekly advice</h2></div>
+      <button class="life-help-btn" id="lifeTipBtn" aria-label="Open weekly advice">?</button>
+    </div>
+    <p class="diag life-hidden-copy" id="lifeTip"></p>
   </div>
 </section>
 
