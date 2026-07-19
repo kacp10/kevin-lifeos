@@ -374,18 +374,20 @@
 </section>
 
 <!-- ============ SUEÑOS ============ -->
-<section id="tab-suenos" class="tab">
-  <h1>✨ Wishlist — waiting for you on the other side</h1>
-  <p class="hint">Golden rule: pay in full, never in installments. Write down how much you've saved for each one.</p>
-  <form id="dreamNew" class="abono-form" style="margin-bottom:14px">
-    <input id="dnCat" list="catList" placeholder="Category" required>
+<section id="tab-suenos" class="tab wishlist-tab">
+  <div class="wishlist-hero">
+    <div><span>HUNTER ACQUISITION BOARD</span><h1>Future targets</h1><p>Prepare resources for the things, experiences and dreams you want to claim without creating new debt.</p></div>
+    <button type="button" class="help-dot" data-help="wishlist" aria-label="How Wishlist works">?</button>
+  </div>
+  <form id="dreamNew" class="wish-new-form">
+    <label><span>Target class</span><input id="dnCat" list="catList" placeholder="Technology, Travel, Personal..." required></label>
     <datalist id="catList">
       <option>Dreams</option><option>Technology</option><option>Shopping</option>
-      <option>Room</option><option>Leisure</option><option>Personal</option>
+      <option>Room</option><option>Leisure</option><option>Personal</option><option>Travel</option><option>Education</option>
     </datalist>
-    <input id="dnName" placeholder="Which wish?" required>
-    <input id="dnValor" type="text" inputmode="numeric" class="money-live" placeholder="Price">
-    <button class="btn-gold" type="submit">+ Add wish</button>
+    <label class="wish-name-field"><span>Future target</span><input id="dnName" placeholder="What do you want to claim?" required></label>
+    <label><span>Target value</span><input id="dnValor" type="text" inputmode="numeric" class="money-live" placeholder="0"></label>
+    <button class="btn-gold wish-add-btn" type="submit">＋ Register target</button>
   </form>
   <div id="dreamList"></div>
 </section>
