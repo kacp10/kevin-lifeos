@@ -3518,3 +3518,56 @@ body.hunter-profile-open {
     margin-right: 0;
   }
 }
+
+
+/* ====== V120 · MULTI-COURSE HUNTER TRAINING OPERATIONS ====== */
+.career-operations{overflow:hidden;border-color:rgba(245,185,66,.2);background:linear-gradient(145deg,rgba(31,26,52,.97),rgba(18,15,34,.98))}
+.career-kicker,.career-stage-head>div>span,.career-section-title span,.career-finished-stage header span{display:block;color:#f5c85c;font-size:.58rem;font-weight:900;letter-spacing:1.6px}
+.career-operations .career-head{align-items:flex-start}.career-operations .career-head b{display:block;margin-top:4px;font:900 clamp(1rem,2vw,1.25rem)/1.2 'Russo One',sans-serif}
+.career-overall-bar{margin:10px 0 14px}.career-stage-head{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:15px;border:1px solid rgba(255,255,255,.08);border-radius:15px;background:rgba(10,11,24,.48)}
+.career-stage-head h3{margin:3px 0 4px;font-size:1.02rem}.career-stage-head p{margin:0;color:var(--mut);font-size:.76rem;line-height:1.45;max-width:620px}
+.advance-career-stage{max-width:280px;border:1px solid rgba(245,185,66,.38);border-radius:12px;padding:10px 13px;background:linear-gradient(135deg,rgba(245,185,66,.18),rgba(124,92,255,.14));color:#f8df8b;font-weight:900;cursor:pointer}.advance-career-stage.done{color:#72ddbd;border-color:rgba(54,201,167,.35)}
+.career-active-courses{margin-top:13px}.career-section-title{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:9px}.career-section-title b{display:block;margin-top:2px}.add-active-course{border:1px solid rgba(124,92,255,.38);background:rgba(124,92,255,.12);color:#d9d1ff;border-radius:10px;padding:8px 11px;font-weight:800;cursor:pointer}
+.career-course-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.career-course-card{min-width:0;padding:12px;border:1px solid rgba(255,255,255,.09);border-radius:14px;background:linear-gradient(145deg,rgba(15,18,34,.96),rgba(23,18,42,.94));box-shadow:inset 0 1px rgba(255,255,255,.03)}
+.career-course-top,.career-course-actions,.career-course-progress>div:first-child{display:flex;justify-content:space-between;align-items:center;gap:8px}.course-platform{max-width:75%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#72ddbd;font-size:.61rem;font-weight:900;letter-spacing:1px;text-transform:uppercase}.career-course-title{width:100%;margin:7px 0 9px;padding:0;border:0;background:transparent;color:#fff;font-weight:800;font-size:.86rem}.career-course-title:focus{outline:none;border-bottom:1px solid var(--gold)}
+.career-course-progress span{color:var(--mut);font-size:.66rem}.career-course-progress strong{font-size:.78rem;color:#f5d76d}.career-course-progress input[type=range]{width:100%;accent-color:#36c9a7;margin-top:5px}.career-course-actions{margin-top:8px}.career-course-actions button{border-radius:9px;padding:7px 9px;font-size:.66rem;font-weight:850;cursor:pointer}.course-platform-edit{border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--mut)}.course-complete{border:1px solid rgba(54,201,167,.35);background:rgba(54,201,167,.12);color:#72ddbd}.career-course-empty{grid-column:1/-1;padding:16px;border:1px dashed rgba(255,255,255,.1);border-radius:13px;color:var(--mut);text-align:center;font-size:.75rem}
+.career-finished-stage{margin-top:9px}.career-finished-stage header{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}.career-finished-stage header b{font-size:.75rem}.course-chip em{font-style:normal;color:#72ddbd;font-size:.58rem;text-transform:uppercase;letter-spacing:.7px}
+@media(max-width:760px){.career-course-grid{grid-template-columns:1fr}.career-stage-head{align-items:stretch;flex-direction:column}.advance-career-stage{max-width:none;width:100%}.career-section-title{align-items:stretch;flex-direction:column}.add-active-course{width:100%}}
+@media(max-width:420px){.career-operations{padding:11px}.career-stage-head{padding:11px}.career-course-card{padding:10px}.career-course-actions{align-items:stretch;flex-direction:column}.career-course-actions button{width:100%}}
+.career-active-stage{margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06)}
+.career-active-stage:first-of-type{margin-top:0;padding-top:0;border-top:0}
+.career-active-stage>header{display:flex;align-items:center;gap:8px;margin:0 0 7px}
+.career-active-stage>header span{color:#8e86aa;font-size:.55rem;font-weight:900;letter-spacing:1.2px}
+.career-active-stage>header b{font-size:.72rem}
+.career-active-stage>header em{margin-left:auto;border:1px solid rgba(245,185,66,.25);border-radius:999px;padding:3px 7px;color:#f5d76d;font-size:.52rem;font-style:normal;font-weight:900}
+
+
+/* ====== V120 FIX · MINIMAL LIFE ORDER + CONTEXT HELP ====== */
+#tab-life.life-minimal{max-width:1180px;margin-inline:auto}
+.life-title-row,.life-heading,.life-action-row,.life-panel-head{display:flex;align-items:center}
+.life-title-row{justify-content:space-between;margin-bottom:12px}
+.life-title-row h1{margin:0}
+.life-heading{gap:8px;min-width:0}
+.life-heading>span{display:grid;place-items:center;min-width:28px;height:22px;border:1px solid rgba(245,185,66,.28);border-radius:999px;color:#f5d76d;font-size:.55rem;font-weight:900;letter-spacing:.7px}
+.life-heading h2{margin:0;font-size:1rem}
+.life-panel-head{justify-content:space-between;gap:12px;margin-bottom:12px}
+.life-help-btn{display:inline-grid;place-items:center;width:26px;height:26px;flex:0 0 26px;padding:0;border:1px solid rgba(124,92,255,.38);border-radius:50%;background:rgba(124,92,255,.1);color:#d9d1ff;font-weight:900;cursor:pointer;transition:.18s ease}
+.life-help-btn:hover{transform:translateY(-1px);border-color:rgba(245,185,66,.5);color:#f5d76d;background:rgba(245,185,66,.1)}
+.life-action-row{gap:8px;flex-wrap:wrap;margin-top:10px}
+.life-action-row .btn-gold{margin:0!important}
+.life-tip-trigger{margin-left:auto}
+.life-hidden-copy{display:none!important}
+.life-daily-panel{border-color:rgba(54,201,167,.2)}
+.life-career-panel{border-color:rgba(245,185,66,.18)}
+.life-planning-panel{border-color:rgba(124,92,255,.18)}
+.life-advice-panel{padding-block:14px}
+#tab-life .panel{margin-bottom:12px}
+#tab-life .shift-grid{margin-top:12px}
+@media(max-width:620px){
+  .life-panel-head{align-items:stretch;flex-direction:column}
+  .life-panel-head>#dayPick{width:100%}
+  .life-action-row .btn-gold{flex:1 1 145px}
+  .life-tip-trigger{margin-left:0}
+  .life-heading h2{font-size:.92rem}
+  #tab-life .panel{padding:12px}
+}

@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 119;
+const FRONT_V = 120;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -3114,6 +3114,33 @@ function renderDesglose() {
 }
 
 /* ---------- HÁBITOS ---------- */
+// Días de descanso excepcionales guardados desde Life (por ejemplo, un festivo entre semana).
+// Se conservan por fecha exacta para que no desaparezcan cuando el turno semanal vuelva a la normalidad.
+function lifeRestDates() {
+  try {
+    const raw = JSON.parse((S.profile || {}).life_rest_dates || '[]');
+    return new Set(Array.isArray(raw) ? raw : []);
+  } catch { return new Set(); }
+}
+function isLifeRestDate(iso) { return lifeRestDates().has(iso); }
+async function saveLifeRestDate(iso) {
+  if (!iso) return;
+  const dates = lifeRestDates();
+  dates.add(iso);
+  await api('/api/profile', { body: { key: 'life_rest_dates', value: JSON.stringify([...dates].sort()) } });
+  if (S.profile) S.profile.life_rest_dates = JSON.stringify([...dates].sort());
+}
+function nextVisibleDateForWeekday(wd) {
+  const pick = document.getElementById('dayPick');
+  if (pick) {
+    const option = [...pick.options].find(o => Number(String(o.value).split('|')[1]) === Number(wd));
+    if (option) return String(option.value).split('|')[0];
+  }
+  const d = new Date(); d.setHours(12,0,0,0);
+  const current = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() + ((Number(wd) - current + 7) % 7));
+  return localISO(d);
+}
 // Calcula días consecutivos de un hábito hasta hoy (o hasta ayer si hoy aún no se marca)
 function rachaHabito(habitId, marks, extraSkipDays = []) {
   let streak = 0;
@@ -3123,8 +3150,9 @@ function rachaHabito(habitId, marks, extraSkipDays = []) {
   if (!marks.has(hoyKey)) d.setDate(d.getDate() - 1);
   for (let k = 0; k < 400; k++) {
     const dow = d.getDay();
-    if (dow === 0 || extraSkipDays.includes(dow)) { d.setDate(d.getDate() - 1); continue; }   // domingo (todos) + días extra (ej. sábado para Exercise): no rompen ni cuentan la racha
-    const key = `${habitId}|${localISO(d)}`;
+    const iso = localISO(d);
+    if (dow === 0 || extraSkipDays.includes(dow) || isLifeRestDate(iso)) { d.setDate(d.getDate() - 1); continue; }   // domingos, descansos del hábito y Rest excepcionales de Life no rompen ni cuentan la racha
+    const key = `${habitId}|${iso}`;
     if (marks.has(key)) { streak++; d.setDate(d.getDate() - 1); }
     else break;
   }
@@ -3158,11 +3186,19 @@ function renderHabitos() {
   $('#habitGrid').innerHTML = html;
 
   const done = S.marks.length;
-  const globalPct = done / (S.habits.length * elapsed);
+  const restDates = lifeRestDates();
+  let countedDays = 0;
+  for (let d = 1; d <= elapsed; d++) {
+    const iso = `${ym}-${String(d).padStart(2, '0')}`;
+    const dow = new Date(iso + 'T12:00:00').getDay();
+    if (dow !== 0 && !restDates.has(iso)) countedDays++;
+  }
+  const denominator = Math.max(1, S.habits.length * countedDays);
+  const globalPct = done / denominator;
   $('#habitStats').innerHTML = `
-    <div class="card green"><label>x marcadas este mes</label><strong>${done}</strong></div>
+    <div class="card green"><label>x marked this month</label><strong>${done}</strong></div>
     <div class="card gold"><label>Month completion</label><strong>${pct(globalPct)}</strong></div>
-    <div class="card"><label>Days elapsed</label><strong>${elapsed} / ${daysInMonth}</strong></div>`;
+    <div class="card"><label>Counted days</label><strong>${countedDays} / ${elapsed}</strong></div>`;
   $('#closeMonth').dataset.pct = globalPct;
   $('#closeMonth').dataset.label = monthName;
 }
@@ -3579,7 +3615,7 @@ function renderHunterProfile() {
   host.innerHTML=`<div class="hunter-profile-hero"><div><span>HUNTER ASSOCIATION · PRIVATE FILE</span><h1>KEVIN · HUNTER PROFILE</h1><p>A private record of the person your daily systems are building.</p></div><div class="hunter-profile-rank rank-${rank.current.rank}"><small>GLOBAL RANK</small><b>${rank.current.rank}</b><span>${esc(rank.current.title)}</span></div></div>
   <div class="hunter-profile-grid">
     <section class="hunter-profile-license"><div id="hunterProfileLicense"></div></section>
-    <section class="hunter-profile-mission"><span>CURRENT EXPEDITION</span><h2>${esc(activeGoal?.name||activeCareer?.name||'Choose an active career')}</h2><p>${esc(activeGoal?.next_step||activeCareer?.course||'Set the next field action in Goals or Life.')}</p><div class="mini-bar green"><i style="width:${activeGoal?.pct||progresoCareer(activeCareer||{})||0}%"></i></div><small>${activeGoal?.pct||progresoCareer(activeCareer||{})||0}% expedition progress</small></section>
+    <section class="hunter-profile-mission"><span>CURRENT EXPEDITION</span><h2>${esc(activeGoal?.name||activeCareer?.name||'Choose an active career')}</h2><p>${esc(activeGoal?.next_step||(S.career_courses||[]).find(x=>String(x.career_id)===String(activeCareer?.id))?.title||'Set the next field action in Goals or Life.')}</p><div class="mini-bar green"><i style="width:${activeGoal?.pct||progresoCareer(activeCareer||{})||0}%"></i></div><small>${activeGoal?.pct||progresoCareer(activeCareer||{})||0}% expedition progress</small></section>
   </div>
   <section class="hunter-profile-stats"><div><b>${rank.xp}</b><span>Expedition XP</span></div><div><b>${finished}</b><span>Finished courses</span></div><div><b>${skills.length}</b><span>Professional skills</span></div><div><b>${unlocked}</b><span>Archive records</span></div><div><b>${defeated}</b><span>Debts defeated</span></div><div><b>${books}</b><span>Books finished</span></div></section>
   <section class="hunter-profile-section"><div class="row-between"><div><span class="profile-kicker">PROFESSIONAL SKILLS</span><h2>Training evidence</h2></div><small>Backed by finished courses${skills.some(x=>x.practiced)?' and Skill Academy practice':''}.</small></div>${skills.length?`<div class="profile-skill-grid">${skills.map(x=>`<article class="profile-skill-card"><div><b>${esc(x.name)}</b><span>${esc(x.level)}</span></div><p>${x.evidence} completed course${x.evidence===1?'':'s'}${x.practiced?' · Skill Academy mastered':''}</p></article>`).join('')}</div>`:'<div class="profile-empty">Finish a course and record its skills to build your professional profile.</div>'}</section>
@@ -4308,6 +4344,28 @@ document.addEventListener('click', async (e) => {
       toast('💬 Open a chat and tell me: "practice English with me"');
     return;
   }
+  const lifeHelp = e.target.closest('[data-life-help]');
+  if (lifeHelp) {
+    const info = {
+      overview: ['📅', 'Life', 'Your daily routine, career training, practical skills, English and weekly shifts live here. The order follows what you use most often.'],
+      routine: ['✓', 'Today', 'Choose a date, complete the activities you actually do and add or schedule anything extra. Life keeps its existing links with Habits.'],
+      careers: ['🗺', 'Career paths', 'Each career moves through Fundamentals, Intermediate, Projects and Professional. Courses keep their own progress and platform. You decide when a stage is conquered; completing a course does not advance the career stage automatically.'],
+      skills: ['⚔', 'Hunter Skill Academy', 'Practice one real-world skill at a time. Course skills still remain connected to finished courses and Hunter Profile.'],
+      workweek: ['🗓', 'Work week', 'Set your normal shift for each weekday. When a Monday–Friday day is marked Rest, the nearest visible date is also saved as an exceptional rest day, so it does not break Habit streaks or lower the monthly completion denominator.']
+    }[lifeHelp.dataset.lifeHelp];
+    if (info) await modal({ icon:info[0], title:info[1], text:info[2], okText:'Got it' });
+    return;
+  }
+  if (e.target.id === 'freeTimeHelpBtn') {
+    const text = ($('#freeTimeHint')?.innerHTML || '').trim();
+    await modal({ icon:'⏳', title:'Free-time suggestion', text:text || 'No suggestion is available for this day.', okText:'Got it' });
+    return;
+  }
+  if (e.target.id === 'lifeTipBtn') {
+    const text = ($('#lifeTip')?.textContent || '').trim();
+    await modal({ icon:'🧭', title:'Weekly advice', text:esc(text || 'No weekly advice is available yet.'), okText:'Got it' });
+    return;
+  }
   if (e.target.id === 'engHelpBtn') {
     await modal({ icon: '🔑', title: 'The real secrets',
       text: '1) Train all 4 skills: read, write, listen, speak — a full speaker does the four.<br>2) Output (speaking AND writing) is what cements input — after every input, produce something.<br>3) Comprehensible input: read/watch what you understand ~85%, not random hard content.<br>4) Depth &gt; breadth: one text or scene 5 times beats 5 different ones once.<br>5) Shadowing &amp; reading aloud build pronunciation and rhythm.<br>6) A little EVERY day beats a marathon once a week.<br><br>Duolingo and passive Netflix feel like progress but barely build real production. The discomfort of producing IS the learning.',
@@ -4345,11 +4403,9 @@ function metaDeCarrera(c) {
 }
 
 function progresoCareer(c) {
-  // el progreso general = lo ya "banqueado" (cursos completados en niveles previos, nunca baja)
-  // o el nivel actual + el % del curso activo (lo que sea mayor). Así, empezar un curso
-  // nuevo dentro del MISMO nivel resetea el % del curso, pero NUNCA el % general ya ganado.
-  const porNivel = (c.step || 0) * 25 + ((c.pct || 0) / 100) * 25;
-  return Math.min(Math.round(Math.max(c.bank || 0, porNivel)), 100);
+  // V120: only explicitly conquered stages move the career/linked Goal.
+  // Course percentages remain independent evidence and never multiply the 25% stage reward.
+  return Math.min(Math.max(Number(c.bank || 0), Number(c.step || 0) * 25), 100);
 }
 
 const COURSE_SKILL_CATALOG = [
@@ -4401,52 +4457,58 @@ function renderCareer() {
   const wrap = document.getElementById('careerPanel');
   if (!wrap) return;
   const careers = S.careers || [];
+  const activeCourses = S.career_courses || [];
   const done = S.courses_done || [];
+  const skillLinks = S.course_skills || [];
+  const skillMap = new Map((S.skills || []).map(x => [String(x.id), x]));
+
+  const platformLabel = value => esc(value || 'Other');
+  const finishedByStage = (items, c) => PELDANOS.map((stageName, step) => {
+    const stageItems = items.filter(x => Number(x.step || 0) === step);
+    if (!stageItems.length) return '';
+    return `<section class="career-finished-stage"><header><span>STAGE ${step + 1}</span><b>${stageName}</b></header><div class="courses-done">${stageItems.map(d => {
+      const names = skillLinks.filter(x => String(x.course_id) === String(d.id)).map(x => skillMap.get(String(x.skill_id))?.name).filter(Boolean);
+      return `<span class="course-chip ${names.length ? 'has-skills' : 'skills-pending'}"><span>✓ ${esc(d.title)}</span><em>${platformLabel(d.platform)}</em><small>${names.length ? `${names.length} skill${names.length === 1 ? '' : 's'} recorded` : 'Skills pending review'}</small><button class="course-skill-review" data-course-skills="${d.id}" title="Review course skills">✦</button><button class="del-x" data-type="course" data-id="${d.id}">✕</button></span>`;
+    }).join('')}</div></section>`;
+  }).join('');
+
   const card = (c) => {
     const prog = progresoCareer(c);
+    const step = Math.max(0, Math.min(3, Number(c.step || 0)));
+    const completedPath = prog >= 100;
     const esIngles = /ingl|english/i.test(c.name || '');
     const diasIng = esIngles ? diasInglesHechos() : 0;
-    const dots = PELDANOS.map((p, i) =>
-      `<span class="peldano ${i < c.step ? 'done' : i === c.step ? 'now' : ''}">${i < c.step ? '✓' : i + 1}. ${p}</span>`).join('');
-    const myCourses = done.filter(d => String(d.career_id || '') === String(c.id) || d.career === c.name);
-    const skillLinks = S.course_skills || [];
-    const skillMap = new Map((S.skills || []).map(x => [String(x.id), x]));
-    const coursesHtml = myCourses.length
-      ? `<div class="courses-done">${myCourses.map(d => {
-          const names = skillLinks.filter(x => String(x.course_id) === String(d.id)).map(x => skillMap.get(String(x.skill_id))?.name).filter(Boolean);
-          return `<span class="course-chip ${names.length ? 'has-skills' : 'skills-pending'}"><span>✓ ${esc(d.title)}</span><small>${names.length ? `${names.length} skill${names.length === 1 ? '' : 's'} recorded` : 'Skills pending review'}</small><button class="course-skill-review" data-course-skills="${d.id}" title="Review course skills">✦</button><button class="del-x" data-type="course" data-id="${d.id}">✕</button></span>`;
-        }).join('')}</div>`
-      : '<p class="hint" style="margin:4px 0">No finished courses yet.</p>';
-    return `<div class="career-card ${c.active ? 'career-active' : ''}">
-      <div class="career-head">
-        <b>${c.icon || '🎯'} ${esc(c.name)}</b>
-        <span class="career-prog">${prog}% to goal</span>
-      </div>
-      <div class="peldano-row">${dots}</div>
-      <div class="mini-bar green" style="margin:8px 0"><i style="width:${prog}%"></i></div>
-      <div class="abono-form" style="margin-top:8px">
-        <select data-career="${c.id}" data-f="step" style="flex:2">
-          ${PELDANOS.map((p, i) => `<option value="${i}" ${i === c.step ? 'selected' : ''}>Step ${i + 1}: ${p}</option>`).join('')}
-        </select>
-        <input data-career="${c.id}" data-f="course" placeholder="Current course" value="${esc(c.course || '')}" style="flex:2">
-        <input data-career="${c.id}" data-f="pct" type="number" min="0" max="100" value="${c.pct || 0}" placeholder="% course" style="flex:1">
-      </div>
-      ${(c.pct || 0) >= 100 ? `<button class="bank-btn" data-bank="${c.id}" data-step="${c.step || 0}">🏁 Course complete — bank this 25% &amp; continue</button>` : ''}
-      <p class="hint" style="margin:6px 0 8px">${STEP_DESC[c.step] || ''}</p>
-      ${esIngles ? `<div class="eng-auto">🔥 <b>${diasIng} days</b> of English practice logged · this bar rises on its own as you complete your daily English block (≈30 days per step). Your effort moves it, not a manual number.</div>` : ''}
-      <div class="career-foot">
-        ${c.active ? '<span class="active-badge">★ Active focus</span>'
-          : `<button class="set-active" data-career="${c.id}">Set as focus</button>`}
-        <button class="add-course" data-career="${c.id}" data-name="${esc(c.name)}">+ Finished a course</button>
-        <button class="del-x" data-type="career" data-id="${c.id}" title="Delete career">✕</button>
-      </div>
-      <div class="career-courses"><b class="mini-title">Finished courses</b>${coursesHtml}</div>
-    </div>`;
-  };
-  wrap.innerHTML = careers.map(card).join('') +
-    `<button class="btn-gold add-career-btn" id="addCareerBtn">+ Add a career to learn</button>`;
-}
+    const dots = PELDANOS.map((p, i) => `<span class="peldano ${i < step || completedPath ? 'done' : i === step ? 'now' : ''}">${i < step || completedPath ? '✓' : i + 1}. ${p}</span>`).join('');
+    const careerActiveCourses = activeCourses.filter(x => String(x.career_id) === String(c.id));
+    const myDone = done.filter(d => String(d.career_id || '') === String(c.id) || d.career === c.name);
+    const renderActiveCourse = course => `
+      <article class="career-course-card" data-course-card="${course.id}">
+        <div class="career-course-top"><span class="course-platform">${platformLabel(course.platform)}</span><button class="del-x active-course-delete" data-active-course-delete="${course.id}" title="Remove active course">✕</button></div>
+        <input class="career-course-title" data-active-course="${course.id}" data-course-field="title" value="${esc(course.title)}" aria-label="Course name">
+        <div class="career-course-progress"><div><span>Course progress</span><strong>${Number(course.pct || 0)}%</strong></div><div class="mini-bar green"><i style="width:${Number(course.pct || 0)}%"></i></div><input data-active-course="${course.id}" data-course-field="pct" type="range" min="0" max="100" value="${Number(course.pct || 0)}"></div>
+        <div class="career-course-actions"><button class="course-platform-edit" data-course-platform="${course.id}">✎ ${platformLabel(course.platform)}</button>${Number(course.pct || 0) >= 100 ? `<button class="course-complete" data-course-complete="${course.id}">✓ Finish course</button>` : ''}</div>
+      </article>`;
+    const activeHtml = careerActiveCourses.length ? PELDANOS.map((stageName, stageIndex) => {
+      const items = careerActiveCourses.filter(x => Number(x.step || 0) === stageIndex);
+      if (!items.length) return '';
+      return `<section class="career-active-stage ${stageIndex === step ? 'current' : ''}"><header><span>STAGE ${stageIndex + 1}</span><b>${stageName}</b>${stageIndex === step ? '<em>CURRENT</em>' : ''}</header><div class="career-course-grid">${items.map(renderActiveCourse).join('')}</div></section>`;
+    }).join('') : '<div class="career-course-empty">No active courses in this career yet.</div>';
+    const finishedHtml = myDone.length ? finishedByStage(myDone, c) : '<p class="hint" style="margin:4px 0">No finished courses yet.</p>';
+    const nextLabel = completedPath ? 'Career path conquered' : step >= 3 ? 'Declare Professional stage conquered' : `Conquer ${PELDANOS[step]} and move to ${PELDANOS[step + 1]}`;
 
+    return `<article class="career-card career-operations ${c.active ? 'career-active' : ''}">
+      <header class="career-head"><div><span class="career-kicker">HUNTER TRAINING ROUTE</span><b>${c.icon || '🎯'} ${esc(c.name)}</b></div><span class="career-prog">${prog}% to goal</span></header>
+      <div class="peldano-row">${dots}</div>
+      <div class="mini-bar green career-overall-bar"><i style="width:${prog}%"></i></div>
+      <section class="career-stage-head"><div><span>STEP ${step + 1}</span><h3>${PELDANOS[step]}</h3><p>${STEP_DESC[step] || ''}</p></div><button class="advance-career-stage ${completedPath ? 'done' : ''}" data-advance-stage="${c.id}" ${completedPath ? 'disabled' : ''}>${completedPath ? '✓ Path conquered' : nextLabel}</button></section>
+      ${esIngles ? `<div class="eng-auto">🔥 <b>${diasIng} days</b> of English practice logged. English automation remains connected to Life.</div>` : ''}
+      <section class="career-active-courses"><div class="career-section-title"><div><span>ACTIVE COURSES</span><b>${PELDANOS[step]} training</b></div><button class="add-active-course" data-add-active-course="${c.id}">＋ Add course</button></div>${activeHtml}</section>
+      <footer class="career-foot">${c.active ? '<span class="active-badge">★ Active focus</span>' : `<button class="set-active" data-career="${c.id}">Set as focus</button>`}<button class="del-x" data-type="career" data-id="${c.id}" title="Delete career">✕</button></footer>
+      <section class="career-courses"><b class="mini-title">Finished courses</b>${finishedHtml}</section>
+    </article>`;
+  };
+  wrap.innerHTML = careers.map(card).join('') + `<button class="btn-gold add-career-btn" id="addCareerBtn">+ Add a career to learn</button>`;
+}
 function actividadesDelDia(wd, shiftKey) {
   const sh = SHIFTS[shiftKey] || SHIFTS.libre;
   const active = (S.careers || []).find(c => c.active) || (S.careers || [])[0];
@@ -4455,8 +4517,8 @@ function actividadesDelDia(wd, shiftKey) {
   const ing = _ingPlan.title;                                   // ej: "🗣 Speaking day"
   const ingDesc = _ingPlan.steps.map((st, i) => `${i + 1}) ${st.s}`).join('  ');  // pasos cortos numerados
   const studyDesc = active
-    ? `${active.course || active.name} (at ${active.pct || 0}%). Advance one module + take notes.`
-    : 'Advance your active course + take notes.';
+    ? `Choose one active ${active.name} course, advance it and take notes.`
+    : 'Advance one active course + take notes.';
 
   if (shiftKey === 'descanso') {
     return { rest: true, msg: 'Rest Sunday 🌿', acts: [
@@ -4507,8 +4569,8 @@ function actividadesDelDia(wd, shiftKey) {
 
 function bloqueEstudio(pf) {
   const active = (S.careers || []).find(c => c.active);
-  return active ? `${active.course || active.name} (${active.pct || 0}%). Advance one module + take notes.`
-    : 'Advance your active course + take notes.';
+  return active ? `Choose one active ${active.name} course, advance it and take notes.`
+    : 'Advance one active course + take notes.';
 }
 
 let CUR_WD = 0;
@@ -4548,7 +4610,8 @@ function renderRoutineDay() {
   const [iso, wdStr] = val.split('|');
   const wd = +wdStr;
   CUR_WD = wd;
-  const shiftKey = (S.shifts || {})[wd] || 'libre';
+  const weeklyShiftKey = (S.shifts || {})[wd] || 'libre';
+  const shiftKey = isLifeRestDate(iso) ? 'descanso' : weeklyShiftKey;
   const { rest, acts, msg } = actividadesDelDia(wd, shiftKey);
   // ocultar principales: por fecha exacta (puntual) o por weekday (recurrente)
   const hiddenWeek = new Set(S.routine_hidden || []);
@@ -4630,11 +4693,22 @@ function renderRoutineDay() {
 // listeners de Life
 document.addEventListener('change', async (e) => {
   if (e.target.matches('#shiftGrid select')) {
-    await api('/api/shift', { body: { weekday: +e.target.dataset.wd, shift: e.target.value } });
-    toast('📅 Shift updated.');
+    const wd = +e.target.dataset.wd;
+    await api('/api/shift', { body: { weekday: wd, shift: e.target.value } });
+    if (e.target.value === 'descanso' && wd <= 4) {
+      const restIso = nextVisibleDateForWeekday(wd);
+      await saveLifeRestDate(restIso);
+      toast(`🌿 Rest saved for ${restIso}. It will not break Habit streaks.`);
+    } else {
+      toast('📅 Shift updated.');
+    }
     load();
   } else if (e.target.matches('[data-career]')) {
     await api('/api/career', { body: { id: +e.target.dataset.career, field: e.target.dataset.f, value: e.target.value } });
+    load();
+  } else if (e.target.matches('[data-active-course]')) {
+    const field = e.target.dataset.courseField;
+    await api('/api/career/course', { body: { id:+e.target.dataset.activeCourse, field, value:e.target.value } });
     load();
   }
 });
@@ -4681,60 +4755,45 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  const bankBtn = e.target.closest('[data-bank]');
-  if (bankBtn) {
-    const id = +bankBtn.dataset.bank;
-    const c = (S.careers || []).find(x => x.id === id);
-    if (!c) return;
-    const stepName = PELDANOS[c.step || 0];
-    // 1) register the finished course and its real skills before moving the path forward.
-    if ((c.course || '').trim()) {
-      const skills = await courseSkillsModal({ title:c.course.trim(), career:c.name, step:c.step || 0 });
-      if (skills === null) return;
-      await api('/api/course/done', { body: { career_id:c.id, career:c.name, step:c.step || 0, title:c.course.trim(), skills } });
-    }
-    // 2) banquear el 25% de este nivel (nunca baja, aunque el próximo curso empiece en 0%)
-    const newBank = Math.min(100, ((c.step || 0) + 1) * 25);
-    await api('/api/career', { body: { id, field: 'bank', value: newBank } });
-    // 3) preguntar si continúa en el mismo nivel o avanza al siguiente (con botones Sí/No claros)
-    const isLast = (c.step || 0) >= PELDANOS.length - 1;
-    const nextName = isLast ? null : PELDANOS[(c.step || 0) + 1];
-    const cont = await modal({ icon: '🎓', title: `Continue in ${stepName}?`,
-      text: `You banked <b>${newBank}%</b> overall.<br><br>Do you want to keep studying more <b>${stepName}</b> courses, or move on to ${isLast ? 'finish here' : '<b>' + nextName + '</b>'}?`,
-      okText: `Yes, more ${stepName}`,
-      cancelText: isLast ? 'No, I\'m done' : `No, go to ${nextName}` }) === true;
-    if (cont) {
-      const r = await modal({ icon: '🎓', title: `Next course in ${stepName}`,
-        fields: [{ type: 'text', placeholder: 'Course name' }], okText: 'Start course' });
-      if (r && r[0].trim()) {
-        await api('/api/career', { body: { id, field: 'course', value: r[0].trim() } });
-        await api('/api/career', { body: { id, field: 'pct', value: 0 } });
-      }
-    } else if (!isLast) {
-      await api('/api/career', { body: { id, field: 'step', value: (c.step || 0) + 1 } });
-      await api('/api/career', { body: { id, field: 'course', value: '' } });
-      await api('/api/career', { body: { id, field: 'pct', value: 0 } });
-      toast(`🚀 Onward to ${PELDANOS[(c.step || 0) + 1]}!`);
-    } else {
-      toast('🎉 100%! You completed the whole career path!');
-    }
-    load();
-    return;
+  const addActive = e.target.closest('[data-add-active-course]');
+  if (addActive) {
+    const career = (S.careers || []).find(x => String(x.id) === String(addActive.dataset.addActiveCourse));
+    if (!career) return;
+    const r = await modal({ icon:'🎓', title:`Add ${PELDANOS[career.step || 0]} course`, text:`Every course has equal value as training evidence. The career stage changes only when you explicitly conquer it.`, fields:[{type:'text',label:'Course name',placeholder:'e.g. Azure Data Fundamentals'},{type:'select',label:'Platform',options:['Coursera','Udemy','Microsoft Learn','LinkedIn Learning','edX','YouTube','Platzi','Other'].map(v=>({v,t:v}))},{type:'select',label:'Training stage',options:PELDANOS.map((name,i)=>({v:String(i),t:`Step ${i+1}: ${name}`})),value:String(career.step||0)},{type:'number',label:'Initial progress %',value:0,min:0,max:100}], okText:'Add course'});
+    if (!r || !String(r[0]||'').trim()) return;
+    await api('/api/career/course/new',{body:{career_id:career.id,step:+r[2]||0,title:String(r[0]).trim(),platform:r[1]||'Other',pct:+r[3]||0}});
+    toast('🎓 Course added to this stage'); load(); return;
   }
 
-  const addC = e.target.closest('.add-course');
-  if (addC) {
-    const r = await modal({ icon: '🎓', title: 'Finished a course',
-      text: `Add a finished course to <b>${addC.dataset.name}</b>. This is your record of what you complete.`,
-      fields: [{ type: 'text', placeholder: 'Course name' }], okText: 'Save course' });
-    if (!r || !r[0].trim()) return;
-    const career = (S.careers || []).find(x => String(x.id) === String(addC.dataset.career));
-    const skills = await courseSkillsModal({ title:r[0].trim(), career:addC.dataset.name, step:career?.step || 0 });
-    if (skills === null) return;
-    await api('/api/course/done', { body: { career_id:career?.id || null, career:addC.dataset.name, step:career?.step || 0, title:r[0].trim(), skills } });
-    toast('🎓 Course and skills logged!');
-    load();
-    return;
+  const editPlatform = e.target.closest('[data-course-platform]');
+  if (editPlatform) {
+    const course=(S.career_courses||[]).find(x=>String(x.id)===String(editPlatform.dataset.coursePlatform)); if(!course)return;
+    const r=await modal({icon:'🏷',title:'Course platform',fields:[{type:'text',label:'Platform',value:course.platform||'Other',placeholder:'Coursera, Udemy, Azure...'}],okText:'Save platform'});
+    if(!r||!String(r[0]||'').trim())return;
+    await api('/api/career/course',{body:{id:course.id,field:'platform',value:String(r[0]).trim()}}); load(); return;
+  }
+
+  const finishActive=e.target.closest('[data-course-complete]');
+  if(finishActive){
+    const course=(S.career_courses||[]).find(x=>String(x.id)===String(finishActive.dataset.courseComplete)); if(!course)return;
+    const career=(S.careers||[]).find(x=>String(x.id)===String(course.career_id));
+    const skills=await courseSkillsModal({title:course.title,career:career?.name||'',step:course.step||0}); if(skills===null)return;
+    await api('/api/career/course/complete',{body:{course_id:course.id,skills}}); toast('✓ Course finished and skills recorded'); load(); return;
+  }
+
+  const deleteActive=e.target.closest('[data-active-course-delete]');
+  if(deleteActive){
+    const course=(S.career_courses||[]).find(x=>String(x.id)===String(deleteActive.dataset.activeCourseDelete)); if(!course)return;
+    const ok=await confirmAction({icon:'✕',title:'Remove active course',text:`<b>${esc(course.title)}</b> will leave this training stage. Finished-course history and career progress are not changed.`,okText:'Remove course',cancelText:'Keep course',danger:true});
+    if(!ok)return; await api(`/api/career/course/${course.id}`,{method:'DELETE'}); toast('Course removed'); load(); return;
+  }
+
+  const advance=e.target.closest('[data-advance-stage]');
+  if(advance){
+    const career=(S.careers||[]).find(x=>String(x.id)===String(advance.dataset.advanceStage)); if(!career)return;
+    const step=Math.max(0,Math.min(3,Number(career.step||0))); const final=step>=3;
+    const ok=await confirmAction({icon:'🗺',title:final?'Declare professional mastery?':`Conquer ${PELDANOS[step]}?`,text:final?`This records <b>${esc(career.name)}</b> as a fully conquered professional path (100%). Active courses may remain for continued learning.`:`You decide this stage is conquered. The linked Goal moves to <b>${(step+1)*25}%</b>. Every course stays equal; no individual course grants the stage by itself.`,okText:final?'Conquer career path':`Move to ${PELDANOS[step+1]}`,cancelText:'Not yet'});
+    if(!ok)return; const result=await api('/api/career/advance-stage',{body:{career_id:career.id}}); toast(result.completed?'🏆 Professional path conquered':`🚀 ${PELDANOS[step+1]} unlocked`); load(); return;
   }
 
   const skillReview = e.target.closest('[data-course-skills]');
@@ -4908,18 +4967,25 @@ document.addEventListener('click', async (e) => {
       }
       // todos los pasos confirmados → abajo se marca el inglés completo
     }
-    // CASO ESPECIAL estudio/curso: al chulear, pregunta el % del curso y lo lleva solo a la carrera activa.
+    // V120: choose exactly which active course advanced. Course progress does not alter
+    // the career/Goal stage percentage; only explicit stage conquest does that.
     if (act === 'estudio') {
       const active = (S.careers || []).find(x => x.active) || (S.careers || [])[0];
-      if (active) {
-        const r = await modal({ icon: active.icon || '📊', title: `${active.icon || ''} ${active.name}`.trim(),
-          text: `Nice session. What % is <b>${esc(active.course || active.name)}</b> at now?`,
-          fields: [{ type: 'number', placeholder: '0–100', value: active.pct || 0, min: 0, max: 100 }],
-          okText: 'Save & check ✓' });
-        if (r === null) return;               // canceló: no marca
-        const nv = Math.max(0, Math.min(100, parseInt(String(r[0]).replace(/[^0-9]/g, ''), 10) || 0));
-        await api('/api/career', { body: { id: active.id, field: 'pct', value: nv } });
-        toast(`📈 ${active.name} updated to ${nv}%. It flows to your goal automatically.`);
+      const courses = active ? (S.career_courses || []).filter(x => String(x.career_id) === String(active.id)) : [];
+      if (active && courses.length) {
+        const options = courses.map(x => ({v:String(x.id),t:`${x.title} · ${x.platform || 'Other'} · ${x.pct || 0}%`}));
+        const pick = await modal({icon:active.icon||'📊',title:`Study: ${active.name}`,text:'Which course did you advance today?',fields:[{type:'select',label:'Active course',options}],okText:'Continue'});
+        if (pick === null) return;
+        const course = courses.find(x => String(x.id) === String(pick[0]));
+        if (!course) return;
+        const r = await modal({icon:'📈',title:course.title,text:`Current progress: <b>${course.pct || 0}%</b><br>What percentage is this course at now?`,fields:[{type:'number',label:'Course progress %',value:course.pct||0,min:0,max:100}],okText:'Save & check ✓'});
+        if (r === null) return;
+        const nv=Math.max(0,Math.min(100,parseInt(String(r[0]).replace(/[^0-9]/g,''),10)||0));
+        await api('/api/career/course',{body:{id:course.id,field:'pct',value:nv}});
+        toast(`📈 ${course.title} updated to ${nv}%. Career stage progress stays unchanged.`);
+      } else if (active) {
+        toast('Add an active course to this career before logging study progress.');
+        return;
       }
     }
     // CASO ESPECIAL leer/Read: pregunta en qué página vas de los libros en "reading"
