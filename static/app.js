@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 121;
+const FRONT_V = 122;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -267,7 +267,7 @@ function pasosInglesDelDia(wd) {
 }
 
 
-// V121 · Language Hunter Mission Core
+// V122 · Language Hunter Error & Phrase Notebook
 // The learning source is entered manually so the app never invents a book page or topic.
 function languageHunterProfile() {
   const pf = S.profile || {};
@@ -281,6 +281,77 @@ function languageHunterProfile() {
     grammar: pf.lang_grammar || '',
     weeklyUpdated: pf.lang_weekly_updated || ''
   };
+}
+
+
+function languageProfileArray(key) {
+  try {
+    const value = JSON.parse((S.profile || {})[key] || '[]');
+    return Array.isArray(value) ? value : [];
+  } catch (_error) { return []; }
+}
+function languageErrors() { return languageProfileArray('language_errors_v1'); }
+function languagePhrases() { return languageProfileArray('language_phrases_v1'); }
+async function saveLanguageProfileArray(key, rows) {
+  const value = JSON.stringify(rows.slice(-200));
+  await api('/api/profile', { body:{ key, value } });
+  S.profile = S.profile || {};
+  S.profile[key] = value;
+}
+function languageLearningContext() {
+  const errors = languageErrors().filter(x => x.status !== 'Mastered').sort((a,b)=>(+b.count||1)-(+a.count||1)).slice(0,3);
+  const phrases = languagePhrases().filter(x => x.confidence !== 'Mastered').slice(-3).reverse();
+  return { errors, phrases };
+}
+async function addLanguageError() {
+  const r = await modal({ icon:'✎', title:'Add recurring error', text:'Save a real mistake from your tutor session. Repeated mistakes are merged instead of duplicated.', fields:[
+    {type:'text',label:'Your original sentence',placeholder:'Yesterday I go to work.'},
+    {type:'text',label:'Correct sentence',placeholder:'Yesterday I went to work.'},
+    {type:'text',label:'Short rule or focus',placeholder:'Use the past form after yesterday.'}
+  ], okText:'Save error' });
+  if (!r) return false;
+  const wrong=String(r[0]||'').trim(), correct=String(r[1]||'').trim(), rule=String(r[2]||'').trim();
+  if (!wrong || !correct) { toast('Original and corrected sentences are required.'); return false; }
+  const rows=languageErrors();
+  const existing=rows.find(x=>String(x.wrong||'').toLowerCase()===wrong.toLowerCase() && String(x.correct||'').toLowerCase()===correct.toLowerCase());
+  if (existing) { existing.count=(+existing.count||1)+1; existing.rule=rule||existing.rule||''; existing.status='Learning'; existing.updated_at=hoyLocal(); }
+  else rows.push({id:`err-${Date.now()}`,wrong,correct,rule,count:1,status:'Learning',updated_at:hoyLocal()});
+  await saveLanguageProfileArray('language_errors_v1',rows); toast('✎ Error saved for future missions.'); return true;
+}
+async function addLanguagePhrase() {
+  const cfg=languageHunterProfile();
+  const r = await modal({ icon:'◆', title:'Add useful phrase', text:'Save complete phrases you want to use naturally, not isolated vocabulary.', fields:[
+    {type:'text',label:'Useful phrase',placeholder:"I'm looking forward to the weekend."},
+    {type:'text',label:'Meaning in your own words',placeholder:'Estoy esperando con ganas el fin de semana.'},
+    {type:'text',label:'Personal example',placeholder:"I'm looking forward to starting my new course."},
+    {type:'select',label:'Source',options:['American School Way','AI conversation','YouTube','Series','Website','Real conversation','Other'].map(v=>({v,t:v}))}
+  ], okText:'Save phrase' });
+  if (!r) return false;
+  const phrase=String(r[0]||'').trim(); if(!phrase){toast('The phrase is required.');return false;}
+  const rows=languagePhrases();
+  const existing=rows.find(x=>String(x.phrase||'').toLowerCase()===phrase.toLowerCase());
+  if(existing){existing.meaning=String(r[1]||'').trim()||existing.meaning||'';existing.example=String(r[2]||'').trim()||existing.example||'';existing.source=r[3]||existing.source||'Other';existing.confidence='Learning';existing.updated_at=hoyLocal();}
+  else rows.push({id:`phr-${Date.now()}`,phrase,meaning:String(r[1]||'').trim(),example:String(r[2]||'').trim(),source:r[3]||'Other',topic:cfg.topic||'',confidence:'Learning',updated_at:hoyLocal()});
+  await saveLanguageProfileArray('language_phrases_v1',rows); toast('◆ Phrase saved for future missions.'); return true;
+}
+function openLanguageNotebook(kind) {
+  const isError=kind==='errors';
+  const previous=document.activeElement;
+  const back=document.createElement('div'); back.className='modal-back language-notebook-back';
+  const draw=()=>{
+    const rows=isError?languageErrors():languagePhrases();
+    const items=rows.length?rows.slice().reverse().map(x=>isError?`<article class="language-note-card ${x.status==='Mastered'?'mastered':''}" data-note-id="${esc(x.id)}"><div><small>${x.status==='Mastered'?'MASTERED':'LEARNING'} · repeated ${+x.count||1}×</small><b>${esc(x.wrong)}</b><span>${esc(x.correct)}</span>${x.rule?`<em>${esc(x.rule)}</em>`:''}</div><div class="language-note-actions"><button data-note-toggle>${x.status==='Mastered'?'Reopen':'Mastered'}</button><button data-note-delete aria-label="Delete">✕</button></div></article>`:`<article class="language-note-card ${x.confidence==='Mastered'?'mastered':''}" data-note-id="${esc(x.id)}"><div><small>${esc(x.source||'Other')} · ${x.confidence||'Learning'}</small><b>${esc(x.phrase)}</b>${x.meaning?`<span>${esc(x.meaning)}</span>`:''}${x.example?`<em>${esc(x.example)}</em>`:''}</div><div class="language-note-actions"><button data-note-toggle>${x.confidence==='Mastered'?'Reopen':'Mastered'}</button><button data-note-delete aria-label="Delete">✕</button></div></article>`).join(''):`<div class="language-notebook-empty">${isError?'No recurring errors saved yet.':'No useful phrases saved yet.'}</div>`;
+    back.innerHTML=`<div class="modal-card language-notebook-card"><div class="language-mission-top"><div><span>LANGUAGE HUNTER NOTEBOOK</span><h3>${isError?'Recurring errors':'Useful phrases'}</h3></div><button type="button" class="language-mission-close">✕</button></div><div class="language-notebook-list">${items}</div><div class="language-notebook-footer"><button class="btn-ghost" data-note-add>${isError?'＋ Add error':'＋ Add phrase'}</button></div></div>`;
+    bind();
+  };
+  const close=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();},250)};
+  const bind=()=>{
+    back.querySelector('.language-mission-close').onclick=close;
+    back.querySelector('[data-note-add]').onclick=async()=>{const ok=isError?await addLanguageError():await addLanguagePhrase();if(ok)draw();};
+    back.querySelectorAll('[data-note-toggle]').forEach(btn=>btn.onclick=async()=>{const card=btn.closest('[data-note-id]');const rows=isError?languageErrors():languagePhrases();const row=rows.find(x=>x.id===card.dataset.noteId);if(!row)return;if(isError)row.status=row.status==='Mastered'?'Learning':'Mastered';else row.confidence=row.confidence==='Mastered'?'Learning':'Mastered';row.updated_at=hoyLocal();await saveLanguageProfileArray(isError?'language_errors_v1':'language_phrases_v1',rows);draw();});
+    back.querySelectorAll('[data-note-delete]').forEach(btn=>btn.onclick=async()=>{const card=btn.closest('[data-note-id]');const ok=await confirmModal('Delete note','This learning note will be removed permanently.',true);if(!ok)return;let rows=isError?languageErrors():languagePhrases();rows=rows.filter(x=>x.id!==card.dataset.noteId);await saveLanguageProfileArray(isError?'language_errors_v1':'language_phrases_v1',rows);draw();});
+  };
+  document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));back.onclick=e=>{if(e.target===back)close();};
 }
 
 async function saveLanguageHunterProfile(values) {
@@ -330,6 +401,9 @@ function languageTutorPrompt(wd, minutes = 25) {
   const target = ENGLISH_TRIMESTERS[qIdx]?.level || 'A2';
   const verified = pf.eng_real_level || 'Not tested';
   const { titulo, pasos } = pasosInglesDelDia(wd);
+  const learning = languageLearningContext();
+  const errorText = learning.errors.length ? learning.errors.map((x,i)=>`${i+1}. ${x.wrong} → ${x.correct}${x.rule ? ` (${x.rule})` : ''}`).join('\n') : 'No recurring errors saved yet.';
+  const phraseText = learning.phrases.length ? learning.phrases.map((x,i)=>`${i+1}. ${x.phrase}${x.example ? ` — ${x.example}` : ''}`).join('\n') : 'No useful phrases saved yet.';
   return `You are my Language Hunter English tutor.\n\nTODAY\nDay: ${DIAS[wd]}\nMission: ${titulo}\nVerified level: ${verified}\nCurrent target: ${target}\nAvailable time: ${minutes} minutes\n\nSTUDY SOURCE\nBook: ${cfg.book || 'Not specified'}\nBook level: ${cfg.level || 'Not specified'}\nUnit: ${cfg.unit || 'Not specified'}\nPages: ${cfg.pages || 'Not specified'}\nWeekly topic: ${cfg.topic || 'Not specified'}\nGrammar focus: ${cfg.grammar || 'Not specified'}\n\nMISSION STEPS\n${pasos.map((p,i)=>`${i+1}. ${p.s}: ${p.how}`).join('\n')}\n\nRULES\nSpeak mainly in English. Ask one question at a time. Make me produce English before explaining. Correct the most important errors, ask me to retry the corrected form, and finish with the exact LANGUAGE HUNTER SESSION REPORT plus a compact APP LOG line.`;
 }
 
@@ -383,6 +457,7 @@ function openLanguageMissionModal(day, wd) {
       <div class="language-source-strip"><div><small>WEEKLY SOURCE</small><b>${esc(cfg.book)}${cfg.level?' · '+esc(cfg.level):''}</b><span>${esc(cfg.unit||'No unit')}${cfg.pages?' · pages '+esc(cfg.pages):''}</span></div><button type="button" data-language-edit-source>Edit</button></div>
       <div class="language-topic-line"><span>${esc(cfg.topic)}</span>${cfg.grammar?`<b>${esc(cfg.grammar)}</b>`:''}</div>
       <div class="language-mission-steps">${stepRows}</div>
+      <div class="language-notebook-toolbar"><button type="button" data-language-errors>✎ Errors <b>${languageErrors().filter(x=>x.status!=='Mastered').length}</b></button><button type="button" data-language-phrases>◆ Phrases <b>${languagePhrases().length}</b></button></div>
       <div class="language-mission-actions"><button type="button" class="btn-ghost" data-language-ai>Copy AI tutor prompt</button><button type="button" class="m-ok language-complete" disabled>Complete mission ✓</button></div>
       <small class="language-save-note">Every step is saved immediately. Close and continue later without losing progress.</small>
     </div>`;
@@ -394,6 +469,8 @@ function openLanguageMissionModal(day, wd) {
     back.querySelector('.language-mission-close').onclick=()=>close(false);
     back.onclick=e=>{if(e.target===back)close(false);};
     back.querySelector('[data-language-ai]').onclick=()=>copyLanguageTutorPrompt(wd);
+    back.querySelector('[data-language-errors]').onclick=()=>openLanguageNotebook('errors');
+    back.querySelector('[data-language-phrases]').onclick=()=>openLanguageNotebook('phrases');
     back.querySelector('[data-language-edit-source]').onclick=async()=>{ const ok=await configureLanguageHunterSource(true); if(ok){ close(false); toast('Source updated. Open the mission again.'); } };
     back.querySelectorAll('[data-lang-step]').forEach(box=>box.onchange=async()=>{
       if(busy){box.checked=!box.checked;return;} busy=true; box.disabled=true;
@@ -4422,21 +4499,20 @@ function renderEnglish() {
       <div class="mini-bar green eng-training-bar"><i style="width:${trainingProgress}%"></i></div>
       <div class="eng-compact-meta"><span>📘 ${esc(t.book)}</span><span>🎬 ${esc(t.subs)}</span></div>
     </div>
-    ${levelCheckReady ? `<div class="eng-check-ready"><div><b>LEVEL CHECK READY</b><span>${immersionDays} immersion days logged. Take a ${esc(t.level)} assessment when you feel ready.</span></div><button class="btn-gold" id="engLevelBtn">Enter test result</button></div>` : ''}
     <div class="eng-blocks eng-blocks-compact">
       <div class="eng-block">🗣 <b>Speak</b><span>Mon & Fri</span></div>
       <div class="eng-block">🎧 <b>Listen</b><span>Tue & Sat</span></div>
       <div class="eng-block">📖 <b>Read</b><span>Wed</span></div>
       <div class="eng-block">✍️ <b>Write</b><span>Thu</span></div>
     </div>
-    <details class="eng-test eng-test-compact" ${levelCheckReady ? 'open' : ''}>
+    <details class="eng-test eng-test-compact">
       <summary><span>📊 Level assessment</span>${lastLevel ? `<small>Last: ${esc(lastLevel)}${lastPct ? ` · ${esc(lastPct)}%` : ''}</small>` : '<small>Verify your real CEFR level</small>'}</summary>
       <p class="hint">Free tests mainly measure reading and listening. Speaking and writing remain part of your daily training.</p>
       <div class="eng-test-links">
         ${ENGLISH_TESTS.map(tst => `<a href="${tst.url}" target="_blank" rel="noopener" class="eng-test-link"><b>${tst.name}</b><small>${tst.note}</small></a>`).join('')}
       </div>
       ${lastLevel ? `<div class="eng-last">Last result: <b>${esc(lastLevel)}</b>${lastPct ? ` (${esc(lastPct)}%)` : ''}${lastDate ? ` · ${fmtFecha(lastDate)}` : ''}</div>` : ''}
-      ${!levelCheckReady ? '<button class="btn-gold" id="engLevelBtn">I took a test → enter my result</button>' : ''}
+      <button class="btn-gold" id="engLevelBtn">I took a test → enter my result</button>
     </details>
     <div class="eng-actions">
       <button class="btn-ghost" id="engTalkBtn">💬 Practice with AI tutor</button>
@@ -5931,12 +6007,33 @@ function petCheckAppointments() {
 }
 
 
+
+function languageLevelCheckAdvice() {
+  try {
+    const pf=S.profile||{};
+    const qIdx=Math.min(+(pf.eng_q||0),ENGLISH_TRIMESTERS.length-1);
+    const target=ENGLISH_TRIMESTERS[qIdx]?.level||'A2';
+    const milestone=Math.min(120,(qIdx+1)*30);
+    const immersionDays=diasInglesHechos();
+    const lastDate=pf.eng_real_date||'';
+    const stageStart=pf['eng_q_start_'+qIdx]||'';
+    const testedThisStage=!!(lastDate&&stageStart&&lastDate>=stageStart);
+    if(immersionDays>=milestone&&!testedThisStage){
+      return `🤖 Hunter, you have ${immersionDays} immersion days. Your ${target} level check mission is ready. Take the assessment, then enter the result in English mastery.`;
+    }
+  }catch(_error){}
+  return '';
+}
+
 // v111 · Kevin Advisor: rules-based guidance from the app's real state.
 // It does not invent progress, alter data or call an external AI service.
 function kevinAdvisorMessage() {
   try {
     const reminder = scheduledReminder();
     if (reminder) return reminder.msg;
+
+    const levelAdvice = languageLevelCheckAdvice();
+    if (levelAdvice) return levelAdvice;
 
     const academy = academyReadState();
     const active = academyAllSkills().find(x => x.id === academy.activeSkillId);
