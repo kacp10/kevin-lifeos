@@ -4243,43 +4243,61 @@ function renderEnglish() {
   const qIdx = Math.min(+(pf.eng_q || 0), ENGLISH_TRIMESTERS.length - 1);
   const t = ENGLISH_TRIMESTERS[qIdx];
   const startedQ = pf['eng_q_start_' + qIdx] || '';
-  // días dentro del trimestre actual
-  let diasEnQ = '';
-  if (startedQ) {
-    const d0 = new Date(startedQ), now = new Date();
-    const dias = Math.floor((now - d0) / 86400000);
-    diasEnQ = `${dias} ${dias === 1 ? 'day' : 'days'} into this quarter`;
-  }
+  const englishCareer = (S.careers || []).find(c => /ingl|english/i.test(c.name || ''));
+  const immersionDays = diasInglesHechos();
+  const trainingProgress = englishCareer ? progresoCareer(englishCareer) : Math.min(100, Math.round((immersionDays / 120) * 100));
   const lastLevel = pf.eng_real_level || '';
+  const verifiedLevel = lastLevel || 'Not tested';
   const lastPct = pf.eng_real_pct || '';
   const lastDate = pf.eng_real_date || '';
+
+  let daysInStage = 0;
+  if (startedQ) {
+    const d0 = new Date(startedQ + 'T12:00:00');
+    const now = new Date();
+    daysInStage = Math.max(0, Math.floor((now - d0) / 86400000));
+  }
+  const milestone = Math.min(120, (qIdx + 1) * 30);
+  const testDate = lastDate ? new Date(lastDate + 'T12:00:00') : null;
+  const stageDate = startedQ ? new Date(startedQ + 'T12:00:00') : null;
+  const testedThisStage = !!(testDate && stageDate && testDate >= stageDate);
+  const levelCheckReady = immersionDays >= milestone && !testedThisStage;
+
   panel.innerHTML = `
-    <div class="eng-hero">
-      <div class="eng-q">${t.q}</div>
-      <div class="eng-goal">🎯 This stage — all 4 skills: <b>${t.goal}</b></div>
-      <div class="eng-meta">📘 ${t.book} · 🎬 ${t.subs}</div>
-      ${diasEnQ ? `<div class="eng-days">${diasEnQ}</div>` : ''}
+    <div class="eng-command-card">
+      <div class="eng-command-head">
+        <div><span class="eng-command-kicker">LANGUAGE HUNTER MISSION</span><h3>${t.q}</h3></div>
+        <span class="eng-command-progress">${trainingProgress}% training</span>
+      </div>
+      <div class="eng-status-grid">
+        <div><span>Immersion</span><b>${immersionDays} days</b></div>
+        <div><span>Verified level</span><b>${esc(verifiedLevel)}</b></div>
+        <div><span>Current target</span><b>${esc(t.level)}</b></div>
+        <div><span>Stage time</span><b>${startedQ ? `${daysInStage} days` : 'Not started'}</b></div>
+      </div>
+      <div class="mini-bar green eng-training-bar"><i style="width:${trainingProgress}%"></i></div>
+      <div class="eng-compact-meta"><span>📘 ${esc(t.book)}</span><span>🎬 ${esc(t.subs)}</span></div>
     </div>
-    <div class="eng-rule">⚖️ The balance rule: train <b>INPUT</b> (reading + listening) <b>and OUTPUT</b> (speaking + writing) every week. Most people only do input → they understand but can't produce. You train all four, A1 → C1.</div>
-    <div class="eng-blocks">
+    ${levelCheckReady ? `<div class="eng-check-ready"><div><b>LEVEL CHECK READY</b><span>${immersionDays} immersion days logged. Take a ${esc(t.level)} assessment when you feel ready.</span></div><button class="btn-gold" id="engLevelBtn">Enter test result</button></div>` : ''}
+    <div class="eng-blocks eng-blocks-compact">
       <div class="eng-block">🗣 <b>Speak</b><span>Mon & Fri</span></div>
       <div class="eng-block">🎧 <b>Listen</b><span>Tue & Sat</span></div>
       <div class="eng-block">📖 <b>Read</b><span>Wed</span></div>
       <div class="eng-block">✍️ <b>Write</b><span>Thu</span></div>
     </div>
-    <div class="eng-test">
-      <div class="eng-test-head">📊 Check your real level (free tests)</div>
-      <p class="hint">These measure mostly <b>reading & listening</b> — speaking & writing you train here. Take one, then enter your result and I'll give you the verdict: advance or keep practicing.</p>
+    <details class="eng-test eng-test-compact" ${levelCheckReady ? 'open' : ''}>
+      <summary><span>📊 Level assessment</span>${lastLevel ? `<small>Last: ${esc(lastLevel)}${lastPct ? ` · ${esc(lastPct)}%` : ''}</small>` : '<small>Verify your real CEFR level</small>'}</summary>
+      <p class="hint">Free tests mainly measure reading and listening. Speaking and writing remain part of your daily training.</p>
       <div class="eng-test-links">
         ${ENGLISH_TESTS.map(tst => `<a href="${tst.url}" target="_blank" rel="noopener" class="eng-test-link"><b>${tst.name}</b><small>${tst.note}</small></a>`).join('')}
       </div>
-      ${lastLevel ? `<div class="eng-last">Your last test: <b>${lastLevel}</b>${lastPct ? ` (${lastPct}%)` : ''}${lastDate ? ` · ${fmtFecha(lastDate)}` : ''}</div>` : ''}
-      <button class="btn-gold" id="engLevelBtn">I took a test → enter my result</button>
-    </div>
+      ${lastLevel ? `<div class="eng-last">Last result: <b>${esc(lastLevel)}</b>${lastPct ? ` (${esc(lastPct)}%)` : ''}${lastDate ? ` · ${fmtFecha(lastDate)}` : ''}</div>` : ''}
+      ${!levelCheckReady ? '<button class="btn-gold" id="engLevelBtn">I took a test → enter my result</button>' : ''}
+    </details>
     <div class="eng-actions">
-      <button class="btn-ghost" id="engTalkBtn">💬 Practice with me now</button>
+      <button class="btn-ghost" id="engTalkBtn">💬 Practice with AI tutor</button>
       ${qIdx < ENGLISH_TRIMESTERS.length - 1
-        ? `<button class="btn-ghost" id="engNextBtn">Advance a stage manually</button>`
+        ? `<button class="btn-ghost" id="engNextBtn">Advance stage manually</button>`
         : '<span class="eng-final">🏆 Final stage — reaching for C1!</span>'}
     </div>`;
 }
@@ -4339,7 +4357,7 @@ document.addEventListener('click', async (e) => {
   }
   if (e.target.id === 'engTalkBtn') {
     if (typeof sendPrompt === 'function')
-      sendPrompt("Let's practice English. Talk to me only in English, ask me questions about my day, and gently correct my mistakes. Start now.");
+      sendPrompt("Act as my English tutor. Use only English unless I explicitly ask for Spanish. Start with today's Life training focus, ask one question at a time, correct my mistakes after I answer, explain the correction briefly, make me repeat the improved sentence, and finish with my 3 most important recurring mistakes plus a short homework task.");
     else
       toast('💬 Open a chat and tell me: "practice English with me"');
     return;
@@ -4349,7 +4367,7 @@ document.addEventListener('click', async (e) => {
     const info = {
       overview: ['📅', 'Life', 'Your daily routine, career training, practical skills, English and weekly shifts live here. The order follows what you use most often.'],
       routine: ['✓', 'Today', 'Choose a date, complete the activities you actually do and add or schedule anything extra. Life keeps its existing links with Habits.'],
-      careers: ['🗺', 'Career paths', 'Each career moves through Fundamentals, Intermediate, Projects and Professional. Courses keep their own progress and platform. You decide when a stage is conquered; completing a course does not advance the career stage automatically.'],
+      careers: ['🗺', 'Career paths', 'Each career moves through Fundamentals, Intermediate, Projects and Professional. Courses keep their own progress and platform. You decide when a regular career stage is conquered; completing a course does not advance it automatically. English is different: immersion days drive training progress and CEFR tests verify your real level.'],
       skills: ['⚔', 'Hunter Skill Academy', 'Practice one real-world skill at a time. Course skills still remain connected to finished courses and Hunter Profile.'],
       workweek: ['🗓', 'Work week', 'Set your normal shift for each weekday. When a Monday–Friday day is marked Rest, the nearest visible date is also saved as an exceptional rest day, so it does not break Habit streaks or lower the monthly completion denominator.']
     }[lifeHelp.dataset.lifeHelp];
@@ -4403,9 +4421,18 @@ function metaDeCarrera(c) {
 }
 
 function progresoCareer(c) {
-  // V120: only explicitly conquered stages move the career/linked Goal.
+  const step = Math.max(0, Math.min(4, Number(c.step || 0)));
+  // English is a special immersion career: its saved percentage is the partial progress
+  // inside the current 30-day block. Restore that gradual slice instead of treating it
+  // like a manually conquered multi-course career.
+  if (/ingl|english/i.test(c.name || '')) {
+    if (step >= 4) return 100;
+    const partial = Math.max(0, Math.min(100, Number(c.pct || 0)));
+    return Math.min(100, Math.round(step * 25 + partial * 0.25));
+  }
+  // V120 regular careers: only explicitly conquered stages move the career/linked Goal.
   // Course percentages remain independent evidence and never multiply the 25% stage reward.
-  return Math.min(Math.max(Number(c.bank || 0), Number(c.step || 0) * 25), 100);
+  return Math.min(Math.max(Number(c.bank || 0), step * 25), 100);
 }
 
 const COURSE_SKILL_CATALOG = [
@@ -4500,11 +4527,9 @@ function renderCareer() {
       <header class="career-head"><div><span class="career-kicker">HUNTER TRAINING ROUTE</span><b>${c.icon || '🎯'} ${esc(c.name)}</b></div><span class="career-prog">${prog}% to goal</span></header>
       <div class="peldano-row">${dots}</div>
       <div class="mini-bar green career-overall-bar"><i style="width:${prog}%"></i></div>
-      <section class="career-stage-head"><div><span>STEP ${step + 1}</span><h3>${PELDANOS[step]}</h3><p>${STEP_DESC[step] || ''}</p></div><button class="advance-career-stage ${completedPath ? 'done' : ''}" data-advance-stage="${c.id}" ${completedPath ? 'disabled' : ''}>${completedPath ? '✓ Path conquered' : nextLabel}</button></section>
-      ${esIngles ? `<div class="eng-auto">🔥 <b>${diasIng} days</b> of English practice logged. English automation remains connected to Life.</div>` : ''}
-      <section class="career-active-courses"><div class="career-section-title"><div><span>ACTIVE COURSES</span><b>${PELDANOS[step]} training</b></div><button class="add-active-course" data-add-active-course="${c.id}">＋ Add course</button></div>${activeHtml}</section>
+      ${esIngles ? `<section class="career-stage-head english-career-stage"><div><span>IMMERSION PATH</span><h3>${PELDANOS[step] || 'Professional'}</h3><p>Progress comes from completed English training days; CEFR level is verified through assessments.</p></div><a class="btn-ghost english-panel-link" href="#englishPanel">Open English mastery</a></section><div class="eng-auto">🔥 <b>${diasIng} days</b> of English practice logged · <b>${prog}%</b> training progress.</div>` : `<section class="career-stage-head"><div><span>STEP ${step + 1}</span><h3>${PELDANOS[step]}</h3><p>${STEP_DESC[step] || ''}</p></div><button class="advance-career-stage ${completedPath ? 'done' : ''}" data-advance-stage="${c.id}" ${completedPath ? 'disabled' : ''}>${completedPath ? '✓ Path conquered' : nextLabel}</button></section><section class="career-active-courses"><div class="career-section-title"><div><span>ACTIVE COURSES</span><b>${PELDANOS[step]} training</b></div><button class="add-active-course" data-add-active-course="${c.id}">＋ Add course</button></div>${activeHtml}</section>`}
       <footer class="career-foot">${c.active ? '<span class="active-badge">★ Active focus</span>' : `<button class="set-active" data-career="${c.id}">Set as focus</button>`}<button class="del-x" data-type="career" data-id="${c.id}" title="Delete career">✕</button></footer>
-      <section class="career-courses"><b class="mini-title">Finished courses</b>${finishedHtml}</section>
+      ${esIngles ? '' : `<section class="career-courses"><b class="mini-title">Finished courses</b>${finishedHtml}</section>`}
     </article>`;
   };
   wrap.innerHTML = careers.map(card).join('') + `<button class="btn-gold add-career-btn" id="addCareerBtn">+ Add a career to learn</button>`;

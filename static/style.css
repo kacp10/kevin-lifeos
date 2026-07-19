@@ -3571,3 +3571,44 @@ body.hunter-profile-open {
   .life-heading h2{font-size:.92rem}
   #tab-life .panel{padding:12px}
 }
+
+/* ====== V120 ENGLISH SPECIAL CAREER FIX ====== */
+.eng-command-card {
+  border: 1px solid rgba(245,185,66,.55);
+  border-radius: 14px;
+  padding: 14px;
+  background: linear-gradient(145deg, rgba(42,35,71,.94), rgba(20,17,40,.96));
+  margin-bottom: 10px;
+}
+.eng-command-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.eng-command-kicker { display:block; color:var(--mut); font-size:.66rem; letter-spacing:.14em; font-weight:800; }
+.eng-command-head h3 { margin:3px 0 0; color:var(--gold); font-family:'Russo One',sans-serif; font-size:1.05rem; }
+.eng-command-progress { white-space:nowrap; border:1px solid rgba(54,201,167,.45); color:var(--ok); border-radius:999px; padding:5px 9px; font-size:.72rem; font-weight:800; }
+.eng-status-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:7px; margin:12px 0 9px; }
+.eng-status-grid > div { border:1px solid var(--line); border-radius:9px; padding:8px 9px; background:rgba(10,8,24,.35); min-width:0; }
+.eng-status-grid span { display:block; color:var(--mut); font-size:.65rem; margin-bottom:2px; }
+.eng-status-grid b { display:block; font-size:.82rem; overflow-wrap:anywhere; }
+.eng-training-bar { margin:0 0 8px; }
+.eng-compact-meta { display:flex; gap:8px 14px; flex-wrap:wrap; color:var(--mut); font-size:.72rem; }
+.eng-blocks-compact { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.eng-check-ready { display:flex; justify-content:space-between; align-items:center; gap:12px; border:1px solid rgba(127,209,240,.5); background:rgba(46,107,138,.13); border-radius:12px; padding:11px 12px; margin-bottom:10px; }
+.eng-check-ready div { display:flex; flex-direction:column; gap:2px; }
+.eng-check-ready b { color:#7fd1f0; font-size:.78rem; letter-spacing:.08em; }
+.eng-check-ready span { color:var(--mut); font-size:.76rem; }
+.eng-test-compact { padding:0; overflow:hidden; }
+.eng-test-compact summary { cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:10px; padding:11px 12px; list-style:none; }
+.eng-test-compact summary::-webkit-details-marker { display:none; }
+.eng-test-compact summary span { color:#7fd1f0; font-family:'Russo One',sans-serif; font-size:.85rem; }
+.eng-test-compact summary small { color:var(--mut); font-size:.68rem; text-align:right; }
+.eng-test-compact[open] { padding:0 12px 12px; }
+.eng-test-compact[open] summary { margin:0 -12px 8px; border-bottom:1px solid var(--line); }
+.english-career-stage { background:rgba(127,209,240,.05); border-color:rgba(127,209,240,.24); }
+.english-panel-link { text-decoration:none; display:inline-flex; align-items:center; justify-content:center; }
+
+@media (max-width: 760px) {
+  .eng-status-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .eng-blocks-compact { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .eng-command-head, .eng-check-ready { align-items:stretch; flex-direction:column; }
+  .eng-command-progress { align-self:flex-start; }
+  .eng-check-ready .btn-gold { width:100%; }
+}
