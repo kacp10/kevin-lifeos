@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 122;
+const FRONT_V = 123;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -267,7 +267,7 @@ function pasosInglesDelDia(wd) {
 }
 
 
-// V122 · Language Hunter Error & Phrase Notebook
+// V123 · AI Tutor Session Bridge + Hunter Wishlist redesign
 // The learning source is entered manually so the app never invents a book page or topic.
 function languageHunterProfile() {
   const pf = S.profile || {};
@@ -404,7 +404,8 @@ function languageTutorPrompt(wd, minutes = 25) {
   const learning = languageLearningContext();
   const errorText = learning.errors.length ? learning.errors.map((x,i)=>`${i+1}. ${x.wrong} → ${x.correct}${x.rule ? ` (${x.rule})` : ''}`).join('\n') : 'No recurring errors saved yet.';
   const phraseText = learning.phrases.length ? learning.phrases.map((x,i)=>`${i+1}. ${x.phrase}${x.example ? ` — ${x.example}` : ''}`).join('\n') : 'No useful phrases saved yet.';
-  return `You are my Language Hunter English tutor.\n\nTODAY\nDay: ${DIAS[wd]}\nMission: ${titulo}\nVerified level: ${verified}\nCurrent target: ${target}\nAvailable time: ${minutes} minutes\n\nSTUDY SOURCE\nBook: ${cfg.book || 'Not specified'}\nBook level: ${cfg.level || 'Not specified'}\nUnit: ${cfg.unit || 'Not specified'}\nPages: ${cfg.pages || 'Not specified'}\nWeekly topic: ${cfg.topic || 'Not specified'}\nGrammar focus: ${cfg.grammar || 'Not specified'}\n\nMISSION STEPS\n${pasos.map((p,i)=>`${i+1}. ${p.s}: ${p.how}`).join('\n')}\n\nRULES\nSpeak mainly in English. Ask one question at a time. Make me produce English before explaining. Correct the most important errors, ask me to retry the corrected form, and finish with the exact LANGUAGE HUNTER SESSION REPORT plus a compact APP LOG line.`;
+  const previous = languageSessions().slice(-1)[0] || {};
+  return `You are my Language Hunter English tutor.\n\nTODAY\nDay: ${DIAS[wd]}\nMission: ${titulo}\nVerified level: ${verified}\nCurrent target: ${target}\nAvailable time: ${minutes} minutes\n\nSTUDY SOURCE\nBook: ${cfg.book || 'Not specified'}\nBook level: ${cfg.level || 'Not specified'}\nUnit: ${cfg.unit || 'Not specified'}\nPages: ${cfg.pages || 'Not specified'}\nWeekly topic: ${cfg.topic || 'Not specified'}\nGrammar focus: ${cfg.grammar || 'Not specified'}\n\nMISSION STEPS\n${pasos.map((p,i)=>`${i+1}. ${p.s}: ${p.how}`).join('\n')}\n\nRECURRING ERRORS TO RETRAIN\n${errorText}\n\nUSEFUL PHRASES TO REUSE\n${phraseText}\n\nPREVIOUS SESSION\nMain issue: ${previous.issue || 'No previous issue logged'}\nHomework: ${previous.homework || 'No pending homework'}\n\nRULES\nSpeak mainly in English. Ask one question at a time. Make me produce English before explaining. Correct the most important errors, ask me to retry the corrected form, deliberately reuse the saved phrases, and finish with the exact LANGUAGE HUNTER SESSION REPORT plus a compact APP LOG line.`;
 }
 
 function copyLanguageTutorPrompt(wd) {
@@ -415,6 +416,146 @@ function copyLanguageTutorPrompt(wd) {
   const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
   toast('Tutor prompt copied. Open your Language Hunter chat.');
   return Promise.resolve();
+}
+
+
+function languageSessions() {
+  try {
+    const rows = JSON.parse((S.profile || {}).language_sessions_v1 || '[]');
+    return Array.isArray(rows) ? rows : [];
+  } catch (_e) { return []; }
+}
+
+async function persistLanguageSessions(rows) {
+  const value = JSON.stringify((Array.isArray(rows) ? rows : []).slice(-120));
+  await api('/api/profile', { body:{ key:'language_sessions_v1', value } });
+  S.profile = S.profile || {};
+  S.profile.language_sessions_v1 = value;
+}
+
+function reportSection(text, heading, nextHeadings = []) {
+  const normalized = String(text || '').replace(/\r/g, '');
+  const start = normalized.search(new RegExp(`^${heading.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\s*$`, 'mi'));
+  if (start < 0) return '';
+  const after = normalized.slice(start).replace(/^.*\n/, '');
+  let end = after.length;
+  for (const next of nextHeadings) {
+    const pos = after.search(new RegExp(`^${next.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\s*$`, 'mi'));
+    if (pos >= 0) end = Math.min(end, pos);
+  }
+  return after.slice(0, end).trim();
+}
+
+function parseTutorReport(raw) {
+  const text = String(raw || '').replace(/\r/g, '').trim();
+  const field = label => {
+    const m = text.match(new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\s*:\\s*(.*)$`, 'mi'));
+    return m ? m[1].trim() : '';
+  };
+  const mission = reportSection(text, 'MISSION RESULT', ['TOP CORRECTIONS']);
+  const correctionsRaw = reportSection(text, 'TOP CORRECTIONS', ['NEW USEFUL PHRASES']);
+  const phrasesRaw = reportSection(text, 'NEW USEFUL PHRASES', ['PRONUNCIATION OR SHADOWING NOTE']);
+  const list = rawSection => rawSection.split('\n').map(x=>x.replace(/^\s*\d+[.)]\s*/, '').trim()).filter(Boolean);
+  const corrections = list(correctionsRaw).slice(0, 3).map(line => {
+    const parts = line.split(/\s*(?:→|->|=>)\s*/);
+    return { raw:line, wrong:(parts[0] || '').trim(), correct:(parts[1] || '').trim() };
+  });
+  const phrases = list(phrasesRaw).slice(0, 5);
+  const difficultyMatch = mission.match(/Difficulty\s*:\s*(Easy|Appropriate|Hard)/i);
+  const weaknessMatch = mission.match(/Main weakness\s*:\s*(.*)/i);
+  return {
+    date: field('Date') || hoyLocal(),
+    day: field('Day'),
+    level: field('Level'),
+    target: field('Target'),
+    bookUnit: field('Book / unit'),
+    topic: field('Weekly topic'),
+    skill: field('Main skill trained'),
+    minutes: +(field('Minutes practiced').match(/\d+/) || [0])[0],
+    difficulty: difficultyMatch ? difficultyMatch[1][0].toUpperCase()+difficultyMatch[1].slice(1).toLowerCase() : 'Appropriate',
+    weakness: weaknessMatch ? weaknessMatch[1].trim() : field('RECURRING ERROR TO REVIEW NEXT TIME'),
+    corrections,
+    phrases,
+    pronunciation: reportSection(text, 'PRONUNCIATION OR SHADOWING NOTE', ['RECURRING ERROR TO REVIEW NEXT TIME']),
+    recurring: reportSection(text, 'RECURRING ERROR TO REVIEW NEXT TIME', ['HOMEWORK']),
+    homework: reportSection(text, 'HOMEWORK', ['APP LOG']),
+    log: reportSection(text, 'APP LOG', []),
+    raw:text
+  };
+}
+
+async function importLanguageTutorReport(wd) {
+  const pasted = await modal({
+    icon:'↳', title:'Import tutor report',
+    text:'Paste the complete LANGUAGE HUNTER SESSION REPORT from your ChatGPT tutor. Nothing is saved until you review the preview.',
+    fields:[{type:'textarea',label:'Tutor report',rows:14,placeholder:'LANGUAGE HUNTER SESSION REPORT\n\nDate: ...'}],
+    okText:'Analyze report'
+  });
+  if (!pasted || !String(pasted[0] || '').trim()) return false;
+  const parsed = parseTutorReport(pasted[0]);
+  if (!parsed.log && !parsed.minutes && !parsed.corrections.length && !parsed.phrases.length) {
+    toast('The report format could not be recognized. Paste the full report.', 'warn');
+    return false;
+  }
+  const cfg = languageHunterProfile();
+  const validErrors = parsed.corrections.filter(x=>x.wrong && x.correct);
+  const preview = `<div class="language-import-preview">
+    <div><small>SESSION</small><b>${esc(parsed.skill || pasosInglesDelDia(wd).titulo)}</b><span>${parsed.minutes || 0} min · ${esc(parsed.difficulty)}</span></div>
+    <div><small>MAIN ISSUE</small><b>${esc(parsed.weakness || parsed.recurring || 'Not detected')}</b></div>
+    <div><small>DETECTED</small><b>${validErrors.length} corrections · ${parsed.phrases.length} phrases</b><span>${parsed.homework ? 'Homework included' : 'No homework detected'}</span></div>
+  </div>`;
+  const reviewed = await modal({
+    icon:'✓', title:'Review imported session', text:preview,
+    fields:[
+      {type:'number',label:'Minutes practiced',value:parsed.minutes || 0,min:0,max:300},
+      {type:'select',label:'Difficulty',value:parsed.difficulty,options:['Easy','Appropriate','Hard'].map(v=>({v,t:v}))},
+      {type:'text',label:'Main issue',value:parsed.weakness || parsed.recurring || '',placeholder:'Main weakness'},
+      {type:'textarea',label:'APP LOG',rows:3,value:parsed.log || '',placeholder:'Compact tutor summary'}
+    ], okText:'Save imported session'
+  });
+  if (!reviewed) return false;
+  const rows = languageSessions();
+  rows.push({
+    date:parsed.date || hoyLocal(), day:parsed.day || DIAS[wd],
+    skill:parsed.skill || pasosInglesDelDia(wd).titulo, book:cfg.book,
+    unit:cfg.unit, pages:cfg.pages, topic:parsed.topic || cfg.topic,
+    grammar:cfg.grammar, minutes:+reviewed[0] || 0,
+    difficulty:reviewed[1] || 'Appropriate', issue:String(reviewed[2] || '').trim(),
+    phrases:parsed.phrases.length, log:String(reviewed[3] || '').trim(),
+    homework:parsed.homework || '', pronunciation:parsed.pronunciation || '',
+    imported:true
+  });
+  await persistLanguageSessions(rows);
+  if (validErrors.length || parsed.phrases.length) {
+    const addNotes = await confirmModal('Update learning notebook', `Add <b>${validErrors.length}</b> detected corrections and <b>${parsed.phrases.length}</b> useful phrases to the Language Hunter notebook?<br><br>You can review or delete them later.`, false);
+    if (addNotes) {
+      const errors = languageErrors();
+      for (const item of validErrors) {
+        const existing = errors.find(x=>String(x.wrong||'').toLowerCase()===item.wrong.toLowerCase() && String(x.correct||'').toLowerCase()===item.correct.toLowerCase());
+        if (existing) { existing.count=(+existing.count||1)+1; existing.status='Learning'; existing.updated_at=hoyLocal(); }
+        else errors.push({id:`err-${Date.now()}-${errors.length}`,wrong:item.wrong,correct:item.correct,rule:parsed.weakness || '',count:1,status:'Learning',updated_at:hoyLocal()});
+      }
+      await saveLanguageProfileArray('language_errors_v1', errors);
+      const phrases = languagePhrases();
+      for (const phrase of parsed.phrases) {
+        if (!phrase || phrases.some(x=>String(x.phrase||'').toLowerCase()===phrase.toLowerCase())) continue;
+        phrases.push({id:`phr-${Date.now()}-${phrases.length}`,phrase,meaning:'',example:'',source:'AI conversation',topic:cfg.topic||'',confidence:'Learning',updated_at:hoyLocal()});
+      }
+      await saveLanguageProfileArray('language_phrases_v1', phrases);
+    }
+  }
+  toast('↳ Tutor report imported. The next prompt can use this evidence.');
+  return true;
+}
+
+function openLanguageSessionHistory() {
+  const rows = languageSessions().slice().reverse();
+  const previous=document.activeElement;
+  const back=document.createElement('div'); back.className='modal-back language-history-back';
+  const items = rows.length ? rows.map(x=>`<article class="language-history-item"><div><small>${esc(x.date||'')} · ${esc(x.day||'')}</small><b>${esc(x.skill||'Language mission')}</b><span>${+x.minutes||0} min · ${esc(x.difficulty||'Appropriate')}</span></div><div><small>MAIN ISSUE</small><b>${esc(x.issue||'No issue logged')}</b>${x.homework?`<em>${esc(x.homework)}</em>`:''}</div></article>`).join('') : '<div class="language-notebook-empty">No tutor sessions saved yet.</div>';
+  back.innerHTML=`<div class="modal-card language-history-card"><div class="language-mission-top"><div><span>LANGUAGE HUNTER ARCHIVE</span><h3>Tutor sessions</h3></div><button type="button" class="language-mission-close">✕</button></div><div class="language-history-list">${items}</div></div>`;
+  const close=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();},250)};
+  document.body.appendChild(back);document.body.classList.add('modal-open');requestAnimationFrame(()=>back.classList.add('show'));back.querySelector('.language-mission-close').onclick=close;back.onclick=e=>{if(e.target===back)close();};
 }
 
 async function saveLanguageSessionReport(wd) {
@@ -431,14 +572,9 @@ async function saveLanguageSessionReport(wd) {
     ], okText:'Save report', cancelText:'Skip report'
   });
   if (!r) return;
-  let sessions=[];
-  try { sessions=JSON.parse((S.profile||{}).language_sessions_v1 || '[]'); } catch(_e) { sessions=[]; }
-  if (!Array.isArray(sessions)) sessions=[];
+  let sessions=languageSessions();
   sessions.push({date:hoyLocal(),day:DIAS[wd],skill:(pasosInglesDelDia(wd).titulo||''),book:cfg.book,unit:cfg.unit,pages:cfg.pages,topic:cfg.topic,grammar:cfg.grammar,minutes:+r[0]||0,difficulty:r[1]||'Appropriate',issue:String(r[2]||'').trim(),phrases:+r[3]||0,log:String(r[4]||'').trim()});
-  sessions=sessions.slice(-120);
-  const value=JSON.stringify(sessions);
-  await api('/api/profile',{body:{key:'language_sessions_v1',value}});
-  S.profile=S.profile||{}; S.profile.language_sessions_v1=value;
+  await persistLanguageSessions(sessions);
   toast('📝 Mission report saved.');
 }
 
@@ -457,8 +593,8 @@ function openLanguageMissionModal(day, wd) {
       <div class="language-source-strip"><div><small>WEEKLY SOURCE</small><b>${esc(cfg.book)}${cfg.level?' · '+esc(cfg.level):''}</b><span>${esc(cfg.unit||'No unit')}${cfg.pages?' · pages '+esc(cfg.pages):''}</span></div><button type="button" data-language-edit-source>Edit</button></div>
       <div class="language-topic-line"><span>${esc(cfg.topic)}</span>${cfg.grammar?`<b>${esc(cfg.grammar)}</b>`:''}</div>
       <div class="language-mission-steps">${stepRows}</div>
-      <div class="language-notebook-toolbar"><button type="button" data-language-errors>✎ Errors <b>${languageErrors().filter(x=>x.status!=='Mastered').length}</b></button><button type="button" data-language-phrases>◆ Phrases <b>${languagePhrases().length}</b></button></div>
-      <div class="language-mission-actions"><button type="button" class="btn-ghost" data-language-ai>Copy AI tutor prompt</button><button type="button" class="m-ok language-complete" disabled>Complete mission ✓</button></div>
+      <div class="language-notebook-toolbar"><button type="button" data-language-errors>✎ Errors <b>${languageErrors().filter(x=>x.status!=='Mastered').length}</b></button><button type="button" data-language-phrases>◆ Phrases <b>${languagePhrases().length}</b></button><button type="button" data-language-history>▤ Sessions <b>${languageSessions().length}</b></button></div>
+      <div class="language-mission-actions language-mission-actions-v123"><button type="button" class="btn-ghost" data-language-ai>Copy AI tutor prompt</button><button type="button" class="btn-ghost" data-language-import>Import tutor report</button><button type="button" class="m-ok language-complete" disabled>Complete mission ✓</button></div>
       <small class="language-save-note">Every step is saved immediately. Close and continue later without losing progress.</small>
     </div>`;
     document.body.appendChild(back); document.body.classList.add('modal-open'); requestAnimationFrame(()=>back.classList.add('show'));
@@ -471,6 +607,8 @@ function openLanguageMissionModal(day, wd) {
     back.querySelector('[data-language-ai]').onclick=()=>copyLanguageTutorPrompt(wd);
     back.querySelector('[data-language-errors]').onclick=()=>openLanguageNotebook('errors');
     back.querySelector('[data-language-phrases]').onclick=()=>openLanguageNotebook('phrases');
+    back.querySelector('[data-language-history]').onclick=()=>openLanguageSessionHistory();
+    back.querySelector('[data-language-import]').onclick=()=>importLanguageTutorReport(wd);
     back.querySelector('[data-language-edit-source]').onclick=async()=>{ const ok=await configureLanguageHunterSource(true); if(ok){ close(false); toast('Source updated. Open the mission again.'); } };
     back.querySelectorAll('[data-lang-step]').forEach(box=>box.onchange=async()=>{
       if(busy){box.checked=!box.checked;return;} busy=true; box.disabled=true;
@@ -712,7 +850,9 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
         const initVal = f.value != null && f.value !== '' ? Number(f.value).toLocaleString('es-CO') : '';
         return lab + `<input data-i="${i}" data-money="1" type="text" inputmode="numeric" placeholder="${f.placeholder || ''}" value="${initVal}">`;
       }
-      return lab + `<input data-i="${i}" type="${f.type || 'text'}" placeholder="${f.placeholder || ''}" value="${f.value ?? ''}" ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''}>`;
+      if (f.type === 'textarea')
+        return lab + `<textarea data-i="${i}" rows="${f.rows || 8}" placeholder="${f.placeholder || ''}">${esc(f.value ?? '')}</textarea>`;
+      return lab + `<input data-i="${i}" type="${f.type || 'text'}" placeholder="${f.placeholder || ''}" value="${esc(f.value ?? '')}" ${f.min != null ? `min="${f.min}"` : ''} ${f.max != null ? `max="${f.max}"` : ''}>`;
     }).join('');
     back.innerHTML = `<div class="modal-card">
       <div class="modal-icon">${icon}</div>
@@ -5419,23 +5559,46 @@ document.addEventListener('click', async (e) => {
 
 /* ---------- SUEÑOS ---------- */
 function renderSuenos() {
-  const cats = [...new Set(S.dreams.map(d => d.category))];
-  $('#dreamList').innerHTML = cats.map(cat => {
-    const items = S.dreams.filter(d => d.category === cat);
-    const comprados = items.filter(d => d.bought).length;
-    return `<div class="dream-cat">${cat} <small>· ${comprados}/${items.length} bought ✅</small></div>` +
-      items.map(d => {
-        const p = d.value ? Math.min(d.saved / d.value, 1) : 0;
-        return `<div class="dream-item ${d.bought ? 'bought-item' : ''}">
-          <span class="dname">${esc(d.name)} <button class="del-x" data-type="dream" data-id="${d.id}">✕</button></span>
-          <input class="d-edit money-live" inputmode="numeric" data-f="value" data-id="${d.id}" value="${Number(d.value || 0).toLocaleString('es-CO')}" title="Valor (editable)">
-          <input class="d-edit money-live" inputmode="numeric" data-f="saved" data-id="${d.id}" value="${Number(d.saved || 0).toLocaleString('es-CO')}" title="Lo que llevas ahorrado">
-          <div class="mini-bar green"><i style="width:${d.bought ? 100 : p * 100}%"></i></div>
-          <button class="buy-btn ${d.bought ? 'on' : ''}" data-id="${d.id}">${d.bought ? '✅ Comprado' : 'Bought?'}</button>
-          <button class="to-shop" data-id="${d.id}" title="Send to Shopping & to-buy">→ 🛒</button>
-        </div>`;
-      }).join('');
+  const dreams = S.dreams || [];
+  const cats = [...new Set(dreams.map(d => d.category || 'Uncategorized'))];
+  const totalValue = dreams.reduce((sum,d)=>sum+(+d.value||0),0);
+  const totalSaved = dreams.reduce((sum,d)=>sum+Math.min(+d.saved||0,+d.value||Number.MAX_SAFE_INTEGER),0);
+  const completed = dreams.filter(d=>d.bought).length;
+  const ready = dreams.filter(d=>!d.bought && +d.value>0 && +d.saved>=+d.value).length;
+  const summary = `<div class="wish-command-strip">
+    <div><small>FUTURE TARGETS</small><b>${dreams.length}</b></div>
+    <div><small>RESOURCES SAVED</small><b>${fmt(totalSaved)}</b></div>
+    <div><small>READY TO CLAIM</small><b>${ready}</b></div>
+    <div><small>CLAIMED</small><b>${completed}</b></div>
+  </div>`;
+  if (!dreams.length) {
+    $('#dreamList').innerHTML = summary + `<div class="wish-empty"><span>◇</span><b>No future targets registered.</b><p>Add a purchase, experience or dream worth preparing for.</p></div>`;
+    return;
+  }
+  const groups = cats.map(cat => {
+    const items = dreams.filter(d => (d.category || 'Uncategorized') === cat);
+    const bought = items.filter(d => d.bought).length;
+    const saved = items.reduce((sum,d)=>sum+(+d.saved||0),0);
+    return `<section class="wish-category">
+      <header class="wish-category-head"><div><small>HUNTER TARGET CLASS</small><h3>${esc(cat)}</h3></div><div><b>${bought}/${items.length}</b><span>claimed · ${fmt(saved)} saved</span></div></header>
+      <div class="wish-grid">${items.map(d => {
+        const value = +d.value || 0, savedAmount = +d.saved || 0;
+        const p = value ? Math.min(savedAmount / value, 1) : 0;
+        const percent = d.bought ? 100 : Math.round(p * 100);
+        const remaining = Math.max(value - savedAmount, 0);
+        return `<article class="dream-item wish-card ${d.bought ? 'bought-item' : ''}">
+          <div class="wish-card-top"><div><small>${d.bought ? 'TARGET CLAIMED' : percent >= 100 ? 'READY TO CLAIM' : 'FUTURE ACQUISITION'}</small><h4>${esc(d.name)}</h4></div><button class="del-x" data-type="dream" data-id="${d.id}" aria-label="Delete wish">✕</button></div>
+          <div class="wish-money-grid">
+            <label><span>Target value</span><input class="d-edit money-live" inputmode="numeric" data-f="value" data-id="${d.id}" value="${Number(value).toLocaleString('es-CO')}" title="Target value"></label>
+            <label><span>Saved</span><input class="d-edit money-live" inputmode="numeric" data-f="saved" data-id="${d.id}" value="${Number(savedAmount).toLocaleString('es-CO')}" title="Amount saved"></label>
+          </div>
+          <div class="wish-progress"><div><span>${percent}% prepared</span><b>${d.bought ? 'Acquired' : remaining ? `${fmt(remaining)} remaining` : 'Ready'}</b></div><div class="mini-bar green"><i style="width:${percent}%"></i></div></div>
+          <div class="wish-card-actions"><button class="buy-btn ${d.bought ? 'on' : ''}" data-id="${d.id}">${d.bought ? '✓ Claimed' : 'Mark as claimed'}</button><button class="to-shop" data-id="${d.id}" title="Send to Shopping & to-buy">Send to Shopping <span>→</span></button></div>
+        </article>`;
+      }).join('')}</div>
+    </section>`;
   }).join('');
+  $('#dreamList').innerHTML = summary + groups;
 }
 $('#dreamList').addEventListener('change', async (e) => {
   if (!e.target.classList.contains('d-edit')) return;
@@ -5728,7 +5891,7 @@ const DEL_MSG = {
   goal: 'Delete this goal?',
   compra: 'Delete this installment purchase? Its installment stops adding in Home and the boss bar goes down.',
   detalle: 'Remove this installment line from the breakdown? Do this only if it shouldn\'t be there.',
-  dream: 'Delete this wish? (if you\'re not into it anymore, out)',
+  dream: 'Delete this future target? Remove it only if it no longer belongs to your plans.',
   book: 'Delete this book from your library?',
   anime: 'Delete this anime from the list?',
   debt: 'Delete this debt AND its logged payments? Only if you registered it by mistake.'
@@ -6095,3 +6258,15 @@ load().then(() => {
 });
 
 // v102: el respaldo usa una descarga nativa para no depender del estado de la SPA.
+
+// V123 · Contextual help for the Hunter Acquisition Board.
+document.addEventListener('click', async (event) => {
+  const help = event.target.closest('[data-help="wishlist"]');
+  if (!help) return;
+  await modal({
+    icon:'◇',
+    title:'How Future Targets work',
+    text:'Register purchases, experiences or dreams you want to prepare for. Update the target value and the amount saved directly on each card. When you are ready to buy, send the target to Shopping. Mark it as claimed only after it is truly acquired.<br><br><b>Hunter rule:</b> prepare the resources first and avoid creating new installment debt.',
+    okText:'Understood'
+  });
+});
