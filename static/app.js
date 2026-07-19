@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 120;
+const FRONT_V = 121;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -264,6 +264,150 @@ const ACT_TO_HABIT = {
 function pasosInglesDelDia(wd) {
   const plan = INGLES_PLAN[wd] || INGLES_PLAN[0];
   return { titulo: plan.title, pasos: plan.steps };
+}
+
+
+// V121 · Language Hunter Mission Core
+// The learning source is entered manually so the app never invents a book page or topic.
+function languageHunterProfile() {
+  const pf = S.profile || {};
+  return {
+    language: pf.lang_language || 'English',
+    book: pf.lang_book || '',
+    level: pf.lang_book_level || '',
+    unit: pf.lang_unit || '',
+    pages: pf.lang_pages || '',
+    topic: pf.lang_topic || '',
+    grammar: pf.lang_grammar || '',
+    weeklyUpdated: pf.lang_weekly_updated || ''
+  };
+}
+
+async function saveLanguageHunterProfile(values) {
+  const keys = ['lang_language','lang_book','lang_book_level','lang_unit','lang_pages','lang_topic','lang_grammar'];
+  for (let i = 0; i < keys.length; i++) {
+    await api('/api/profile', { body:{ key:keys[i], value:String(values[i] || '').trim() } });
+    S.profile = S.profile || {};
+    S.profile[keys[i]] = String(values[i] || '').trim();
+  }
+  const today = hoyLocal();
+  await api('/api/profile', { body:{ key:'lang_weekly_updated', value:today } });
+  S.profile.lang_weekly_updated = today;
+}
+
+async function configureLanguageHunterSource(force = false) {
+  const cfg = languageHunterProfile();
+  if (!force && cfg.book && cfg.topic) return true;
+  const result = await modal({
+    icon:'📘',
+    title:'Set this week’s English source',
+    text:'Tell the app exactly what you are studying. It will use this information for the daily mission and AI tutor prompt; it will never invent pages or topics.',
+    fields:[
+      {type:'text',label:'Language',value:cfg.language || 'English',placeholder:'English'},
+      {type:'text',label:'Book',value:cfg.book,placeholder:'American School Way'},
+      {type:'text',label:'Book level',value:cfg.level,placeholder:'A1, A2, B1 or B2'},
+      {type:'text',label:'Unit',value:cfg.unit,placeholder:'Unit 4'},
+      {type:'text',label:'Pages',value:cfg.pages,placeholder:'62–67'},
+      {type:'text',label:'Weekly topic',value:cfg.topic,placeholder:'Past experiences'},
+      {type:'text',label:'Grammar focus',value:cfg.grammar,placeholder:'Simple past'}
+    ],
+    okText:'Save weekly source'
+  });
+  if (!result) return false;
+  if (!String(result[1] || '').trim() || !String(result[5] || '').trim()) {
+    toast('Book and weekly topic are required.');
+    return configureLanguageHunterSource(true);
+  }
+  await saveLanguageHunterProfile(result);
+  toast('📘 Weekly English source saved.');
+  return true;
+}
+
+function languageTutorPrompt(wd, minutes = 25) {
+  const cfg = languageHunterProfile();
+  const pf = S.profile || {};
+  const qIdx = Math.min(+(pf.eng_q || 0), ENGLISH_TRIMESTERS.length - 1);
+  const target = ENGLISH_TRIMESTERS[qIdx]?.level || 'A2';
+  const verified = pf.eng_real_level || 'Not tested';
+  const { titulo, pasos } = pasosInglesDelDia(wd);
+  return `You are my Language Hunter English tutor.\n\nTODAY\nDay: ${DIAS[wd]}\nMission: ${titulo}\nVerified level: ${verified}\nCurrent target: ${target}\nAvailable time: ${minutes} minutes\n\nSTUDY SOURCE\nBook: ${cfg.book || 'Not specified'}\nBook level: ${cfg.level || 'Not specified'}\nUnit: ${cfg.unit || 'Not specified'}\nPages: ${cfg.pages || 'Not specified'}\nWeekly topic: ${cfg.topic || 'Not specified'}\nGrammar focus: ${cfg.grammar || 'Not specified'}\n\nMISSION STEPS\n${pasos.map((p,i)=>`${i+1}. ${p.s}: ${p.how}`).join('\n')}\n\nRULES\nSpeak mainly in English. Ask one question at a time. Make me produce English before explaining. Correct the most important errors, ask me to retry the corrected form, and finish with the exact LANGUAGE HUNTER SESSION REPORT plus a compact APP LOG line.`;
+}
+
+function copyLanguageTutorPrompt(wd) {
+  const text = languageTutorPrompt(wd);
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text).then(()=>toast('Tutor prompt copied. Open your Language Hunter chat.'));
+  }
+  const ta=document.createElement('textarea'); ta.value=text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+  toast('Tutor prompt copied. Open your Language Hunter chat.');
+  return Promise.resolve();
+}
+
+async function saveLanguageSessionReport(wd) {
+  const cfg = languageHunterProfile();
+  const r = await modal({
+    icon:'📝', title:'Mission report',
+    text:'Optional. The official English check is already safe; skipping this report will not affect Life, Habits, Goals or your streak.',
+    fields:[
+      {type:'number',label:'Minutes practiced',min:0,max:300,placeholder:'25'},
+      {type:'select',label:'Difficulty',options:[{v:'Appropriate',t:'Appropriate'},{v:'Easy',t:'Easy'},{v:'Hard',t:'Hard'}]},
+      {type:'text',label:'Main issue',placeholder:'Irregular verbs'},
+      {type:'number',label:'New useful phrases',min:0,max:50,placeholder:'3'},
+      {type:'text',label:'Tutor APP LOG (optional)',placeholder:'Speaking · 20 min · Past simple...'}
+    ], okText:'Save report', cancelText:'Skip report'
+  });
+  if (!r) return;
+  let sessions=[];
+  try { sessions=JSON.parse((S.profile||{}).language_sessions_v1 || '[]'); } catch(_e) { sessions=[]; }
+  if (!Array.isArray(sessions)) sessions=[];
+  sessions.push({date:hoyLocal(),day:DIAS[wd],skill:(pasosInglesDelDia(wd).titulo||''),book:cfg.book,unit:cfg.unit,pages:cfg.pages,topic:cfg.topic,grammar:cfg.grammar,minutes:+r[0]||0,difficulty:r[1]||'Appropriate',issue:String(r[2]||'').trim(),phrases:+r[3]||0,log:String(r[4]||'').trim()});
+  sessions=sessions.slice(-120);
+  const value=JSON.stringify(sessions);
+  await api('/api/profile',{body:{key:'language_sessions_v1',value}});
+  S.profile=S.profile||{}; S.profile.language_sessions_v1=value;
+  toast('📝 Mission report saved.');
+}
+
+function openLanguageMissionModal(day, wd) {
+  return new Promise(async resolve => {
+    const configured = await configureLanguageHunterSource(false);
+    if (!configured) { resolve(false); return; }
+    const cfg = languageHunterProfile();
+    const { titulo, pasos } = pasosInglesDelDia(wd);
+    const done = new Set(S.rdone || []);
+    const previousFocus=document.activeElement;
+    const back=document.createElement('div'); back.className='modal-back language-mission-back';
+    const stepRows=pasos.map((p,k)=>`<label class="language-mission-step ${done.has(`${day}|ingles#${k}`)?'done':''}"><input type="checkbox" data-lang-step="${k}" ${done.has(`${day}|ingles#${k}`)?'checked':''}><span class="language-step-number">${String(k+1).padStart(2,'0')}</span><span><b>${esc(p.s)}</b><small>${esc(p.how)}</small></span></label>`).join('');
+    back.innerHTML=`<div class="modal-card language-mission-card">
+      <div class="language-mission-top"><div><span>LANGUAGE HUNTER · ${esc(DIAS[wd].toUpperCase())}</span><h3>${esc(titulo)}</h3></div><button type="button" class="language-mission-close" aria-label="Close">✕</button></div>
+      <div class="language-source-strip"><div><small>WEEKLY SOURCE</small><b>${esc(cfg.book)}${cfg.level?' · '+esc(cfg.level):''}</b><span>${esc(cfg.unit||'No unit')}${cfg.pages?' · pages '+esc(cfg.pages):''}</span></div><button type="button" data-language-edit-source>Edit</button></div>
+      <div class="language-topic-line"><span>${esc(cfg.topic)}</span>${cfg.grammar?`<b>${esc(cfg.grammar)}</b>`:''}</div>
+      <div class="language-mission-steps">${stepRows}</div>
+      <div class="language-mission-actions"><button type="button" class="btn-ghost" data-language-ai>Copy AI tutor prompt</button><button type="button" class="m-ok language-complete" disabled>Complete mission ✓</button></div>
+      <small class="language-save-note">Every step is saved immediately. Close and continue later without losing progress.</small>
+    </div>`;
+    document.body.appendChild(back); document.body.classList.add('modal-open'); requestAnimationFrame(()=>back.classList.add('show'));
+    let busy=false, closed=false;
+    const refresh=()=>{ const boxes=[...back.querySelectorAll('[data-lang-step]')]; boxes.forEach(x=>x.closest('.language-mission-step').classList.toggle('done',x.checked)); back.querySelector('.language-complete').disabled=!boxes.every(x=>x.checked); };
+    refresh();
+    const close=(val)=>{ if(closed)return; closed=true; back.classList.remove('show'); setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previousFocus?.focus?.();},280);resolve(val); };
+    back.querySelector('.language-mission-close').onclick=()=>close(false);
+    back.onclick=e=>{if(e.target===back)close(false);};
+    back.querySelector('[data-language-ai]').onclick=()=>copyLanguageTutorPrompt(wd);
+    back.querySelector('[data-language-edit-source]').onclick=async()=>{ const ok=await configureLanguageHunterSource(true); if(ok){ close(false); toast('Source updated. Open the mission again.'); } };
+    back.querySelectorAll('[data-lang-step]').forEach(box=>box.onchange=async()=>{
+      if(busy){box.checked=!box.checked;return;} busy=true; box.disabled=true;
+      try{
+        const k=+box.dataset.langStep; const marker=`${day}|ingles#${k}`;
+        await api('/api/routine',{body:{day,activity:`ingles#${k}`}});
+        S.rdone=S.rdone||[];
+        if(box.checked){if(!S.rdone.includes(marker))S.rdone.push(marker);}else{S.rdone=S.rdone.filter(x=>x!==marker);}
+        refresh();
+      }catch(err){box.checked=!box.checked;toast('The step could not be saved. Try again.');refresh();}
+      finally{box.disabled=false;busy=false;}
+    });
+    back.querySelector('.language-complete').onclick=()=>close(true);
+  });
 }
 
 const ENGLISH_TASKS = [
@@ -4971,26 +5115,11 @@ document.addEventListener('click', async (e) => {
   const marcando = !c.classList.contains('on');
 
   if (marcando) {
-    // CASO ESPECIAL inglés: confirma los pasos del día EN ORDEN, guardando cada "sí".
-    // Si dices "Not yet", el progreso queda guardado y la próxima vez RETOMA en ese paso.
-    // La casilla solo se chulea completa cuando TODOS los pasos están confirmados.
+    // V121 · English opens one persistent Language Hunter mission modal.
+    // Partial steps never affect Habits/Goals. Only completing every step allows the official check below.
     if (act === 'ingles') {
-      const { titulo, pasos } = pasosInglesDelDia(CUR_WD);
-      const hechos = new Set(S.rdone || []);
-      for (let k = 0; k < pasos.length; k++) {
-        if (hechos.has(`${day}|ingles#${k}`)) continue;     // paso ya confirmado antes: saltar
-        const ultimo = k === pasos.length - 1;
-        const r = await modal({ icon: '🗣', title: `${titulo} · step ${k + 1} of ${pasos.length}`,
-          text: `<b>${k + 1}) ${pasos[k].s}</b><br><br><span style="color:var(--mut);font-size:.82rem">HOW TO DO IT WELL</span><br>${pasos[k].how}`,
-          okText: ultimo ? 'Yes ✓ — finish English' : 'Yes ✓ — next step', extraBtn: 'Not yet' });
-        if (r !== true) {                                   // "Not yet"/Cancel: guarda hasta aquí y sale
-          toast('Progress saved 💪 — next time you continue from this step.');
-          load();
-          return;
-        }
-        await api('/api/routine', { body: { day, activity: `ingles#${k}` } });   // persiste el paso
-      }
-      // todos los pasos confirmados → abajo se marca el inglés completo
+      const completed = await openLanguageMissionModal(day, CUR_WD);
+      if (!completed) { toast('English mission progress saved.'); return; }
     }
     // V120: choose exactly which active course advanced. Course progress does not alter
     // the career/Goal stage percentage; only explicit stage conquest does that.
@@ -5040,6 +5169,7 @@ document.addEventListener('click', async (e) => {
     if (act !== 'estudio' && act !== 'leer') toast('✓ Done! One more step toward your goals.');
     // marcar el hábito sinónimo en Habits
     await sincronizarHabito(act, day, true);
+    if (act === 'ingles') await saveLanguageSessionReport(CUR_WD);
   } else {
     const why = await modal({ icon: '🤔', title: 'Uncheck?',
       text: "Didn't get to do this? That's okay, life happens. You can note why.",
