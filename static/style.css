@@ -3612,3 +3612,83 @@ body.hunter-profile-open {
   .eng-command-progress { align-self:flex-start; }
   .eng-check-ready .btn-gold { width:100%; }
 }
+
+/* ====== V121 · HUNTER SET-AS-FOCUS BUTTON ====== */
+/* Unselected career focus action. The selected Active focus badge remains unchanged. */
+.career-foot .set-active {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 8px 13px;
+  border: 1px solid rgba(245,185,66,.42);
+  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba(245,185,66,.13), rgba(124,92,255,.11)),
+    rgba(18,15,34,.92);
+  color: #f5d76d;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.05),
+    0 6px 16px rgba(7,5,18,.2);
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: .75px;
+  text-transform: uppercase;
+  cursor: pointer;
+  overflow: hidden;
+  transition: transform .18s ease, border-color .18s ease, background .18s ease, box-shadow .18s ease, color .18s ease;
+}
+
+.career-foot .set-active::before {
+  content: '◎';
+  color: #72ddbd;
+  font-size: .82rem;
+  line-height: 1;
+  text-shadow: 0 0 10px rgba(54,201,167,.34);
+}
+
+.career-foot .set-active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 18%, rgba(255,255,255,.08) 50%, transparent 82%);
+  transform: translateX(-120%);
+  transition: transform .38s ease;
+  pointer-events: none;
+}
+
+.career-foot .set-active:hover {
+  transform: translateY(-1px);
+  border-color: rgba(245,185,66,.72);
+  background:
+    linear-gradient(135deg, rgba(245,185,66,.21), rgba(124,92,255,.16)),
+    rgba(22,18,42,.96);
+  color: #fff0a8;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.07),
+    0 8px 20px rgba(7,5,18,.28),
+    0 0 0 1px rgba(245,185,66,.06);
+}
+
+.career-foot .set-active:hover::after {
+  transform: translateX(120%);
+}
+
+.career-foot .set-active:active {
+  transform: translateY(0) scale(.98);
+}
+
+.career-foot .set-active:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+@media (max-width: 520px) {
+  .career-foot .set-active {
+    min-height: 36px;
+    padding-inline: 12px;
+    font-size: .65rem;
+  }
+}
