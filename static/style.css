@@ -3843,3 +3843,34 @@ body.hunter-profile-open {
 .knowledge-archive-group article small{color:var(--muted);white-space:nowrap}
 .knowledge-archive-group article p{margin:6px 0 0;color:var(--muted);font-size:.82rem}
 @media(max-width:640px){.knowledge-archive-group article div{align-items:flex-start;flex-direction:column;gap:3px}.knowledge-archive-group article small{white-space:normal}.academy-actions{flex-wrap:wrap}}
+
+/* ---------- V129 · Adaptive Hunter Gym ---------- */
+.gym-hunter-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:10px 12px;border:1px solid rgba(78,255,163,.35);border-left:3px solid var(--accent);background:linear-gradient(90deg,rgba(78,255,163,.08),transparent);border-radius:12px}
+.gym-hunter-bar>span{font-size:.74rem;letter-spacing:.14em;font-weight:900;color:var(--accent)}
+.gym-hunter-bar small{margin-left:auto;color:var(--mut);font-size:.72rem}
+.gym-hunter-bar button{width:25px;height:25px;padding:0;border-radius:50%;border:1px solid rgba(78,255,163,.4);background:transparent;color:var(--accent);font-weight:900}
+.hunter-ex{position:relative;overflow:hidden;background:linear-gradient(145deg,rgba(255,255,255,.025),rgba(78,255,163,.018))}
+.hunter-ex:before{content:'◆';position:absolute;right:10px;bottom:3px;font-size:3.8rem;color:rgba(78,255,163,.035);pointer-events:none}
+.hunter-ex.ex-done{box-shadow:inset 3px 0 0 var(--ok)}
+.hunter-ex .ex-name{display:flex;align-items:center;gap:7px}
+.hunter-ex .ex-check{display:inline-grid;place-items:center;min-width:20px;height:20px;border-radius:50%;background:rgba(78,255,163,.14);color:var(--ok);font-size:.7rem}
+.hunter-ex .replace-btn,.hunter-ex .restore-btn{min-width:34px;padding:7px;border-radius:9px}
+.ex-trend{font-size:.76rem;margin-top:5px}.ex-trend.ok{color:var(--ok)}.ex-trend.bad{color:#ff9c7a}.ex-trend.mut{color:var(--mut)}
+.set-row .body-load{max-width:112px;font-size:.72rem}
+.set-timer{border:1px solid rgba(89,193,255,.45);background:rgba(89,193,255,.08);color:#8ed8ff;border-radius:8px;padding:7px 9px;cursor:pointer}
+.gym-timer-float{position:fixed;z-index:10020;right:18px;bottom:18px;display:flex;align-items:center;gap:18px;min-width:260px;padding:12px 14px;border:1px solid rgba(78,255,163,.55);border-radius:14px;background:rgba(7,15,20,.96);box-shadow:0 14px 40px rgba(0,0,0,.45),0 0 22px rgba(78,255,163,.12);backdrop-filter:blur(12px)}
+.gym-timer-float.exercise{border-color:rgba(89,193,255,.6)}
+.gym-timer-float small{display:block;font-size:.62rem;letter-spacing:.14em;color:var(--mut);font-weight:800}.gym-timer-float strong{display:block;font-size:1.55rem;line-height:1;color:#fff;font-variant-numeric:tabular-nums}
+.gym-timer-actions{display:flex;gap:5px;margin-left:auto}.gym-timer-actions button{padding:6px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:var(--txt);font-size:.7rem}
+.gym-settings-card{max-width:430px}.toggle-line{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:12px 0;border-bottom:1px solid rgba(255,255,255,.07)}.toggle-line input{width:18px;height:18px;accent-color:var(--accent)}
+@media(max-width:600px){.gym-hunter-bar small{width:100%;margin-left:0}.gym-timer-float{left:10px;right:10px;bottom:10px;min-width:0}.gym-timer-actions button{padding:6px}.set-row .body-load{max-width:96px}.hunter-ex .ex-actions{gap:4px}}
+
+/* ---------- V130 · training blocks + compact measurement guide ---------- */
+.gym-block-pill{width:auto!important;height:auto!important;padding:5px 9px!important;border-radius:999px!important;font-size:.67rem!important;letter-spacing:.02em!important;color:var(--mut)!important;background:rgba(255,255,255,.035)!important}
+.gym-block-pill.due{color:#09130f!important;background:var(--accent)!important;border-color:var(--accent)!important;box-shadow:0 0 18px rgba(78,255,163,.2)}
+.gym-block-card{max-width:560px}.gym-block-card .doc-head small{display:block;color:var(--accent);font-size:.62rem;letter-spacing:.15em;font-weight:900;margin-bottom:3px}
+.block-score{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 0 12px}.block-score>div{text-align:center;padding:12px 7px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.025)}.block-score strong{display:block;font-size:1.35rem;color:#fff}.block-score span{display:block;color:var(--mut);font-size:.68rem;margin-top:2px}
+.block-details{margin:12px 0;border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden}.block-details summary{cursor:pointer;padding:11px 12px;font-weight:800;font-size:.78rem}.block-swap{display:flex;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid rgba(255,255,255,.06)}.block-swap input{accent-color:var(--accent)}.block-swap b,.block-swap small{display:block}.block-swap small{color:var(--accent);margin-top:2px}
+.block-actions{display:grid;gap:8px}.block-actions button{padding:10px;border-radius:10px;border:1px solid rgba(78,255,163,.28);background:rgba(78,255,163,.06);color:var(--txt);font-weight:800}.block-actions button:nth-child(2){background:var(--accent);color:#07120d;border-color:var(--accent)}
+.gym-measure-help{width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid rgba(255,255,255,.08);border-radius:11px;background:rgba(255,255,255,.025);color:var(--mut);font-size:.76rem}.gym-measure-help b{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;border:1px solid rgba(78,255,163,.4);color:var(--accent)}
+@media(max-width:600px){.gym-block-pill{order:3}.block-score{gap:5px}.block-score>div{padding:9px 4px}.gym-block-card{max-height:88vh}}

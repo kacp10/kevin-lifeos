@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 128;
+const FRONT_V = 130;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -983,65 +983,122 @@ async function saveGym(g) {
 let gymChart = null;
 
 const GYM_IMG = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
+const GYM_GROUP_IMG = { chest:'Pushups', triceps:'Bench_Dips', back:'Pullups', biceps:'Dumbbell_Bicep_Curl', quads:'Barbell_Squat', hamstrings:'Romanian_Deadlift', glutes:'Butt_Lift_Bridge', calves:'Standing_Calf_Raises', shoulders:'Dumbbell_Shoulder_Press', abs:'Crunches', forearms:'Farmers_Walk', cardio:'Jumping_Jacks' };
 const EXERCISE_DB = {
-  bench:        { n: 'Bench Press',            m: 'Chest',         img: 'Barbell_Bench_Press_-_Medium_Grip', grp: 'chest',     eq: 'Barbell' },
-  incline_db:   { n: 'Incline Dumbbell Press', m: 'Upper chest',   img: 'Incline_Dumbbell_Press',             grp: 'chest',     eq: 'Dumbbell' },
-  flyes:        { n: 'Dumbbell Flyes',         m: 'Chest',         img: 'Dumbbell_Flyes',                     grp: 'chest',     eq: 'Dumbbell' },
-  pushups:      { n: 'Push-ups',               m: 'Chest',         img: 'Pushups',                            grp: 'chest',     eq: 'Bodyweight' },
-  dips_chest:   { n: 'Chest Dips',             m: 'Chest',         img: 'Dips_-_Chest_Version',               grp: 'chest',     eq: 'Dip bars' },
-  tri_pushdown: { n: 'Triceps Pushdown',       m: 'Triceps',       img: 'Triceps_Pushdown',                   grp: 'triceps',   eq: 'Cable' },
-  tri_ext:      { n: 'Overhead Triceps Ext.',  m: 'Triceps',       img: 'Standing_Dumbbell_Triceps_Extension', grp: 'triceps',  eq: 'Dumbbell' },
-  dips_tri:     { n: 'Triceps Dips',           m: 'Triceps',       img: 'Dips_-_Triceps_Version',             grp: 'triceps',   eq: 'Dip bars' },
-  pullups:      { n: 'Pull-ups',               m: 'Back / Lats',   img: 'Pullups',                            grp: 'back',      eq: 'Pull-up bar' },
-  lat_pull:     { n: 'Lat Pulldown',           m: 'Back / Lats',   img: 'Wide-Grip_Lat_Pulldown',             grp: 'back',      eq: 'Cable machine' },
-  bb_row:       { n: 'Barbell Row',            m: 'Back',          img: 'Bent_Over_Barbell_Row',              grp: 'back',      eq: 'Barbell' },
-  cable_row:    { n: 'Seated Cable Row',       m: 'Back',          img: 'Seated_Cable_Rows',                  grp: 'back',      eq: 'Cable machine' },
-  bb_curl:      { n: 'Barbell Curl',           m: 'Biceps',        img: 'Barbell_Curl',                       grp: 'biceps',    eq: 'Barbell' },
-  db_curl:      { n: 'Dumbbell Curl',          m: 'Biceps',        img: 'Dumbbell_Bicep_Curl',                grp: 'biceps',    eq: 'Dumbbell' },
-  hammer:       { n: 'Hammer Curls',           m: 'Biceps',        img: 'Hammer_Curls',                       grp: 'biceps',    eq: 'Dumbbell' },
-  squat:        { n: 'Barbell Squat',          m: 'Quads / Legs',  img: 'Barbell_Squat',                      grp: 'quads',     eq: 'Barbell' },
-  leg_press:    { n: 'Leg Press',              m: 'Quads / Legs',  img: 'Leg_Press',                          grp: 'quads',     eq: 'Machine' },
-  rdl:          { n: 'Romanian Deadlift',      m: 'Hamstrings',    img: 'Romanian_Deadlift',                  grp: 'hamstrings', eq: 'Barbell' },
-  leg_ext:      { n: 'Leg Extensions',         m: 'Quads',         img: 'Leg_Extensions',                     grp: 'quads',     eq: 'Machine' },
-  leg_curl:     { n: 'Lying Leg Curl',         m: 'Hamstrings',    img: 'Lying_Leg_Curls',                    grp: 'hamstrings', eq: 'Machine' },
-  calf:         { n: 'Calf Raises',            m: 'Calves',        img: 'Standing_Calf_Raises',               grp: 'calves',    eq: 'Machine / Bodyweight' },
-  lunges:       { n: 'Dumbbell Lunges',        m: 'Legs / Glutes', img: 'Dumbbell_Lunges',                    grp: 'quads',     eq: 'Dumbbell' },
-  db_press:     { n: 'DB Shoulder Press',      m: 'Shoulders',     img: 'Dumbbell_Shoulder_Press',            grp: 'shoulders', eq: 'Dumbbell' },
-  lateral:      { n: 'Lateral Raise',          m: 'Side delts',    img: 'Side_Lateral_Raise',                 grp: 'shoulders', eq: 'Dumbbell' },
-  face_pull:    { n: 'Face Pull',              m: 'Rear delts',    img: 'Face_Pull',                          grp: 'shoulders', eq: 'Cable' },
-  crunch:       { n: 'Crunches',               m: 'Abs',           img: 'Crunches',                           grp: 'abs',       eq: 'Bodyweight' },
-  plank:        { n: 'Plank',                  m: 'Core',          img: 'Plank',                              grp: 'abs',       eq: 'Bodyweight' },
-  hanging:      { n: 'Hanging Leg Raise',      m: 'Abs',           img: 'Hanging_Leg_Raise',                  grp: 'abs',       eq: 'Pull-up bar' },
-  // --- alternativas extra (más opciones para "Replace") ---
-  cable_cross:  { n: 'Cable Crossover',        m: 'Chest',         img: 'Cable_Crossover',                    grp: 'chest',     eq: 'Cable' },
-  machine_bench:{ n: 'Machine Bench Press',    m: 'Chest',         img: 'Machine_Bench_Press',                grp: 'chest',     eq: 'Machine' },
-  db_bench:     { n: 'Dumbbell Bench Press',   m: 'Chest',         img: 'Dumbbell_Bench_Press',               grp: 'chest',     eq: 'Dumbbell' },
-  close_grip:   { n: 'Close-Grip Bench Press', m: 'Triceps',       img: 'Close-Grip_Barbell_Bench_Press',     grp: 'triceps',   eq: 'Barbell' },
-  bench_dips2:  { n: 'Bench Dips',             m: 'Triceps',       img: 'Bench_Dips',                         grp: 'triceps',   eq: 'Bodyweight' },
-  cable_ext_1:  { n: '1-Arm Cable Extension',  m: 'Triceps',       img: 'Cable_One_Arm_Tricep_Extension',     grp: 'triceps',   eq: 'Cable' },
-  tbar_row:     { n: 'T-Bar Row',              m: 'Back',          img: 'Lying_T-Bar_Row',                    grp: 'back',      eq: 'Machine' },
-  one_arm_row:  { n: 'One-Arm Dumbbell Row',   m: 'Back',          img: 'One-Arm_Dumbbell_Row',               grp: 'back',      eq: 'Dumbbell' },
-  deadlift:     { n: 'Barbell Deadlift',       m: 'Back / Posterior', img: 'Barbell_Deadlift',                grp: 'back',      eq: 'Barbell' },
-  chinup:       { n: 'Chin-Up',                m: 'Back / Lats',   img: 'Chin-Up',                            grp: 'back',      eq: 'Pull-up bar' },
-  concentration:{ n: 'Concentration Curl',     m: 'Biceps',        img: 'Concentration_Curls',                grp: 'biceps',    eq: 'Dumbbell' },
-  preacher:     { n: 'Preacher Curl',          m: 'Biceps',        img: 'Preacher_Curl',                      grp: 'biceps',    eq: 'Barbell' },
-  cable_curl2:  { n: 'Cable Curl',             m: 'Biceps',        img: 'High_Cable_Curls',                   grp: 'biceps',    eq: 'Cable' },
-  front_squat:  { n: 'Front Squat',            m: 'Quads / Legs',  img: 'Front_Squat_Clean_Grip',             grp: 'quads',     eq: 'Barbell' },
-  hack_squat:   { n: 'Hack Squat',             m: 'Quads / Legs',  img: 'Hack_Squat',                         grp: 'quads',     eq: 'Machine' },
-  goblet:       { n: 'Goblet Squat',           m: 'Quads / Legs',  img: 'Goblet_Squat',                       grp: 'quads',     eq: 'Kettlebell' },
-  stiff_db:     { n: 'Stiff-Leg DB Deadlift',  m: 'Hamstrings',    img: 'Stiff-Legged_Dumbbell_Deadlift',     grp: 'hamstrings', eq: 'Dumbbell' },
-  good_morning: { n: 'Good Morning',           m: 'Hamstrings',    img: 'Good_Morning',                       grp: 'hamstrings', eq: 'Barbell' },
-  seated_calf:  { n: 'Seated Calf Raise',      m: 'Calves',        img: 'Seated_Calf_Raise',                  grp: 'calves',    eq: 'Machine' },
-  donkey_calf:  { n: 'Donkey Calf Raises',     m: 'Calves',        img: 'Donkey_Calf_Raises',                 grp: 'calves',    eq: 'Machine' },
-  arnold:       { n: 'Arnold Press',           m: 'Shoulders',     img: 'Arnold_Dumbbell_Press',              grp: 'shoulders', eq: 'Dumbbell' },
-  bb_press:     { n: 'Barbell Shoulder Press', m: 'Shoulders',     img: 'Barbell_Shoulder_Press',             grp: 'shoulders', eq: 'Barbell' },
-  upright_row:  { n: 'Upright Row',            m: 'Shoulders',     img: 'Upright_Barbell_Row',                grp: 'shoulders', eq: 'Barbell' },
-  rear_delt:    { n: 'Cable Rear Delt Fly',    m: 'Rear delts',    img: 'Cable_Rear_Delt_Fly',                grp: 'shoulders', eq: 'Cable' },
-  cable_crunch: { n: 'Cable Crunch',           m: 'Abs',           img: 'Cable_Crunch',                       grp: 'abs',       eq: 'Cable' },
-  russian_twist:{ n: 'Russian Twist',          m: 'Obliques',      img: 'Russian_Twist',                      grp: 'abs',       eq: 'Bodyweight' },
-  ab_roller:    { n: 'Ab Roller',              m: 'Abs',           img: 'Ab_Roller',                          grp: 'abs',       eq: 'Ab wheel' },
-  situp:        { n: 'Sit-Up',                 m: 'Abs',           img: 'Sit-Up',                             grp: 'abs',       eq: 'Bodyweight' },
-  reverse_crunch:{ n: 'Reverse Crunch',        m: 'Abs',           img: 'Reverse_Crunch',                     grp: 'abs',       eq: 'Bodyweight' }
+  bench:         { n:'Bench Press', m:'Chest', img:'Barbell_Bench_Press_-_Medium_Grip', grp:'chest', eq:'Barbell', mode:'weight_reps', step:2.5 },
+  incline_db:    { n:'Incline Dumbbell Press', m:'Upper chest', img:'Incline_Dumbbell_Press', grp:'chest', eq:'Dumbbell', mode:'weight_reps', step:2 },
+  flyes:         { n:'Dumbbell Flyes', m:'Chest', img:'Dumbbell_Flyes', grp:'chest', eq:'Dumbbell', mode:'weight_reps', step:1 },
+  pushups:       { n:'Push-ups', m:'Chest', img:'Pushups', grp:'chest', eq:'Bodyweight', mode:'reps', step:1 },
+  dips_chest:    { n:'Chest Dips', m:'Chest', img:'Dips_-_Chest_Version', grp:'chest', eq:'Dip bars', mode:'bodyweight', step:2.5 },
+  cable_cross:   { n:'Cable Crossover', m:'Chest', img:'Cable_Crossover', grp:'chest', eq:'Cable', mode:'weight_reps', step:2.5 },
+  machine_bench: { n:'Machine Bench Press', m:'Chest', img:'Machine_Bench_Press', grp:'chest', eq:'Machine', mode:'weight_reps', step:5 },
+  db_bench:      { n:'Dumbbell Bench Press', m:'Chest', img:'Dumbbell_Bench_Press', grp:'chest', eq:'Dumbbell', mode:'weight_reps', step:2 },
+  decline_bench: { n:'Decline Bench Press', m:'Lower chest', img:'Decline_Barbell_Bench_Press', grp:'chest', eq:'Barbell', mode:'weight_reps', step:2.5 },
+  pec_deck:      { n:'Pec Deck Fly', m:'Chest', img:'Butterfly', grp:'chest', eq:'Machine', mode:'weight_reps', step:5 },
+  incline_push:  { n:'Incline Push-up', m:'Chest', img:'Pushups', grp:'chest', eq:'Bodyweight', mode:'reps', step:1 },
+  diamond_push:  { n:'Diamond Push-up', m:'Chest / Triceps', img:'Pushups', grp:'chest', eq:'Bodyweight', mode:'reps', step:1 },
+
+  tri_pushdown:  { n:'Triceps Pushdown', m:'Triceps', img:'Triceps_Pushdown', grp:'triceps', eq:'Cable', mode:'weight_reps', step:2.5 },
+  tri_ext:       { n:'Overhead Triceps Extension', m:'Triceps', img:'Standing_Dumbbell_Triceps_Extension', grp:'triceps', eq:'Dumbbell', mode:'weight_reps', step:1 },
+  dips_tri:      { n:'Triceps Dips', m:'Triceps', img:'Dips_-_Triceps_Version', grp:'triceps', eq:'Dip bars', mode:'bodyweight', step:2.5 },
+  close_grip:    { n:'Close-Grip Bench Press', m:'Triceps', img:'Close-Grip_Barbell_Bench_Press', grp:'triceps', eq:'Barbell', mode:'weight_reps', step:2.5 },
+  bench_dips2:   { n:'Bench Dips', m:'Triceps', img:'Bench_Dips', grp:'triceps', eq:'Bodyweight', mode:'reps', step:1 },
+  cable_ext_1:   { n:'1-Arm Cable Extension', m:'Triceps', img:'Cable_One_Arm_Tricep_Extension', grp:'triceps', eq:'Cable', mode:'weight_reps', step:1 },
+  skullcrusher:  { n:'Lying Triceps Extension', m:'Triceps', img:'Lying_Triceps_Press', grp:'triceps', eq:'EZ bar', mode:'weight_reps', step:2.5 },
+  kickback:      { n:'Dumbbell Kickback', m:'Triceps', img:'Tricep_Dumbbell_Kickback', grp:'triceps', eq:'Dumbbell', mode:'weight_reps', step:1 },
+  rope_overhead: { n:'Rope Overhead Extension', m:'Triceps', img:'Cable_Rope_Overhead_Triceps_Extension', grp:'triceps', eq:'Cable', mode:'weight_reps', step:2.5 },
+
+  pullups:       { n:'Pull-ups', m:'Back / Lats', img:'Pullups', grp:'back', eq:'Pull-up bar', mode:'bodyweight', step:2.5 },
+  lat_pull:      { n:'Lat Pulldown', m:'Back / Lats', img:'Wide-Grip_Lat_Pulldown', grp:'back', eq:'Cable machine', mode:'weight_reps', step:5 },
+  bb_row:        { n:'Barbell Row', m:'Back', img:'Bent_Over_Barbell_Row', grp:'back', eq:'Barbell', mode:'weight_reps', step:2.5 },
+  cable_row:     { n:'Seated Cable Row', m:'Back', img:'Seated_Cable_Rows', grp:'back', eq:'Cable machine', mode:'weight_reps', step:5 },
+  tbar_row:      { n:'T-Bar Row', m:'Back', img:'Lying_T-Bar_Row', grp:'back', eq:'Machine', mode:'weight_reps', step:5 },
+  one_arm_row:   { n:'One-Arm Dumbbell Row', m:'Back', img:'One-Arm_Dumbbell_Row', grp:'back', eq:'Dumbbell', mode:'weight_reps', step:2 },
+  deadlift:      { n:'Barbell Deadlift', m:'Posterior chain', img:'Barbell_Deadlift', grp:'back', eq:'Barbell', mode:'weight_reps', step:5 },
+  chinup:        { n:'Chin-Up', m:'Back / Biceps', img:'Chin-Up', grp:'back', eq:'Pull-up bar', mode:'bodyweight', step:2.5 },
+  straight_pull: { n:'Straight-Arm Pulldown', m:'Lats', img:'Straight-Arm_Pulldown', grp:'back', eq:'Cable', mode:'weight_reps', step:2.5 },
+  inverted_row:  { n:'Inverted Row', m:'Back', img:'Inverted_Row', grp:'back', eq:'Bar / Bodyweight', mode:'reps', step:1 },
+  chest_row:     { n:'Chest-Supported Row', m:'Back', img:'Dumbbell_Incline_Row', grp:'back', eq:'Dumbbell', mode:'weight_reps', step:2 },
+  shrug:         { n:'Barbell Shrug', m:'Traps', img:'Barbell_Shrug', grp:'back', eq:'Barbell', mode:'weight_reps', step:5 },
+  pullover:      { n:'Dumbbell Pullover', m:'Lats / Chest', img:'Bent-Arm_Dumbbell_Pullover', grp:'back', eq:'Dumbbell', mode:'weight_reps', step:2 },
+
+  bb_curl:       { n:'Barbell Curl', m:'Biceps', img:'Barbell_Curl', grp:'biceps', eq:'Barbell', mode:'weight_reps', step:2.5 },
+  db_curl:       { n:'Dumbbell Curl', m:'Biceps', img:'Dumbbell_Bicep_Curl', grp:'biceps', eq:'Dumbbell', mode:'weight_reps', step:1 },
+  hammer:        { n:'Hammer Curl', m:'Biceps / Brachialis', img:'Hammer_Curls', grp:'biceps', eq:'Dumbbell', mode:'weight_reps', step:1 },
+  concentration: { n:'Concentration Curl', m:'Biceps', img:'Concentration_Curls', grp:'biceps', eq:'Dumbbell', mode:'weight_reps', step:1 },
+  preacher:      { n:'Preacher Curl', m:'Biceps', img:'Preacher_Curl', grp:'biceps', eq:'EZ bar', mode:'weight_reps', step:2.5 },
+  cable_curl2:   { n:'Cable Curl', m:'Biceps', img:'High_Cable_Curls', grp:'biceps', eq:'Cable', mode:'weight_reps', step:2.5 },
+  incline_curl:  { n:'Incline Dumbbell Curl', m:'Biceps', img:'Incline_Dumbbell_Curl', grp:'biceps', eq:'Dumbbell', mode:'weight_reps', step:1 },
+  reverse_curl:  { n:'Reverse Curl', m:'Biceps / Forearms', img:'Reverse_Barbell_Curl', grp:'biceps', eq:'Barbell', mode:'weight_reps', step:2.5 },
+  spider_curl:   { n:'Spider Curl', m:'Biceps', img:'Preacher_Curl', grp:'biceps', eq:'Dumbbell', mode:'weight_reps', step:1 },
+
+  squat:         { n:'Barbell Squat', m:'Quads / Glutes', img:'Barbell_Squat', grp:'quads', eq:'Barbell', mode:'weight_reps', step:5 },
+  leg_press:     { n:'Leg Press', m:'Quads / Glutes', img:'Leg_Press', grp:'quads', eq:'Machine', mode:'weight_reps', step:10 },
+  leg_ext:       { n:'Leg Extension', m:'Quads', img:'Leg_Extensions', grp:'quads', eq:'Machine', mode:'weight_reps', step:5 },
+  lunges:        { n:'Dumbbell Lunges', m:'Quads / Glutes', img:'Dumbbell_Lunges', grp:'quads', eq:'Dumbbell', mode:'weight_reps', step:2 },
+  front_squat:   { n:'Front Squat', m:'Quads / Core', img:'Front_Squat_Clean_Grip', grp:'quads', eq:'Barbell', mode:'weight_reps', step:2.5 },
+  hack_squat:    { n:'Hack Squat', m:'Quads / Glutes', img:'Hack_Squat', grp:'quads', eq:'Machine', mode:'weight_reps', step:5 },
+  goblet:        { n:'Goblet Squat', m:'Quads / Glutes', img:'Goblet_Squat', grp:'quads', eq:'Kettlebell', mode:'weight_reps', step:2 },
+  split_squat:   { n:'Bulgarian Split Squat', m:'Quads / Glutes', img:'Dumbbell_Lunges', grp:'quads', eq:'Dumbbell', mode:'weight_reps', step:2 },
+  step_up:       { n:'Dumbbell Step-Up', m:'Quads / Glutes', img:'Dumbbell_Step_Ups', grp:'quads', eq:'Dumbbell', mode:'weight_reps', step:2 },
+  sissy_squat:   { n:'Sissy Squat', m:'Quads', img:'Bodyweight_Squat', grp:'quads', eq:'Bodyweight', mode:'reps', step:1 },
+  wall_sit:      { n:'Wall Sit', m:'Quads', img:'Wall_Sit', grp:'quads', eq:'Bodyweight', mode:'duration', step:5 },
+
+  rdl:           { n:'Romanian Deadlift', m:'Hamstrings / Glutes', img:'Romanian_Deadlift', grp:'hamstrings', eq:'Barbell', mode:'weight_reps', step:5 },
+  leg_curl:      { n:'Lying Leg Curl', m:'Hamstrings', img:'Lying_Leg_Curls', grp:'hamstrings', eq:'Machine', mode:'weight_reps', step:5 },
+  stiff_db:      { n:'Stiff-Leg Dumbbell Deadlift', m:'Hamstrings', img:'Stiff-Legged_Dumbbell_Deadlift', grp:'hamstrings', eq:'Dumbbell', mode:'weight_reps', step:2 },
+  good_morning:  { n:'Good Morning', m:'Hamstrings / Back', img:'Good_Morning', grp:'hamstrings', eq:'Barbell', mode:'weight_reps', step:2.5 },
+  seated_curl:   { n:'Seated Leg Curl', m:'Hamstrings', img:'Seated_Leg_Curl', grp:'hamstrings', eq:'Machine', mode:'weight_reps', step:5 },
+  nordic_curl:   { n:'Nordic Hamstring Curl', m:'Hamstrings', img:'Natural_Glute_Ham_Raise', grp:'hamstrings', eq:'Bodyweight', mode:'reps', step:1 },
+  hip_hinge:     { n:'Cable Pull-Through', m:'Hamstrings / Glutes', img:'Cable_Pull_Through', grp:'hamstrings', eq:'Cable', mode:'weight_reps', step:5 },
+
+  hip_thrust:    { n:'Barbell Hip Thrust', m:'Glutes', img:'Barbell_Hip_Thrust', grp:'glutes', eq:'Barbell', mode:'weight_reps', step:5 },
+  glute_bridge:  { n:'Glute Bridge', m:'Glutes', img:'Butt_Lift_Bridge', grp:'glutes', eq:'Bodyweight', mode:'reps', step:1 },
+  cable_kick:    { n:'Cable Glute Kickback', m:'Glutes', img:'Cable_Hip_Extension', grp:'glutes', eq:'Cable', mode:'weight_reps', step:2.5 },
+  abductor:      { n:'Hip Abductor Machine', m:'Glutes / Abductors', img:'Thigh_Abductor', grp:'glutes', eq:'Machine', mode:'weight_reps', step:5 },
+  frog_pump:     { n:'Frog Pumps', m:'Glutes', img:'Butt_Lift_Bridge', grp:'glutes', eq:'Bodyweight', mode:'reps', step:1 },
+
+  calf:          { n:'Standing Calf Raise', m:'Calves', img:'Standing_Calf_Raises', grp:'calves', eq:'Machine / Bodyweight', mode:'weight_reps', step:5 },
+  seated_calf:   { n:'Seated Calf Raise', m:'Calves', img:'Seated_Calf_Raise', grp:'calves', eq:'Machine', mode:'weight_reps', step:5 },
+  donkey_calf:   { n:'Donkey Calf Raise', m:'Calves', img:'Donkey_Calf_Raises', grp:'calves', eq:'Machine', mode:'weight_reps', step:5 },
+  single_calf:   { n:'Single-Leg Calf Raise', m:'Calves', img:'Standing_Calf_Raises', grp:'calves', eq:'Bodyweight', mode:'reps', step:1 },
+
+  db_press:      { n:'Dumbbell Shoulder Press', m:'Shoulders', img:'Dumbbell_Shoulder_Press', grp:'shoulders', eq:'Dumbbell', mode:'weight_reps', step:2 },
+  lateral:       { n:'Lateral Raise', m:'Side delts', img:'Side_Lateral_Raise', grp:'shoulders', eq:'Dumbbell', mode:'weight_reps', step:1 },
+  face_pull:     { n:'Face Pull', m:'Rear delts', img:'Face_Pull', grp:'shoulders', eq:'Cable', mode:'weight_reps', step:2.5 },
+  arnold:        { n:'Arnold Press', m:'Shoulders', img:'Arnold_Dumbbell_Press', grp:'shoulders', eq:'Dumbbell', mode:'weight_reps', step:2 },
+  bb_press:      { n:'Barbell Shoulder Press', m:'Shoulders', img:'Barbell_Shoulder_Press', grp:'shoulders', eq:'Barbell', mode:'weight_reps', step:2.5 },
+  upright_row:   { n:'Upright Row', m:'Shoulders / Traps', img:'Upright_Barbell_Row', grp:'shoulders', eq:'Barbell', mode:'weight_reps', step:2.5 },
+  rear_delt:     { n:'Cable Rear Delt Fly', m:'Rear delts', img:'Cable_Rear_Delt_Fly', grp:'shoulders', eq:'Cable', mode:'weight_reps', step:2.5 },
+  front_raise:   { n:'Front Raise', m:'Front delts', img:'Front_Dumbbell_Raise', grp:'shoulders', eq:'Dumbbell', mode:'weight_reps', step:1 },
+  reverse_fly:   { n:'Reverse Dumbbell Fly', m:'Rear delts', img:'Bent_Over_Dumbbell_Rear_Delt_Raise_With_Head_On_Bench', grp:'shoulders', eq:'Dumbbell', mode:'weight_reps', step:1 },
+  machine_press: { n:'Machine Shoulder Press', m:'Shoulders', img:'Machine_Shoulder_Military_Press', grp:'shoulders', eq:'Machine', mode:'weight_reps', step:5 },
+
+  crunch:        { n:'Crunches', m:'Abs', img:'Crunches', grp:'abs', eq:'Bodyweight', mode:'reps', step:1 },
+  plank:         { n:'Plank', m:'Core', img:'Plank', grp:'abs', eq:'Bodyweight', mode:'duration', step:5 },
+  hanging:       { n:'Hanging Leg Raise', m:'Abs', img:'Hanging_Leg_Raise', grp:'abs', eq:'Pull-up bar', mode:'reps', step:1 },
+  cable_crunch:  { n:'Cable Crunch', m:'Abs', img:'Cable_Crunch', grp:'abs', eq:'Cable', mode:'weight_reps', step:2.5 },
+  russian_twist: { n:'Russian Twist', m:'Obliques', img:'Russian_Twist', grp:'abs', eq:'Bodyweight', mode:'reps', step:1 },
+  ab_roller:     { n:'Ab Roller', m:'Abs', img:'Ab_Roller', grp:'abs', eq:'Ab wheel', mode:'reps', step:1 },
+  situp:         { n:'Sit-Up', m:'Abs', img:'Sit-Up', grp:'abs', eq:'Bodyweight', mode:'reps', step:1 },
+  reverse_crunch:{ n:'Reverse Crunch', m:'Abs', img:'Reverse_Crunch', grp:'abs', eq:'Bodyweight', mode:'reps', step:1 },
+  side_plank:    { n:'Side Plank', m:'Obliques', img:'Side_Plank', grp:'abs', eq:'Bodyweight', mode:'duration', step:5 },
+  dead_bug:      { n:'Dead Bug', m:'Core', img:'Dead_Bug', grp:'abs', eq:'Bodyweight', mode:'reps', step:1 },
+  bicycle:       { n:'Bicycle Crunch', m:'Abs / Obliques', img:'Air_Bike', grp:'abs', eq:'Bodyweight', mode:'reps', step:1 },
+  mountain:      { n:'Mountain Climbers', m:'Core', img:'Mountain_Climbers', grp:'abs', eq:'Bodyweight', mode:'duration', step:5 },
+  hollow_hold:   { n:'Hollow Body Hold', m:'Core', img:'Plank', grp:'abs', eq:'Bodyweight', mode:'duration', step:5 },
+  pallof:        { n:'Pallof Press', m:'Core / Anti-rotation', img:'Pallof_Press', grp:'abs', eq:'Cable', mode:'weight_reps', step:2.5 },
+
+  wrist_curl:    { n:'Wrist Curl', m:'Forearms', img:'Palms-Up_Barbell_Wrist_Curl_Over_A_Bench', grp:'forearms', eq:'Barbell', mode:'weight_reps', step:1 },
+  reverse_wrist: { n:'Reverse Wrist Curl', m:'Forearms', img:'Palms-Down_Wrist_Curl_Over_A_Bench', grp:'forearms', eq:'Barbell', mode:'weight_reps', step:1 },
+  farmers_walk:  { n:'Farmer Walk', m:'Grip / Full body', img:'Farmers_Walk', grp:'forearms', eq:'Dumbbell', mode:'duration_weight', step:2 },
+  dead_hang:     { n:'Dead Hang', m:'Grip / Shoulders', img:'Pullups', grp:'forearms', eq:'Pull-up bar', mode:'duration', step:5 },
+
+  jumping_jack:  { n:'Jumping Jacks', m:'Cardio', img:'Jumping_Jacks', grp:'cardio', eq:'Bodyweight', mode:'duration', step:10 },
+  high_knees:    { n:'High Knees', m:'Cardio', img:'High_Knees', grp:'cardio', eq:'Bodyweight', mode:'duration', step:10 },
+  burpee:        { n:'Burpees', m:'Full body', img:'Burpee', grp:'cardio', eq:'Bodyweight', mode:'reps', step:1 },
+  bike:          { n:'Stationary Bike', m:'Cardio', img:'Bicycling_Stationary', grp:'cardio', eq:'Bike', mode:'duration', step:60 },
+  rower:         { n:'Rowing Machine', m:'Cardio / Back', img:'Rowing_Stationary', grp:'cardio', eq:'Rower', mode:'duration', step:60 }
 };
 // list item = [exerciseId, sets, repsRange, restSeconds]
 const WORKOUT_PLAN = {
@@ -1066,31 +1123,149 @@ function gymLastSession(exId) {
   const last = dates[dates.length - 1];
   return { date: last, sets: gymSetsFor(exId, last) };
 }
-function fmtSets(sets) {
-  return sets.map(s => `${(+s.weight) || 0}${s.weight ? 'kg' : ''}×${s.reps}`).join(', ');
+function exerciseMode(exId) { return (EXERCISE_DB[exId] && EXERCISE_DB[exId].mode) || 'weight_reps'; }
+function parseTarget(range) {
+  const nums = String(range || '').match(/\d+/g)?.map(Number) || [10];
+  return { low: nums[0] || 10, high: nums[1] || nums[0] || 10 };
 }
+function formatGymSet(exId, set) {
+  const mode = exerciseMode(exId);
+  const value = +set.reps || 0;
+  const load = +set.weight || 0;
+  if (mode === 'duration') return `${value}s`;
+  if (mode === 'duration_weight') return `${load ? load + 'kg · ' : ''}${value}s`;
+  if (mode === 'reps') return `${value} reps`;
+  if (mode === 'bodyweight') {
+    if (load < 0) return `${value} reps · ${Math.abs(load)}kg assistance`;
+    if (load > 0) return `${value} reps · +${load}kg`;
+    return `${value} reps · bodyweight`;
+  }
+  return `${load}kg × ${value}`;
+}
+function fmtSets(exId, sets) { return sets.map(s => formatGymSet(exId, s)).join(', '); }
 function gymSuggest(exId, repsRange) {
+  const ex = EXERCISE_DB[exId] || {};
+  const mode = exerciseMode(exId);
   const last = gymLastSession(exId);
-  const parts = String(repsRange).replace(/[^0-9-]/g, '').split('-');
-  const topRep = parseInt(parts[parts.length - 1], 10) || 10;
-  const lowRep = parseInt(parts[0], 10) || topRep;
-  if (!last || !last.sets.length) return { weight: '', reps: '', text: 'First time — pick a weight you can fully control for the whole rep range.' };
+  const { low, high } = parseTarget(repsRange);
+  if (!last || !last.sets.length) {
+    const firstText = mode === 'duration' || mode === 'duration_weight'
+      ? 'First time — choose a controlled duration inside the target range.'
+      : mode === 'reps' || mode === 'bodyweight'
+        ? 'First time — use clean form and stay inside the target range.'
+        : 'First time — pick a load you can fully control for the whole rep range.';
+    return { weight:'', reps:'', text:firstText };
+  }
   const lastSet = last.sets[last.sets.length - 1];
-  const allHitTop = last.sets.every(s => s.reps >= topRep);
-  if (allHitTop && lastSet.weight > 0)
-    return { weight: +(lastSet.weight + 2.5).toFixed(1), reps: lowRep, text: `You hit the top reps last time → go up to ${+(lastSet.weight + 2.5)} kg.` };
-  return { weight: lastSet.weight || '', reps: (lastSet.reps + 1) || '', text: `Stay at ${lastSet.weight || '?'} kg and aim for 1 more rep than last time.` };
+  const allHitTop = last.sets.every(s => (+s.reps || 0) >= high);
+  const step = +ex.step || 1;
+  if (mode === 'duration' || mode === 'duration_weight') {
+    const next = Math.max(low, (+lastSet.reps || low) + step);
+    return { weight:lastSet.weight || '', reps:next, text:`Aim for ${next}s with the same quality. When the top range feels controlled, choose a harder variation.` };
+  }
+  if (mode === 'reps') {
+    const next = Math.max(low, (+lastSet.reps || low) + 1);
+    return { weight:'', reps:next, text: allHitTop ? 'You reached the top range — add a harder variation or slower tempo.' : `Aim for ${next} clean reps.` };
+  }
+  if (mode === 'bodyweight') {
+    const load = +lastSet.weight || 0;
+    if (allHitTop) {
+      if (load < 0) return { weight:Math.min(0, load + step), reps:low, text:`Top range reached — reduce assistance to ${Math.abs(Math.min(0, load + step))} kg.` };
+      return { weight:load + step, reps:low, text:`Top range reached — try +${load + step} kg, or keep bodyweight with stricter form.` };
+    }
+    return { weight:load || '', reps:(+lastSet.reps || low) + 1, text:'Keep the same assistance or added load and aim for one more clean rep.' };
+  }
+  if (allHitTop && (+lastSet.weight || 0) > 0) {
+    const next = +((+lastSet.weight || 0) + step).toFixed(1);
+    return { weight:next, reps:low, text:`Top range reached → move to ${next} kg.` };
+  }
+  return { weight:lastSet.weight || '', reps:(+lastSet.reps || low) + 1, text:`Keep ${lastSet.weight || '?'} kg and aim for one more rep.` };
+}
+function gymScore(exId, set) {
+  const mode = exerciseMode(exId), r = +set.reps || 0, w = +set.weight || 0;
+  if (mode === 'duration') return r;
+  if (mode === 'duration_weight') return r + Math.max(0, w) * 10;
+  if (mode === 'reps') return r;
+  if (mode === 'bodyweight') return r * 100 + w;
+  return Math.max(0, w) * 1000 + r;
 }
 function gymProgression(exId) {
   const today = gymSetsFor(exId, hoyLocal());
   const last = gymLastSession(exId);
   if (!today.length || !last) return null;
-  const best = arr => Math.max(...arr.map(s => (+s.weight || 0) * 1000 + (s.reps || 0)));
-  const vol = arr => arr.reduce((a, s) => a + (+s.weight || 0) * (s.reps || 0), 0);
+  const best = arr => Math.max(...arr.map(s => gymScore(exId, s)));
   const t = best(today), l = best(last.sets);
-  if (t > l || vol(today) > vol(last.sets)) return { cls: 'ok', text: '⬆ Stronger than last session — progress!' };
-  if (t === l && vol(today) === vol(last.sets)) return { cls: 'mut', text: '➡ Matched last session — solid.' };
-  return { cls: 'bad', text: '⬇ A bit below last time — totally fine, rest & food matter too.' };
+  if (t > l) return { cls:'ok', text:'⬆ Stronger than last session — progress!' };
+  if (t === l) return { cls:'mut', text:'➡ Matched last session — solid.' };
+  return { cls:'bad', text:'⬇ Below last time — recovery, technique and fatigue can explain it.' };
+}
+function gymTrend(exId) {
+  const dates = [...new Set((S.gym_sets || []).filter(s => s.exercise === exId).map(s => s.date))].sort().slice(-5);
+  if (dates.length < 3) return null;
+  const scores = dates.map(d => Math.max(...gymSetsFor(exId, d).map(s => gymScore(exId, s))));
+  let gains = 0;
+  for (let i=1;i<scores.length;i++) if (scores[i] > scores[i-1]) gains++;
+  if (gains >= 2) return { cls:'ok', text:'Progress trend: improving. Keep this exercise.' };
+  if (scores.slice(-3).every(v => v <= scores[scores.length-3])) return { cls:'bad', text:'No measurable progress in 3 sessions. Consider a lighter week or variation.' };
+  return { cls:'mut', text:'Progress trend: stable.' };
+}
+
+function gymDateDiffDays(a,b=hoyLocal()) { return Math.max(0,Math.floor((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/86400000)); }
+function gymAllTrainingDates() { return [...new Set((S.gym_sets||[]).map(x=>x.date).filter(Boolean))].sort(); }
+function gymBlockState() {
+  const p=getGymPrefs(), dates=gymAllTrainingDates();
+  const start=p.blockStart || hoyLocal(); // V130 starts a fresh block without reinterpreting old history
+  const weeks=Math.max(1,Math.floor(gymDateDiffDays(start)/7)+1);
+  const length=Math.min(8,Math.max(4,+p.blockLength||6));
+  const due=weeks>=length && p.blockReviewedStart!==start;
+  const deloadActive=!!(p.deloadUntil && p.deloadUntil>=hoyLocal());
+  return {start,weeks,length,due,deloadActive,deloadUntil:p.deloadUntil||null};
+}
+function gymBlockAnalysis() {
+  const st=gymBlockState(), since=new Date(Date.now()-st.length*7*86400000).toISOString().slice(0,10);
+  const ids=[...new Set((S.gym_sets||[]).filter(x=>x.date>=since).map(x=>x.exercise))];
+  const rows=ids.map(id=>({id, ex:EXERCISE_DB[id], trend:gymTrend(id)})).filter(x=>x.ex);
+  return {
+    state:st,
+    improving:rows.filter(x=>x.trend?.cls==='ok'),
+    stable:rows.filter(x=>!x.trend||x.trend.cls==='mut'),
+    stalled:rows.filter(x=>x.trend?.cls==='bad'),
+    sessions:new Set((S.gym_sets||[]).filter(x=>x.date>=since).map(x=>x.date)).size
+  };
+}
+function suggestedBlockSwaps(analysis) {
+  const out=[];
+  Object.entries(WORKOUT_PLAN).forEach(([wd,plan])=>{
+    if(!plan.list)return;
+    plan.list.forEach(([orig])=>{
+      const current=effectiveExId(+wd,orig);
+      if(!analysis.stalled.some(x=>x.id===current))return;
+      const alt=altsFor(current).find(a=>!analysis.stalled.some(x=>x.id===a.id));
+      if(alt)out.push({wd:+wd,orig,from:current,to:alt.id});
+    });
+  });
+  return out.slice(0,6);
+}
+async function startNewGymBlock(extra={}) {
+  const p=getGymPrefs();
+  p.blockStart=hoyLocal(); p.blockReviewedStart=null; p.blockNumber=(+p.blockNumber||1)+1;
+  Object.assign(p,extra); await saveGymPrefs(p); renderWorkout();
+}
+function openGymBlockReview() {
+  const a=gymBlockAnalysis(), swaps=suggestedBlockSwaps(a), back=document.createElement('div'); back.className='modal-back doc-back';
+  const rows=swaps.length?swaps.map(x=>`<label class="block-swap"><input type="checkbox" data-block-swap checked data-wd="${x.wd}" data-orig="${x.orig}" data-to="${x.to}"><span><b>${esc(EXERCISE_DB[x.from]?.n||x.from)}</b><small>→ ${esc(EXERCISE_DB[x.to]?.n||x.to)}</small></span></label>`).join(''):'<p class="hint">No stalled exercise needs replacement. Keeping the routine is a strong option.</p>';
+  back.innerHTML=`<div class="modal-card doc-card gym-block-card"><div class="doc-head"><div><small>◆ TRAINING BLOCK</small><h3>Review · Week ${a.state.weeks}</h3></div><button class="doc-x">✕</button></div><div class="doc-body"><div class="block-score"><div><strong>${a.improving.length}</strong><span>improving</span></div><div><strong>${a.stable.length}</strong><span>stable</span></div><div><strong>${a.stalled.length}</strong><span>stalled</span></div></div><p class="hint">${a.sessions} training days analyzed. Nothing changes until you approve it.</p><details class="block-details"><summary>Suggested exercise changes</summary>${rows}</details><div class="block-actions"><button data-block-action="keep">Keep routine</button><button data-block-action="refresh">Apply selected changes</button><button data-block-action="deload">Start lighter week</button></div></div></div>`;
+  document.body.appendChild(back); requestAnimationFrame(()=>back.classList.add('show')); const close=()=>{back.classList.remove('show');setTimeout(()=>back.remove(),250)}; back.querySelector('.doc-x').onclick=close; back.onclick=e=>{if(e.target===back)close()};
+  back.querySelectorAll('[data-block-action]').forEach(btn=>btn.onclick=async()=>{
+    const action=btn.dataset.blockAction,p=getGymPrefs();
+    if(action==='keep'){p.blockReviewedStart=a.state.start;p.blockStart=hoyLocal();p.blockNumber=(+p.blockNumber||1)+1;delete p.deloadUntil;await saveGymPrefs(p);close();toast('Routine kept · new training block started');renderWorkout();return;}
+    if(action==='deload'){const until=new Date(Date.now()+7*86400000).toISOString().slice(0,10);p.deloadUntil=until;p.blockReviewedStart=a.state.start;await saveGymPrefs(p);close();toast('Lighter week active for 7 days');renderWorkout();return;}
+    p.swaps=p.swaps||{}; back.querySelectorAll('[data-block-swap]:checked').forEach(c=>p.swaps[slotKey(+c.dataset.wd,c.dataset.orig)]=c.dataset.to);
+    p.blockStart=hoyLocal();p.blockReviewedStart=null;p.blockNumber=(+p.blockNumber||1)+1;delete p.deloadUntil;await saveGymPrefs(p);close();toast('Approved changes applied · new block started');renderWorkout();
+  });
+}
+function openMeasurementGuide() {
+  docModal('📏 How to take your measurements', `<p>A simple <b>sewing tape (metro de costura)</b> is all you need. Measure in the morning before eating, relaxed, tape snug but not tight, on the same day each week.</p><ul class="gym-help-list"><li><b>Waist</b> — around the navel, relaxed. Your main fat-loss signal.</li><li><b>Chest</b> — across the nipples, arms down, normal breath.</li><li><b>Arm</b> — flexed bicep, at its thickest point.</li><li><b>Hips</b> — widest part of the glutes.</li><li><b>Thigh</b> — highest point, just under the glute.</li><li><b>Weight</b> — same scale, morning, after bathroom, before eating.</li></ul><p>One bad week means little. Food and water move the scale daily; the <b>2-week trend</b> matters.</p>`);
 }
 
 // ---- Preferencias de la rutina: reemplazos de ejercicio y # de series, por día de plan ----
@@ -1112,124 +1287,89 @@ function altsFor(origId) {
 }
 let GYM_CELEBRATED_DATE = null;
 
+let GYM_TIMER = { kind:null, exercise:null, endAt:0, remaining:0, interval:null, running:false };
+function gymTimerPrefs() {
+  const p = getGymPrefs();
+  return { autoRest:p.autoRest !== false, sound:p.timerSound !== false, vibration:p.timerVibration !== false };
+}
+function gymBeep() {
+  const pref = gymTimerPrefs();
+  if (pref.sound) try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx(), osc = ctx.createOscillator(), gain = ctx.createGain();
+    osc.frequency.value = 880; gain.gain.setValueAtTime(.001, ctx.currentTime); gain.gain.exponentialRampToValueAtTime(.18, ctx.currentTime+.02); gain.gain.exponentialRampToValueAtTime(.001, ctx.currentTime+.45);
+    osc.connect(gain); gain.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime+.48);
+  } catch {}
+  if (pref.vibration && navigator.vibrate) navigator.vibrate([180,80,180]);
+}
+function formatClock(sec) { sec=Math.max(0,Math.ceil(sec)); return `${String(Math.floor(sec/60)).padStart(2,'0')}:${String(sec%60).padStart(2,'0')}`; }
+function stopGymTimer(clear=true) {
+  if (GYM_TIMER.interval) clearInterval(GYM_TIMER.interval);
+  GYM_TIMER.interval=null; GYM_TIMER.running=false;
+  if (clear) GYM_TIMER={kind:null,exercise:null,endAt:0,remaining:0,interval:null,running:false};
+  renderGymTimerBar();
+}
+function renderGymTimerBar() {
+  document.querySelector('.gym-timer-float')?.remove();
+  if (!GYM_TIMER.kind) return;
+  const left = GYM_TIMER.running ? Math.max(0,(GYM_TIMER.endAt-Date.now())/1000) : GYM_TIMER.remaining;
+  const el=document.createElement('div'); el.className=`gym-timer-float ${GYM_TIMER.kind}`;
+  el.innerHTML=`<div><small>${GYM_TIMER.kind==='rest'?'REST TIMER':'ACTIVE TIMER'}</small><strong>${formatClock(left)}</strong></div><div class="gym-timer-actions"><button data-timer-pause>${GYM_TIMER.running?'Pause':'Resume'}</button><button data-timer-add>+15s</button><button data-timer-stop>✕</button></div>`;
+  document.body.appendChild(el);
+}
+function startGymTimer(seconds, kind='rest', exercise=null) {
+  stopGymTimer();
+  GYM_TIMER={kind,exercise,endAt:Date.now()+seconds*1000,remaining:seconds,interval:null,running:true};
+  const tick=()=>{
+    const left=Math.max(0,(GYM_TIMER.endAt-Date.now())/1000); GYM_TIMER.remaining=left; renderGymTimerBar();
+    if (left<=0) { const ex=GYM_TIMER.exercise; stopGymTimer(); gymBeep(); toast(kind==='rest'?'⚡ Rest complete — next set ready.':`⏱ Time complete${ex&&EXERCISE_DB[ex]?' · '+EXERCISE_DB[ex].n:''}`); }
+  };
+  GYM_TIMER.interval=setInterval(tick,500); tick();
+}
+document.addEventListener('click', e=>{
+  if (e.target.closest('[data-timer-pause]')) {
+    if (GYM_TIMER.running) { GYM_TIMER.remaining=Math.max(0,(GYM_TIMER.endAt-Date.now())/1000); clearInterval(GYM_TIMER.interval); GYM_TIMER.interval=null; GYM_TIMER.running=false; renderGymTimerBar(); }
+    else startGymTimer(GYM_TIMER.remaining, GYM_TIMER.kind, GYM_TIMER.exercise);
+  }
+  if (e.target.closest('[data-timer-add]')) { const left=GYM_TIMER.running?Math.max(0,(GYM_TIMER.endAt-Date.now())/1000):GYM_TIMER.remaining; startGymTimer(left+15,GYM_TIMER.kind,GYM_TIMER.exercise); }
+  if (e.target.closest('[data-timer-stop]')) stopGymTimer();
+});
+function gymInputRow(id, idx, valueW, valueR, extra=false) {
+  const ex=EXERCISE_DB[id]||{}, mode=exerciseMode(id), label=extra?'Extra':`Set ${idx+1}`;
+  if (mode==='duration' || mode==='duration_weight') {
+    return `<div class="set-row set-live ${extra?'set-extra':''}"><span class="set-n">${label}</span>${mode==='duration_weight'?`<input class="set-w" type="number" step="0.5" min="0" placeholder="kg" value="${valueW||''}">`:''}<input class="set-r" type="number" min="1" placeholder="seconds" value="${valueR||''}"><button class="set-timer" data-start-ex-timer="${id}" title="Start timer">⏱</button><button class="set-log" data-log="${id}">✓</button></div>`;
+  }
+  if (mode==='reps') return `<div class="set-row set-live ${extra?'set-extra':''}"><span class="set-n">${label}</span><input class="set-r" type="number" min="1" placeholder="reps" value="${valueR||''}"><button class="set-log" data-log="${id}">✓</button></div>`;
+  if (mode==='bodyweight') return `<div class="set-row set-live ${extra?'set-extra':''}"><span class="set-n">${label}</span><input class="set-r" type="number" min="1" placeholder="reps" value="${valueR||''}"><input class="set-w body-load" type="number" step="0.5" placeholder="+kg / -assist" value="${valueW||''}" title="Positive = added weight, negative = assistance"><button class="set-log" data-log="${id}">✓</button></div>`;
+  return `<div class="set-row set-live ${extra?'set-extra':''}"><span class="set-n">${label}</span><input class="set-w" type="number" step="0.5" min="0" placeholder="kg" value="${valueW||''}"><span class="set-x">×</span><input class="set-r" type="number" min="1" placeholder="reps" value="${valueR||''}"><button class="set-log" data-log="${id}">✓</button></div>`;
+}
+function targetLabel(id, reps) { const m=exerciseMode(id); return (m==='duration'||m==='duration_weight')?`${reps}`:`${reps} reps`; }
 function renderWorkout() {
-  const box = document.getElementById('workoutBox');
-  if (!box) return;
-  const sel = document.getElementById('workoutDay');
-  const todayWd = new Date().getDay();
-  if (sel && !sel.dataset.ready) {
-    let opts = `<option value="today">Today · ${DAY_NAMES[todayWd]}</option>`;
-    [1, 2, 3, 4, 5].forEach(w => { opts += `<option value="${w}">${WORKOUT_PLAN[w].title}</option>`; });
-    opts += `<option value="rest">🌿 Rest day</option>`;
-    sel.innerHTML = opts;
-    sel.dataset.ready = '1';
-    sel.addEventListener('change', () => { GYM_PLAN_SEL = sel.value; renderWorkout(); });
-  }
-  let wd;
-  if (GYM_PLAN_SEL == null || GYM_PLAN_SEL === 'today') wd = todayWd;
-  else if (GYM_PLAN_SEL === 'rest') wd = 0;
-  else wd = +GYM_PLAN_SEL;
-  const plan = WORKOUT_PLAN[wd] || WORKOUT_PLAN[0];
-  const titleEl = document.getElementById('workoutTitle');
-  if (titleEl) titleEl.textContent = (GYM_PLAN_SEL == null || GYM_PLAN_SEL === 'today') ? `🔥 Today · ${plan.title.replace(/^\S+\s/, '')}` : plan.title;
-
-  if (plan.rest) {
-    box.innerHTML = `<div class="rest-day"><div class="big">🌿</div>
-      <p><b>Rest day.</b> Muscle grows while you recover, not while you train. Protect it like a payment.</p>
-      <p class="hint">Optional light stuff: a 30–45 min walk toward your 10k steps, gentle stretching or mobility, foam rolling. No heavy lifting today.</p></div>`;
-    return;
-  }
-
-  const offDay = (wd !== todayWd);
-  const banner = offDay
-    ? `<div class="workout-banner">📅 You're viewing <b>${plan.title.replace(/^\S+\s/, '')}</b>, but today is <b>${DAY_NAMES[todayWd]}</b>. Sets you log are saved to <b>today</b>. Switch the menu to <b>Today</b> for your scheduled workout.</div>`
-    : '';
-  let allDone = true;
-  box.innerHTML = banner + plan.list.map(([origId, baseSets, reps, rest]) => {
-    const origEx = EXERCISE_DB[origId]; if (!origEx) return '';
-    const id = effectiveExId(wd, origId);             // ejercicio efectivo (puede estar reemplazado)
-    const ex = EXERCISE_DB[id] || origEx;
-    const sets = effectiveSetCount(wd, origId, baseSets);  // # de series efectivo (puede estar editado)
-    const today = gymSetsFor(id, hoyLocal());
-    const last = gymLastSession(id);
-    const sug = gymSuggest(id, reps);
-    const prog = gymProgression(id);
-    const done = today.length >= sets;
-    if (!done) allDone = false;
-    const swapped = id !== origId;
-    // sugerencia sutil de variación: 8+ sesiones distintas en el mismo ejercicio sin cambiarlo
-    const sessionsCount = new Set((S.gym_sets || []).filter(s => s.exercise === id).map(s => s.date)).size;
-    const suggestVariation = !swapped && sessionsCount >= 8 && altsFor(id).length > 0;
-
-    // Mostrar TODAS las series: hechas (✓), la activa (inputs) y las que faltan (objetivo).
-    const shown = Math.max(sets, today.length);
-    let rowsHtml = '';
-    for (let i = 0; i < shown; i++) {
-      if (i < today.length) {                       // serie ya registrada
-        const s = today[i];
-        rowsHtml += `<div class="set-row set-done">
-          <span class="set-n">Set ${i + 1}</span>
-          <span class="set-val">${(+s.weight) || 0} kg × ${s.reps}</span>
-          <button class="set-undo" data-undo="${s.id}" title="Undo set">✕</button></div>`;
-      } else if (i === today.length) {              // serie activa (a registrar ahora)
-        const wVal = today.length ? ((+today[today.length - 1].weight) || '') : (sug.weight || '');
-        const rVal = today.length ? (today[today.length - 1].reps || '') : (sug.reps || '');
-        rowsHtml += `<div class="set-row set-live">
-          <span class="set-n">Set ${i + 1}</span>
-          <input class="set-w" type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" value="${wVal}">
-          <span class="set-x">×</span>
-          <input class="set-r" type="number" inputmode="numeric" min="0" placeholder="reps" value="${rVal}">
-          <button class="set-log" data-log="${id}" title="Log this set">✓</button></div>`;
-      } else {                                       // series que faltan (objetivo)
-        rowsHtml += `<div class="set-row set-upcoming">
-          <span class="set-n">Set ${i + 1}</span>
-          <span class="set-val mut">target ${reps} reps</span></div>`;
-      }
+  const box=document.getElementById('workoutBox'); if(!box)return;
+  const sel=document.getElementById('workoutDay'), todayWd=new Date().getDay();
+  if(sel&&!sel.dataset.ready){ let opts=`<option value="today">Today · ${DAY_NAMES[todayWd]}</option>`; [1,2,3,4,5].forEach(w=>opts+=`<option value="${w}">${WORKOUT_PLAN[w].title}</option>`); opts+=`<option value="rest">🌿 Rest day</option>`; sel.innerHTML=opts; sel.dataset.ready='1'; sel.addEventListener('change',()=>{GYM_PLAN_SEL=sel.value;renderWorkout();}); }
+  let wd=(GYM_PLAN_SEL==null||GYM_PLAN_SEL==='today')?todayWd:(GYM_PLAN_SEL==='rest'?0:+GYM_PLAN_SEL), plan=WORKOUT_PLAN[wd]||WORKOUT_PLAN[0];
+  const titleEl=document.getElementById('workoutTitle'); if(titleEl) titleEl.textContent=(GYM_PLAN_SEL==null||GYM_PLAN_SEL==='today')?`🔥 Today · ${plan.title.replace(/^\S+\s/,'')}`:plan.title;
+  if(plan.rest){ box.innerHTML=`<div class="rest-day"><div class="big">🌿</div><p><b>Rest day.</b> Recovery is part of the training arc.</p><p class="hint">Walk, mobility or gentle stretching only.</p></div>`; return; }
+  const prefs=gymTimerPrefs(), block=gymBlockState();
+  const blockLabel=block.deloadActive?`Deload until ${block.deloadUntil.slice(5)}`:`Block ${(+getGymPrefs().blockNumber||1)} · Week ${block.weeks}/${block.length}`;
+  const toolbar=`<div class="gym-hunter-bar"><span>◆ TRAINING SYSTEM</span><button data-gym-timer-settings title="Timer settings">?</button><button class="gym-block-pill ${block.due?'due':''}" data-gym-block-review title="Review training block">${blockLabel}${block.due?' · Review':''}</button><small>${Object.keys(EXERCISE_DB).length} illustrated exercises · adaptive metrics</small></div>`;
+  const banner=wd!==todayWd?`<div class="workout-banner">📅 Viewing <b>${plan.title.replace(/^\S+\s/,'')}</b>. New sets are saved to today.</div>`:'';
+  let allDone=true;
+  box.innerHTML=toolbar+banner+plan.list.map(([origId,baseSets,reps,rest])=>{
+    const origEx=EXERCISE_DB[origId]; if(!origEx)return''; const id=effectiveExId(wd,origId), ex=EXERCISE_DB[id]||origEx, normalSets=effectiveSetCount(wd,origId,baseSets), sets=block.deloadActive?Math.max(1,Math.ceil(normalSets*.6)):normalSets, today=gymSetsFor(id,hoyLocal()), last=gymLastSession(id), sug=gymSuggest(id,reps), prog=gymProgression(id), trend=gymTrend(id), done=today.length>=sets; if(!done)allDone=false;
+    const swapped=id!==origId, sessionsCount=new Set((S.gym_sets||[]).filter(s=>s.exercise===id).map(s=>s.date)).size, suggestVariation=!swapped&&sessionsCount>=8&&altsFor(id).length>0&&(!trend||trend.cls!=='ok');
+    let rows=''; const shown=Math.max(sets,today.length);
+    for(let i=0;i<shown;i++){
+      if(i<today.length){const set=today[i];rows+=`<div class="set-row set-done"><span class="set-n">Set ${i+1}</span><span class="set-val">${formatGymSet(id,set)}</span><button class="set-undo" data-undo="${set.id}">✕</button></div>`;}
+      else if(i===today.length){const prev=today[today.length-1];rows+=gymInputRow(id,i,prev?.weight??sug.weight,prev?.reps??sug.reps);}
+      else rows+=`<div class="set-row set-upcoming"><span class="set-n">Set ${i+1}</span><span class="set-val mut">target ${targetLabel(id,reps)}</span></div>`;
     }
-    if (today.length >= shown) {                     // todo hecho: fila opcional para una serie extra
-      rowsHtml += `<div class="set-row set-live set-extra">
-        <span class="set-n">Extra</span>
-        <input class="set-w" type="number" inputmode="decimal" step="0.5" min="0" placeholder="kg" value="${(+today[today.length - 1].weight) || ''}">
-        <span class="set-x">×</span>
-        <input class="set-r" type="number" inputmode="numeric" min="0" placeholder="reps" value="">
-        <button class="set-log" data-log="${id}" title="Log an extra set">✓</button></div>`;
-    }
-    // controles de # de series: quitar solo si hay filas "target" sin registrar aún
-    const canRemoveSet = sets > Math.max(1, today.length);
-    const setCtrl = `<div class="set-ctrl">
-      ${canRemoveSet ? `<button class="set-adj" data-adj="-1" data-wd="${wd}" data-orig="${origId}" data-base="${baseSets}">− Remove a set</button>` : '<span></span>'}
-      <button class="set-adj" data-adj="1" data-wd="${wd}" data-orig="${origId}" data-base="${baseSets}">+ Add a set</button>
-    </div>`;
-
-    return `<div class="ex-card ${done ? 'ex-done' : ''}" data-ex="${id}">
-      <div class="ex-top">
-        <img class="ex-img" loading="lazy" src="${GYM_IMG}${ex.img}/0.jpg" alt="" onerror="this.classList.add('noimg')">
-        <div class="ex-head">
-          <div class="ex-name">${ex.n} ${done ? '<span class="ex-check">✓ done</span>' : ''}</div>
-          <div class="ex-mus">${ex.m}${swapped ? ' · <span class="swap-tag">🔄 replaced</span>' : ''}</div>
-          <div class="ex-target">${sets} sets × ${reps} · rest ${rest}s</div>
-        </div>
-        <div class="ex-actions">
-          <button class="replace-btn" data-replace="${origId}" data-wd="${wd}" title="Replace exercise">🔄 Replace</button>
-          ${swapped ? `<button class="restore-btn" data-restore="${origId}" data-wd="${wd}" title="Restore original">↺ Original</button>` : ''}
-        </div>
-      </div>
-      <div class="ex-coach">
-        ${last ? `<div class="ex-last">📋 Last (${last.date.slice(5)}): ${fmtSets(last.sets)}</div>` : '<div class="ex-last mut">No history yet — today sets your baseline.</div>'}
-        <div class="ex-suggest">🎯 ${sug.text}</div>
-        ${prog ? `<div class="ex-prog ${prog.cls}">${prog.text}</div>` : ''}
-        ${suggestVariation ? `<div class="ex-variation">🔄 You've done this ${sessionsCount} sessions — <button class="link-like" data-replace="${origId}" data-wd="${wd}">try a variation?</button></div>` : ''}
-      </div>
-      <div class="ex-sets">${rowsHtml}</div>
-      ${setCtrl}
-    </div>`;
+    if(today.length>=shown)rows+=gymInputRow(id,shown,today[today.length-1]?.weight||'', '', true);
+    const canRemove=sets>Math.max(1,today.length), ctrl=`<div class="set-ctrl">${canRemove?`<button class="set-adj" data-adj="-1" data-wd="${wd}" data-orig="${origId}" data-base="${baseSets}">− Set</button>`:'<span></span>'}<button class="set-adj" data-adj="1" data-wd="${wd}" data-orig="${origId}" data-base="${baseSets}">+ Set</button></div>`;
+    return `<div class="ex-card hunter-ex ${done?'ex-done':''}" data-ex="${id}" data-rest="${rest}"><div class="ex-top"><img class="ex-img" loading="lazy" src="${GYM_IMG}${ex.img}/0.jpg" alt="${esc(ex.n)}" onerror="if(!this.dataset.fallback){this.dataset.fallback='1';this.src='${GYM_IMG}${GYM_GROUP_IMG[ex.grp]||'Pushups'}/0.jpg'}else this.classList.add('noimg')"><div class="ex-head"><div class="ex-name">${ex.n}${done?'<span class="ex-check">✓</span>':''}</div><div class="ex-mus">${ex.m} · ${ex.eq}${swapped?' · <span class="swap-tag">replaced</span>':''}</div><div class="ex-target">${sets} sets · ${targetLabel(id,reps)} · rest ${rest}s</div></div><div class="ex-actions"><button class="replace-btn" data-replace="${origId}" data-wd="${wd}">🔄</button>${swapped?`<button class="restore-btn" data-restore="${origId}" data-wd="${wd}">↺</button>`:''}</div></div><div class="ex-coach">${last?`<div class="ex-last">Last ${last.date.slice(5)} · ${fmtSets(id,last.sets)}</div>`:'<div class="ex-last mut">No history — today sets your baseline.</div>'}<div class="ex-suggest">🎯 ${sug.text}</div>${prog?`<div class="ex-prog ${prog.cls}">${prog.text}</div>`:''}${trend?`<div class="ex-trend ${trend.cls}">${trend.text}</div>`:''}${suggestVariation?`<div class="ex-variation">Variation recommended · <button class="link-like" data-replace="${origId}" data-wd="${wd}">review options</button></div>`:''}</div><div class="ex-sets">${rows}</div>${ctrl}</div>`;
   }).join('');
-
-  // celebración al completar toda la rutina de HOY (una sola vez por fecha)
-  if (allDone && (GYM_PLAN_SEL == null || GYM_PLAN_SEL === 'today') && wd === todayWd && GYM_CELEBRATED_DATE !== hoyLocal()) {
-    GYM_CELEBRATED_DATE = hoyLocal();
-    showWorkoutCelebration();
-  }
+  if(allDone&&(GYM_PLAN_SEL==null||GYM_PLAN_SEL==='today')&&wd===todayWd&&GYM_CELEBRATED_DATE!==hoyLocal()){GYM_CELEBRATED_DATE=hoyLocal();showWorkoutCelebration();}
 }
 
 function showWorkoutCelebration() {
@@ -1251,7 +1391,7 @@ function showWorkoutCelebration() {
 function exercisePickerModal(origId, wd) {
   const alts = altsFor(origId);
   const html = alts.map(a => `<div class="alt-pick" data-pick="${a.id}">
-      <img class="alt-img" loading="lazy" src="${GYM_IMG}${a.img}/0.jpg" alt="" onerror="this.classList.add('noimg')">
+      <img class="alt-img" loading="lazy" src="${GYM_IMG}${a.img}/0.jpg" alt="" onerror="if(!this.dataset.fallback){this.dataset.fallback='1';this.src='${GYM_IMG}${GYM_GROUP_IMG[a.grp]||'Pushups'}/0.jpg'}else this.classList.add('noimg')">
       <div class="alt-info"><b>${a.n}</b><small>${a.m} · ${a.eq}</small></div>
     </div>`).join('') || '<p class="hint">No alternatives found for this muscle group.</p>';
   const back = document.createElement('div');
@@ -1275,68 +1415,30 @@ function exercisePickerModal(origId, wd) {
 }
 
 document.getElementById('workoutBox')?.addEventListener('click', async (e) => {
-  const replaceBtn = e.target.closest('[data-replace]');
-  if (replaceBtn) { exercisePickerModal(replaceBtn.dataset.replace, replaceBtn.dataset.wd); return; }
-
-  const restoreBtn = e.target.closest('[data-restore]');
-  if (restoreBtn) {
-    const p = getGymPrefs(); p.swaps = p.swaps || {};
-    delete p.swaps[slotKey(restoreBtn.dataset.wd, restoreBtn.dataset.restore)];
-    await saveGymPrefs(p);
-    toast('↺ Original exercise restored');
-    renderWorkout();
+  const blockReview=e.target.closest('[data-gym-block-review]'); if(blockReview){openGymBlockReview();return;}
+  const settings=e.target.closest('[data-gym-timer-settings]');
+  if(settings){
+    const p=getGymPrefs(), back=document.createElement('div'); back.className='modal-back doc-back';
+    back.innerHTML=`<div class="modal-card doc-card gym-settings-card"><div class="doc-head"><h3>◆ Gym timers</h3><button class="doc-x">✕</button></div><div class="doc-body"><label class="toggle-line"><span>Auto-start rest timer</span><input id="gymAutoRest" type="checkbox" ${p.autoRest!==false?'checked':''}></label><label class="toggle-line"><span>Sound at zero</span><input id="gymTimerSound" type="checkbox" ${p.timerSound!==false?'checked':''}></label><label class="toggle-line"><span>Vibration</span><input id="gymTimerVibration" type="checkbox" ${p.timerVibration!==false?'checked':''}></label><p class="hint">Timed exercises use seconds. Bodyweight exercises hide kilograms unless you add weight or assistance.</p><button class="m-ok" id="gymTimerSave">Save</button></div></div>`;
+    document.body.appendChild(back); requestAnimationFrame(()=>back.classList.add('show')); const close=()=>{back.classList.remove('show');setTimeout(()=>back.remove(),250)}; back.querySelector('.doc-x').onclick=close; back.onclick=x=>{if(x.target===back)close()};
+    back.querySelector('#gymTimerSave').onclick=async()=>{p.autoRest=back.querySelector('#gymAutoRest').checked;p.timerSound=back.querySelector('#gymTimerSound').checked;p.timerVibration=back.querySelector('#gymTimerVibration').checked;await saveGymPrefs(p);close();toast('Gym timer settings saved');}; return;
+  }
+  const startTimer=e.target.closest('[data-start-ex-timer]');
+  if(startTimer){ const card=startTimer.closest('.ex-card'), input=card.querySelector('.set-live .set-r'), sec=Math.max(1,parseInt(input?.value,10)||parseTarget(card.querySelector('.ex-target')?.textContent).low||30); if(input&&!input.value)input.value=sec; startGymTimer(sec,'exercise',startTimer.dataset.startExTimer); return; }
+  const replaceBtn=e.target.closest('[data-replace]'); if(replaceBtn){exercisePickerModal(replaceBtn.dataset.replace,replaceBtn.dataset.wd);return;}
+  const restoreBtn=e.target.closest('[data-restore]'); if(restoreBtn){const p=getGymPrefs();p.swaps=p.swaps||{};delete p.swaps[slotKey(restoreBtn.dataset.wd,restoreBtn.dataset.restore)];await saveGymPrefs(p);toast('Original exercise restored');renderWorkout();return;}
+  const adjBtn=e.target.closest('[data-adj]'); if(adjBtn){const wd=adjBtn.dataset.wd,orig=adjBtn.dataset.orig,base=+adjBtn.dataset.base,delta=+adjBtn.dataset.adj,p=getGymPrefs();p.setcount=p.setcount||{};const key=slotKey(wd,orig),cur=p.setcount[key]!=null?p.setcount[key]:base,today=gymSetsFor(effectiveExId(wd,orig),hoyLocal()),next=Math.max(Math.max(1,today.length),Math.min(10,cur+delta));if(delta<0&&next>=cur){toast('You already logged that many sets today');return;}p.setcount[key]=next;await saveGymPrefs(p);renderWorkout();return;}
+  const log=e.target.closest('[data-log]');
+  if(log){
+    const todayPlan=WORKOUT_PLAN[new Date().getDay()]; if(todayPlan&&todayPlan.rest){toast('Today is your rest day 🌿');return;}
+    const card=log.closest('.ex-card'), row=log.closest('.set-row'), mode=exerciseMode(log.dataset.log), wInput=row.querySelector('.set-w'), rInput=row.querySelector('.set-r');
+    const w=parseFloat(String(wInput?.value||'0').replace(',','.'))||0, r=parseInt(rInput?.value,10)||0;
+    if(r<=0){toast(mode==='duration'||mode==='duration_weight'?'Type the seconds first ⏱':'Type the reps first 💪');return;}
+    try{const res=await api('/api/gym/set',{quiet:true,body:{date:hoyLocal(),exercise:log.dataset.log,weight:w,reps:r}});S.gym_sets=S.gym_sets||[];S.gym_sets.push({id:res.id,date:hoyLocal(),exercise:log.dataset.log,weight:w,reps:r});const rest=+card.dataset.rest||60;if(gymTimerPrefs().autoRest)startGymTimer(rest,'rest',log.dataset.log);renderWorkout();renderGym();}
+    catch{toast("Couldn't save that set right now.");}
     return;
   }
-
-  const adjBtn = e.target.closest('[data-adj]');
-  if (adjBtn) {
-    const wd = adjBtn.dataset.wd, orig = adjBtn.dataset.orig, base = +adjBtn.dataset.base, delta = +adjBtn.dataset.adj;
-    const p = getGymPrefs(); p.setcount = p.setcount || {};
-    const key = slotKey(wd, orig);
-    const cur = p.setcount[key] != null ? p.setcount[key] : base;
-    const today = gymSetsFor(effectiveExId(wd, orig), hoyLocal());
-    const next = Math.max(Math.max(1, today.length), Math.min(10, cur + delta));
-    if (delta < 0 && next >= cur) { toast('You already logged that many sets today'); return; }
-    p.setcount[key] = next;
-    await saveGymPrefs(p);
-    renderWorkout();
-    return;
-  }
-
-  const log = e.target.closest('[data-log]');
-  if (log) {
-    // si HOY es día de descanso, no se registra: mensaje amable (aunque estés viendo otro plan)
-    const todayPlan = WORKOUT_PLAN[new Date().getDay()];
-    if (todayPlan && todayPlan.rest) {
-      toast('Today is your rest day 🌿 — there\'s no workout to log. Rest is part of the plan!');
-      return;
-    }
-    const card = log.closest('.ex-card');
-    const w = parseFloat(String(card.querySelector('.set-w').value).replace(',', '.')) || 0;
-    const r = parseInt(card.querySelector('.set-r').value, 10) || 0;
-    if (r <= 0) { toast('Type the reps first 💪'); return; }
-    try {
-      const res = await api('/api/gym/set', { quiet: true, body: { date: hoyLocal(), exercise: log.dataset.log, weight: w, reps: r } });
-      S.gym_sets = S.gym_sets || [];
-      S.gym_sets.push({ id: res.id, date: hoyLocal(), exercise: log.dataset.log, weight: w, reps: r });
-      renderWorkout(); renderGym();
-    } catch (err) {
-      toast('Couldn\'t save that set right now — please try again in a moment.');
-    }
-    return;
-  }
-  const undo = e.target.closest('[data-undo]');
-  if (undo) {
-    const id = +undo.dataset.undo;
-    try {
-      await api('/api/gym/set/' + id, { method: 'DELETE', quiet: true });
-      S.gym_sets = (S.gym_sets || []).filter(s => s.id != id);
-      renderWorkout(); renderGym();
-    } catch (err) {
-      toast('Couldn\'t undo that set right now — please try again.');
-    }
-    return;
-  }
+  const undo=e.target.closest('[data-undo]'); if(undo){const id=+undo.dataset.undo;try{await api('/api/gym/set/'+id,{method:'DELETE',quiet:true});S.gym_sets=(S.gym_sets||[]).filter(s=>s.id!=id);renderWorkout();renderGym();}catch{toast("Couldn't undo that set.");}return;}
 });
 
 // Recomendación inteligente de peso objetivo (basada sobre todo en el objetivo físico + estatura)
@@ -1444,19 +1546,10 @@ function renderGym() {
     }</tbody></table>`;
   }
 
-  // ayuda para medir
-  document.getElementById('gymHelp').innerHTML =
-    `<p class="hint">A simple <b>sewing tape (metro de costura)</b> is all you need. Measure in the morning before eating, relaxed (don’t suck in), tape snug but not tight, same day each week.</p>
-     <ul class="gym-help-list">
-       <li><b>Waist</b> — the key one. Around the navel, relaxed. Your #1 fat-loss signal.</li>
-       <li><b>Chest</b> — across the nipples, arms down, normal breath.</li>
-       <li><b>Arm</b> — flexed bicep, at its thickest point.</li>
-       <li><b>Hips</b> — widest part of the glutes.</li>
-       <li><b>Thigh</b> — highest point, just under the glute.</li>
-       <li><b>Weight</b> — same scale, morning, after bathroom, before eating.</li>
-     </ul>
-     <p class="hint">Don’t panic over one bad week — food and water move the scale daily. The <b>2-week trend</b> is the truth.</p>`;
+  // guía compacta: el detalle vive en un modal para no ocupar la pantalla
+  document.getElementById('gymHelp').innerHTML = `<button class="gym-measure-help" id="gymMeasureHelpBtn"><span>📏 Measurement guide</span><b>?</b></button>`;
 }
+document.getElementById('gymHelp')?.addEventListener('click',e=>{if(e.target.closest('#gymMeasureHelpBtn'))openMeasurementGuide();});
 
 function renderGymChart(entries) {
   const cv = document.getElementById('gymChart');
