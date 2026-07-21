@@ -19,7 +19,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 128  # V128 adds Knowledge Archive, custom topics, controlled topic-pack import and self-paced Academy logging; must match FRONT_V in static/app.js
+VERSION = 130  # V130 adds user-approved training blocks, block reviews, deloads and a compact measurement guide; must match FRONT_V in static/app.js
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
