@@ -3803,3 +3803,11 @@ body.hunter-profile-open {
   .wish-command-strip b { font-size: .85rem; }
   .wish-money-grid, .wish-card-actions { grid-template-columns: 1fr; }
 }
+
+
+/* V124 · English nested dialogs always appear above the mission modal */
+.modal-back-stacked{z-index:10080!important;background:rgba(5,7,15,.82)}
+.language-history-back{z-index:10080}
+.language-mission-back{z-index:10050}
+.language-topic-line span,.language-topic-line b{overflow-wrap:anywhere}
+@media(max-width:600px){.language-history-item{grid-template-columns:1fr}.language-mission-actions-v123{grid-template-columns:1fr}}

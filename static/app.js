@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 123;
+const FRONT_V = 124;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -267,20 +267,46 @@ function pasosInglesDelDia(wd) {
 }
 
 
-// V123 · AI Tutor Session Bridge + Hunter Wishlist redesign
+// V124 · Multi-lesson Language Hunter + stacked English modals
 // The learning source is entered manually so the app never invents a book page or topic.
+function languageSourceRows() {
+  const pf = S.profile || {};
+  try {
+    const rows = JSON.parse(pf.language_sources_v2 || '[]');
+    if (Array.isArray(rows) && rows.length) return rows;
+  } catch (_error) {}
+  const legacy = {
+    id:'legacy-source', language:pf.lang_language || 'English', book:pf.lang_book || '',
+    level:pf.lang_book_level || '', unit:pf.lang_unit || '', pages:pf.lang_pages || '',
+    topic:pf.lang_topic || '', grammar:pf.lang_grammar || '', updated_at:pf.lang_weekly_updated || ''
+  };
+  return (legacy.book || legacy.topic) ? [legacy] : [];
+}
 function languageHunterProfile() {
   const pf = S.profile || {};
+  const rows = languageSourceRows();
+  const activeId = pf.lang_active_source_id || rows[0]?.id || '';
+  const active = rows.find(x => x.id === activeId) || rows[0] || {};
   return {
-    language: pf.lang_language || 'English',
-    book: pf.lang_book || '',
-    level: pf.lang_book_level || '',
-    unit: pf.lang_unit || '',
-    pages: pf.lang_pages || '',
-    topic: pf.lang_topic || '',
-    grammar: pf.lang_grammar || '',
-    weeklyUpdated: pf.lang_weekly_updated || ''
+    id: active.id || '', language: active.language || 'English', book: active.book || '',
+    level: active.level || '', unit: active.unit || '', pages: active.pages || '',
+    topic: active.topic || '', grammar: active.grammar || '',
+    weeklyUpdated: active.updated_at || pf.lang_weekly_updated || '', sourceCount: rows.length
   };
+}
+async function persistLanguageSources(rows, activeId) {
+  rows = Array.isArray(rows) ? rows.slice(-60) : [];
+  const active = rows.find(x => x.id === activeId) || rows[0] || {};
+  const updates = {
+    language_sources_v2: JSON.stringify(rows), lang_active_source_id: active.id || '',
+    lang_language: active.language || 'English', lang_book: active.book || '',
+    lang_book_level: active.level || '', lang_unit: active.unit || '', lang_pages: active.pages || '',
+    lang_topic: active.topic || '', lang_grammar: active.grammar || '', lang_weekly_updated: active.updated_at || hoyLocal()
+  };
+  for (const [key,value] of Object.entries(updates)) {
+    await api('/api/profile', { body:{ key, value:String(value ?? '') } });
+    S.profile = S.profile || {}; S.profile[key] = String(value ?? '');
+  }
 }
 
 
@@ -354,45 +380,57 @@ function openLanguageNotebook(kind) {
   document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));back.onclick=e=>{if(e.target===back)close();};
 }
 
-async function saveLanguageHunterProfile(values) {
-  const keys = ['lang_language','lang_book','lang_book_level','lang_unit','lang_pages','lang_topic','lang_grammar'];
-  for (let i = 0; i < keys.length; i++) {
-    await api('/api/profile', { body:{ key:keys[i], value:String(values[i] || '').trim() } });
-    S.profile = S.profile || {};
-    S.profile[keys[i]] = String(values[i] || '').trim();
-  }
-  const today = hoyLocal();
-  await api('/api/profile', { body:{ key:'lang_weekly_updated', value:today } });
-  S.profile.lang_weekly_updated = today;
-}
-
-async function configureLanguageHunterSource(force = false) {
-  const cfg = languageHunterProfile();
-  if (!force && cfg.book && cfg.topic) return true;
+async function editLanguageSource(existing = null) {
+  const cfg = existing || {language:'English',book:'',level:'',unit:'',pages:'',topic:'',grammar:''};
   const result = await modal({
-    icon:'📘',
-    title:'Set this week’s English source',
-    text:'Tell the app exactly what you are studying. It will use this information for the daily mission and AI tutor prompt; it will never invent pages or topics.',
+    icon:'📘', title:existing ? 'Edit study lesson' : 'Add study lesson',
+    text:'Save one lesson or study focus. Topics and grammar may contain several items separated by commas or semicolons.',
     fields:[
       {type:'text',label:'Language',value:cfg.language || 'English',placeholder:'English'},
-      {type:'text',label:'Book',value:cfg.book,placeholder:'American School Way'},
-      {type:'text',label:'Book level',value:cfg.level,placeholder:'A1, A2, B1 or B2'},
-      {type:'text',label:'Unit',value:cfg.unit,placeholder:'Unit 4'},
-      {type:'text',label:'Pages',value:cfg.pages,placeholder:'62–67'},
-      {type:'text',label:'Weekly topic',value:cfg.topic,placeholder:'Past experiences'},
-      {type:'text',label:'Grammar focus',value:cfg.grammar,placeholder:'Simple past'}
-    ],
-    okText:'Save weekly source'
+      {type:'text',label:'Book or source',value:cfg.book || '',placeholder:'American School Way, YouTube, podcast...'},
+      {type:'text',label:'Source level',value:cfg.level || '',placeholder:'A1, A2, B1 or B2'},
+      {type:'text',label:'Unit or lesson',value:cfg.unit || '',placeholder:'Unit 9 / Lesson 3'},
+      {type:'text',label:'Pages or material',value:cfg.pages || '',placeholder:'76–77 / video title'},
+      {type:'text',label:'Topics',value:cfg.topic || '',placeholder:'Present continuous; daily routines; vocabulary'},
+      {type:'text',label:'Grammar focuses',value:cfg.grammar || '',placeholder:'Present continuous; question forms'}
+    ], okText:existing ? 'Save and activate' : 'Add and activate'
   });
   if (!result) return false;
   if (!String(result[1] || '').trim() || !String(result[5] || '').trim()) {
-    toast('Book and weekly topic are required.');
-    return configureLanguageHunterSource(true);
+    toast('Source and at least one topic are required.'); return false;
   }
-  await saveLanguageHunterProfile(result);
-  toast('📘 Weekly English source saved.');
-  return true;
+  const rows = languageSourceRows();
+  const row = {
+    id: existing?.id || `src-${Date.now()}`, language:String(result[0]||'English').trim(),
+    book:String(result[1]||'').trim(), level:String(result[2]||'').trim(), unit:String(result[3]||'').trim(),
+    pages:String(result[4]||'').trim(), topic:String(result[5]||'').trim(), grammar:String(result[6]||'').trim(),
+    updated_at:hoyLocal()
+  };
+  const ix = rows.findIndex(x=>x.id===row.id); if(ix>=0) rows[ix]=row; else rows.push(row);
+  await persistLanguageSources(rows,row.id); toast('📘 Study lesson saved and activated.'); return true;
 }
+async function configureLanguageHunterSource(force = false) {
+  const rows = languageSourceRows();
+  const cfg = languageHunterProfile();
+  if (!force && cfg.book && cfg.topic) return true;
+  if (!rows.length) return editLanguageSource(null);
+  const options = rows.map(x=>({v:x.id,t:`${x.book || 'Source'} · ${x.unit || 'No unit'} · ${x.topic || 'No topic'}`}));
+  options.push({v:'__new__',t:'＋ Add a new lesson/source'});
+  const choice = await modal({
+    icon:'🗂️', title:'English study lessons',
+    text:'Choose the lesson you want to use today. Previous session records keep their original lesson even when you switch the active one.',
+    fields:[{type:'select',label:'Active lesson',value:cfg.id || rows[0].id,options}], okText:'Continue'
+  });
+  if (!choice) return false;
+  if (choice[0] === '__new__') return editLanguageSource(null);
+  const selected = rows.find(x=>x.id===choice[0]);
+  if (!selected) return false;
+  const action = await modal({icon:'📚',title:selected.book || 'Study lesson',text:`<b>${esc(selected.unit||'No unit')}</b>${selected.pages?` · ${esc(selected.pages)}`:''}<br>${esc(selected.topic||'No topic')}`,fields:[{type:'select',label:'Action',options:[{v:'activate',t:'Use this lesson today'},{v:'edit',t:'Edit this lesson'}]}],okText:'Apply'});
+  if (!action) return false;
+  if (action[0] === 'edit') return editLanguageSource(selected);
+  await persistLanguageSources(rows,selected.id); toast('📖 Active English lesson changed.'); return true;
+}
+
 
 function languageTutorPrompt(wd, minutes = 25) {
   const cfg = languageHunterProfile();
@@ -405,7 +443,7 @@ function languageTutorPrompt(wd, minutes = 25) {
   const errorText = learning.errors.length ? learning.errors.map((x,i)=>`${i+1}. ${x.wrong} → ${x.correct}${x.rule ? ` (${x.rule})` : ''}`).join('\n') : 'No recurring errors saved yet.';
   const phraseText = learning.phrases.length ? learning.phrases.map((x,i)=>`${i+1}. ${x.phrase}${x.example ? ` — ${x.example}` : ''}`).join('\n') : 'No useful phrases saved yet.';
   const previous = languageSessions().slice(-1)[0] || {};
-  return `You are my Language Hunter English tutor.\n\nTODAY\nDay: ${DIAS[wd]}\nMission: ${titulo}\nVerified level: ${verified}\nCurrent target: ${target}\nAvailable time: ${minutes} minutes\n\nSTUDY SOURCE\nBook: ${cfg.book || 'Not specified'}\nBook level: ${cfg.level || 'Not specified'}\nUnit: ${cfg.unit || 'Not specified'}\nPages: ${cfg.pages || 'Not specified'}\nWeekly topic: ${cfg.topic || 'Not specified'}\nGrammar focus: ${cfg.grammar || 'Not specified'}\n\nMISSION STEPS\n${pasos.map((p,i)=>`${i+1}. ${p.s}: ${p.how}`).join('\n')}\n\nRECURRING ERRORS TO RETRAIN\n${errorText}\n\nUSEFUL PHRASES TO REUSE\n${phraseText}\n\nPREVIOUS SESSION\nMain issue: ${previous.issue || 'No previous issue logged'}\nHomework: ${previous.homework || 'No pending homework'}\n\nRULES\nSpeak mainly in English. Ask one question at a time. Make me produce English before explaining. Correct the most important errors, ask me to retry the corrected form, deliberately reuse the saved phrases, and finish with the exact LANGUAGE HUNTER SESSION REPORT plus a compact APP LOG line.`;
+  return `You are my Language Hunter English tutor.\n\nTODAY\nDay: ${DIAS[wd]}\nMission: ${titulo}\nVerified level: ${verified}\nCurrent target: ${target}\nAvailable time: ${minutes} minutes\n\nSTUDY LESSON\nBook: ${cfg.book || 'Not specified'}\nBook level: ${cfg.level || 'Not specified'}\nUnit: ${cfg.unit || 'Not specified'}\nPages: ${cfg.pages || 'Not specified'}\nTopics: ${cfg.topic || 'Not specified'}\nGrammar focuses: ${cfg.grammar || 'Not specified'}\n\nMISSION STEPS\n${pasos.map((p,i)=>`${i+1}. ${p.s}: ${p.how}`).join('\n')}\n\nRECURRING ERRORS TO RETRAIN\n${errorText}\n\nUSEFUL PHRASES TO REUSE\n${phraseText}\n\nPREVIOUS SESSION\nMain issue: ${previous.issue || 'No previous issue logged'}\nHomework: ${previous.homework || 'No pending homework'}\n\nRULES\nSpeak mainly in English. Ask one question at a time. Make me produce English before explaining. Correct the most important errors, ask me to retry the corrected form, deliberately reuse the saved phrases, and finish with the exact LANGUAGE HUNTER SESSION REPORT plus a compact APP LOG line.`;
 }
 
 function copyLanguageTutorPrompt(wd) {
@@ -469,7 +507,7 @@ function parseTutorReport(raw) {
     level: field('Level'),
     target: field('Target'),
     bookUnit: field('Book / unit'),
-    topic: field('Weekly topic'),
+    topic: field('Topics') || field('Weekly topic'),
     skill: field('Main skill trained'),
     minutes: +(field('Minutes practiced').match(/\d+/) || [0])[0],
     difficulty: difficultyMatch ? difficultyMatch[1][0].toUpperCase()+difficultyMatch[1].slice(1).toLowerCase() : 'Appropriate',
@@ -486,8 +524,8 @@ function parseTutorReport(raw) {
 
 async function importLanguageTutorReport(wd) {
   const pasted = await modal({
-    icon:'↳', title:'Import tutor report',
-    text:'Paste the complete LANGUAGE HUNTER SESSION REPORT from your ChatGPT tutor. Nothing is saved until you review the preview.',
+    icon:'↳', title:'Import AI session result',
+    text:'After finishing with your AI tutor, paste its complete LANGUAGE HUNTER SESSION REPORT here. The app previews it, then saves minutes, difficulty, corrections, phrases and homework for future missions.',
     fields:[{type:'textarea',label:'Tutor report',rows:14,placeholder:'LANGUAGE HUNTER SESSION REPORT\n\nDate: ...'}],
     okText:'Analyze report'
   });
@@ -517,7 +555,7 @@ async function importLanguageTutorReport(wd) {
   const rows = languageSessions();
   rows.push({
     date:parsed.date || hoyLocal(), day:parsed.day || DIAS[wd],
-    skill:parsed.skill || pasosInglesDelDia(wd).titulo, book:cfg.book,
+    skill:parsed.skill || pasosInglesDelDia(wd).titulo, source_id:cfg.id || '', book:cfg.book,
     unit:cfg.unit, pages:cfg.pages, topic:parsed.topic || cfg.topic,
     grammar:cfg.grammar, minutes:+reviewed[0] || 0,
     difficulty:reviewed[1] || 'Appropriate', issue:String(reviewed[2] || '').trim(),
@@ -551,8 +589,8 @@ async function importLanguageTutorReport(wd) {
 function openLanguageSessionHistory() {
   const rows = languageSessions().slice().reverse();
   const previous=document.activeElement;
-  const back=document.createElement('div'); back.className='modal-back language-history-back';
-  const items = rows.length ? rows.map(x=>`<article class="language-history-item"><div><small>${esc(x.date||'')} · ${esc(x.day||'')}</small><b>${esc(x.skill||'Language mission')}</b><span>${+x.minutes||0} min · ${esc(x.difficulty||'Appropriate')}</span></div><div><small>MAIN ISSUE</small><b>${esc(x.issue||'No issue logged')}</b>${x.homework?`<em>${esc(x.homework)}</em>`:''}</div></article>`).join('') : '<div class="language-notebook-empty">No tutor sessions saved yet.</div>';
+  const back=document.createElement('div'); back.className='modal-back language-history-back modal-back-stacked';
+  const items = rows.length ? rows.map(x=>`<article class="language-history-item"><div><small>${esc(x.date||'')} · ${esc(x.day||'')}</small><b>${esc(x.skill||'Language mission')}</b><span>${+x.minutes||0} min · ${esc(x.difficulty||'Appropriate')}</span><em>${esc(x.book||'')}${x.unit?' · '+esc(x.unit):''}${x.topic?' · '+esc(x.topic):''}</em></div><div><small>MAIN ISSUE</small><b>${esc(x.issue||'No issue logged')}</b>${x.homework?`<em>${esc(x.homework)}</em>`:''}</div></article>`).join('') : '<div class="language-notebook-empty">No tutor sessions saved yet.</div>';
   back.innerHTML=`<div class="modal-card language-history-card"><div class="language-mission-top"><div><span>LANGUAGE HUNTER ARCHIVE</span><h3>Tutor sessions</h3></div><button type="button" class="language-mission-close">✕</button></div><div class="language-history-list">${items}</div></div>`;
   const close=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();},250)};
   document.body.appendChild(back);document.body.classList.add('modal-open');requestAnimationFrame(()=>back.classList.add('show'));back.querySelector('.language-mission-close').onclick=close;back.onclick=e=>{if(e.target===back)close();};
@@ -560,6 +598,8 @@ function openLanguageSessionHistory() {
 
 async function saveLanguageSessionReport(wd) {
   const cfg = languageHunterProfile();
+  const importedToday = languageSessions().some(x => x.imported && x.date === hoyLocal() && (!x.source_id || x.source_id === cfg.id));
+  if (importedToday) { toast('AI session result already saved. No duplicate manual report was created.'); return; }
   const r = await modal({
     icon:'📝', title:'Mission report',
     text:'Optional. The official English check is already safe; skipping this report will not affect Life, Habits, Goals or your streak.',
@@ -573,7 +613,7 @@ async function saveLanguageSessionReport(wd) {
   });
   if (!r) return;
   let sessions=languageSessions();
-  sessions.push({date:hoyLocal(),day:DIAS[wd],skill:(pasosInglesDelDia(wd).titulo||''),book:cfg.book,unit:cfg.unit,pages:cfg.pages,topic:cfg.topic,grammar:cfg.grammar,minutes:+r[0]||0,difficulty:r[1]||'Appropriate',issue:String(r[2]||'').trim(),phrases:+r[3]||0,log:String(r[4]||'').trim()});
+  sessions.push({date:hoyLocal(),day:DIAS[wd],skill:(pasosInglesDelDia(wd).titulo||''),source_id:cfg.id||'',book:cfg.book,unit:cfg.unit,pages:cfg.pages,topic:cfg.topic,grammar:cfg.grammar,minutes:+r[0]||0,difficulty:r[1]||'Appropriate',issue:String(r[2]||'').trim(),phrases:+r[3]||0,log:String(r[4]||'').trim()});
   await persistLanguageSessions(sessions);
   toast('📝 Mission report saved.');
 }
@@ -590,11 +630,11 @@ function openLanguageMissionModal(day, wd) {
     const stepRows=pasos.map((p,k)=>`<label class="language-mission-step ${done.has(`${day}|ingles#${k}`)?'done':''}"><input type="checkbox" data-lang-step="${k}" ${done.has(`${day}|ingles#${k}`)?'checked':''}><span class="language-step-number">${String(k+1).padStart(2,'0')}</span><span><b>${esc(p.s)}</b><small>${esc(p.how)}</small></span></label>`).join('');
     back.innerHTML=`<div class="modal-card language-mission-card">
       <div class="language-mission-top"><div><span>LANGUAGE HUNTER · ${esc(DIAS[wd].toUpperCase())}</span><h3>${esc(titulo)}</h3></div><button type="button" class="language-mission-close" aria-label="Close">✕</button></div>
-      <div class="language-source-strip"><div><small>WEEKLY SOURCE</small><b>${esc(cfg.book)}${cfg.level?' · '+esc(cfg.level):''}</b><span>${esc(cfg.unit||'No unit')}${cfg.pages?' · pages '+esc(cfg.pages):''}</span></div><button type="button" data-language-edit-source>Edit</button></div>
+      <div class="language-source-strip"><div><small>ACTIVE LESSON · ${cfg.sourceCount} SAVED</small><b>${esc(cfg.book)}${cfg.level?' · '+esc(cfg.level):''}</b><span>${esc(cfg.unit||'No unit')}${cfg.pages?' · pages '+esc(cfg.pages):''}</span></div><button type="button" data-language-edit-source>Edit</button></div>
       <div class="language-topic-line"><span>${esc(cfg.topic)}</span>${cfg.grammar?`<b>${esc(cfg.grammar)}</b>`:''}</div>
       <div class="language-mission-steps">${stepRows}</div>
       <div class="language-notebook-toolbar"><button type="button" data-language-errors>✎ Errors <b>${languageErrors().filter(x=>x.status!=='Mastered').length}</b></button><button type="button" data-language-phrases>◆ Phrases <b>${languagePhrases().length}</b></button><button type="button" data-language-history>▤ Sessions <b>${languageSessions().length}</b></button></div>
-      <div class="language-mission-actions language-mission-actions-v123"><button type="button" class="btn-ghost" data-language-ai>Copy AI tutor prompt</button><button type="button" class="btn-ghost" data-language-import>Import tutor report</button><button type="button" class="m-ok language-complete" disabled>Complete mission ✓</button></div>
+      <div class="language-mission-actions language-mission-actions-v123"><button type="button" class="btn-ghost" data-language-ai>Copy AI tutor prompt</button><button type="button" class="btn-ghost" data-language-import>Import AI session result</button><button type="button" class="m-ok language-complete" disabled>Complete mission ✓</button></div>
       <small class="language-save-note">Every step is saved immediately. Close and continue later without losing progress.</small>
     </div>`;
     document.body.appendChild(back); document.body.classList.add('modal-open'); requestAnimationFrame(()=>back.classList.add('show'));
@@ -842,6 +882,7 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
     const previousFocus = document.activeElement;
     const back = document.createElement('div');
     back.className = 'modal-back';
+    if (document.querySelector('.language-mission-back')) back.classList.add('modal-back-stacked');
     const fieldsHtml = fields.map((f, i) => {
       const lab = f.label ? `<label class="mfield-lab">${f.label}</label>` : '';
       if (f.type === 'select')
