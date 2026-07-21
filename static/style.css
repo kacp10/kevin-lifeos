@@ -3811,3 +3811,35 @@ body.hunter-profile-open {
 .language-mission-back{z-index:10050}
 .language-topic-line span,.language-topic-line b{overflow-wrap:anywhere}
 @media(max-width:600px){.language-history-item{grid-template-columns:1fr}.language-mission-actions-v123{grid-template-columns:1fr}}
+
+
+/* V126 · Minimal Hunter Knowledge Academy + Language insights */
+.academy-knowledge-card{padding:18px;border:1px solid rgba(116,239,211,.18);background:linear-gradient(145deg,rgba(14,22,31,.98),rgba(13,17,27,.96))}
+.academy-knowledge-card .academy-command-top{align-items:flex-start}.academy-help{width:30px;height:30px;border-radius:50%;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.04);color:var(--muted);font-weight:800;cursor:pointer}.academy-help:hover{color:var(--gold);border-color:rgba(245,185,66,.45)}
+.academy-actions{display:flex;gap:9px;align-items:center;margin-top:15px;flex-wrap:wrap}.academy-actions .btn-ghost,.academy-actions .btn{min-height:42px}.academy-book-btn{width:46px;padding-inline:0;font-size:18px}.academy-complete-btn{background:linear-gradient(135deg,#1e866f,#35c8a7)!important;color:#06120f!important;border:0!important;box-shadow:0 8px 24px rgba(53,200,167,.16)}.academy-complete-btn:disabled{background:rgba(53,200,167,.12)!important;color:#76cdb9!important;box-shadow:none}
+.academy-catalogue-head em{max-width:55%;text-align:right}.academy-skill-option small{text-transform:none;letter-spacing:.02em}
+.eng-insights{margin-top:12px;border-top:1px solid rgba(255,255,255,.08);padding-top:10px}.eng-insights summary{cursor:pointer;display:flex;justify-content:space-between;gap:12px;font-weight:800}.eng-insights summary small{font-weight:500;color:var(--muted)}.eng-skill-mini{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:10px}.eng-skill-mini button{border:1px solid rgba(255,255,255,.09);background:rgba(255,255,255,.035);color:var(--text);border-radius:10px;padding:9px 6px;font-size:11px}.eng-skill-mini b{display:block;margin-top:4px;color:var(--green);font-size:13px}
+@media(max-width:700px){.academy-catalogue-head em{display:none}.academy-actions{display:grid;grid-template-columns:1fr 46px 1.2fr}.academy-actions .btn,.academy-actions .btn-ghost{width:100%;padding-inline:8px}.eng-skill-mini{grid-template-columns:repeat(2,1fr)}.eng-insights summary{display:block}.eng-insights summary small{display:block;margin-top:4px}}
+
+/* V127 — Daily Hunter Training + bilingual Daily Intel */
+.academy-intel-card{margin-top:12px;min-height:0;gap:10px}
+.academy-intel-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.academy-intel-translate{min-height:36px;padding:7px 12px;border-radius:999px;font-size:.7rem;letter-spacing:.04em}
+.academy-intel-card .academy-help{position:static;flex:0 0 auto}
+@media(max-width:560px){.academy-intel-actions{justify-content:flex-start}.academy-intel-translate{width:auto}}
+
+
+/* V128 · Hunter Knowledge Archive */
+.academy-empty-route{padding:18px;border:1px dashed rgba(111,255,179,.22);border-radius:14px;color:var(--muted);text-align:center}
+.knowledge-archive-summary p{margin:.7rem 0 0;color:var(--muted)}
+.knowledge-archive-modal{max-height:58vh;overflow:auto;text-align:left;padding-right:4px}
+.knowledge-archive-group{margin:0 0 16px;border:1px solid rgba(111,255,179,.13);border-radius:14px;overflow:hidden;background:rgba(7,17,20,.48)}
+.knowledge-archive-group>header{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:rgba(111,255,179,.06);letter-spacing:.08em;text-transform:uppercase;font-size:.76rem}
+.knowledge-archive-group>header span{min-width:26px;text-align:center;border-radius:999px;background:rgba(111,255,179,.12);padding:2px 7px}
+.knowledge-archive-group article{padding:11px 12px;border-top:1px solid rgba(255,255,255,.06)}
+.knowledge-archive-group article:first-of-type{border-top:0}
+.knowledge-archive-group article div{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.knowledge-archive-group article strong{font-size:.9rem}
+.knowledge-archive-group article small{color:var(--muted);white-space:nowrap}
+.knowledge-archive-group article p{margin:6px 0 0;color:var(--muted);font-size:.82rem}
+@media(max-width:640px){.knowledge-archive-group article div{align-items:flex-start;flex-direction:column;gap:3px}.knowledge-archive-group article small{white-space:normal}.academy-actions{flex-wrap:wrap}}
