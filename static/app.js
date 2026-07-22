@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 131;
+const FRONT_V = 133;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -267,7 +267,7 @@ function pasosInglesDelDia(wd) {
 }
 
 
-// V128 · Hunter Knowledge Archive, custom topics and controlled AI topic-pack import
+// V133 · Independent Word Hunter deck with bilingual meanings, examples and protected English missions
 // The learning source is entered manually so the app never invents a book page or topic.
 function languageSourceRows() {
   const pf = S.profile || {};
@@ -324,25 +324,415 @@ async function saveLanguageProfileArray(key, rows) {
   S.profile = S.profile || {};
   S.profile[key] = value;
 }
+const WORD_HUNTER_CORE_1000 = ["the","of","and","to","in","a","that","he","was","it","his","is","with","as","i","had","for","at","by","on","not","be","from","but","you","or","her","him","which","were","all","this","she","they","are","have","said","an","one","who","so","what","there","their","when","been","may","if","no","up","my","them","into","more","out","would","me","we","did","only","could","now","man","its","has","will","then","some","time","after","do","other","about","such","before","very","how","should","over","your","these","new","than","any","those","well","old","first","himself","men","two","down","face","upon","see","can","like","our","same","know","without","went","made","little","long","states","came","where","under","room","must","even","eyes","come","still","being","most","go","thought","people","war","life","again","way","another","away","general","left","hand","day","through","began","great","own","also","asked","rostov","while","just","army","looked","say","count","back","am","whole","good","shall","head","right","part","government","felt","seemed","here","yes","us","something","why","place","having","much","state","house","against","between","though","every","nothing","emperor","heard","off","because","young","bone","take","disease","many","always","saw","never","three","don","tissue","skin","took","years","once","look","last","united","think","round","found","too","power","blood","met","might","father","usually","both","small","give","side","form","let","make","during","turned","quite","door","suddenly","knew","tell","told","whom","looking","yet","moment","already","love","large","get","holmes","end","treatment","chapter","officer","voice","words","few","hands","days","cases","everything","among","called","dear","congress","seen","often","gave","battle","history","taken","case","put","position","law","however","done","ll","smile","sometimes","country","soon","free","understand","soldiers","known","each","others","oh","become","far","brought","order","along","sat","especially","behind","women","course","result","night","stood","patient","work","joint","anything","going","cause","evidently","several","president","wife","passed","less","infection","matter","given","god","world","feeling","certain","mr","front","chief","does","whether","action","white","question","movement","condition","son","mind","herself","possible","morning","body","alone","later","horse","toward","death","present","followed","labor","necessary","money","woman","until","set","open","almost","nerve","want","ran","things","expression","act","use","replied","fig","troops","sent","south","half","officers","business","became","within","mother","commander","year","pp","wound","themselves","taking","thing","pain","number","leave","word","party","added","above","table","parts","lay","home","find","tissues","near","either","boris","enemy","constitution","fact","continued","letter","high","four","red","public","project","talk","held","common","west","example","national","important","illustration","friend","cried","entered","carried","second","received","nor","got","surface","land","five","light","next","cannot","used","glands","fire","ever","different","union","itself","twenty","really","around","saying","early","sitting","petya","best","full","better","evening","british","gutenberg","name","horses","bones","arm","together","since","road","political","thousand","cold","heart","speak","forms","shouted","means","kept","ask","impossible","vessels","due","arms","moved","line","petersburg","becomes","wish","vasili","rose","conditions","tuberculous","system","rise","gone","drawing","third","force","king","de","times","short","everyone","pressure","formed","black","hair","laws","fellow","clear","longer","remained","children","regiment","ready","help","results","hundred","forward","military","air","wounded","rode","peace","north","myself","answered","tried","growth","crowd","beyond","news","lost","tumour","service","point","past","orders","anyone","understood","interest","anatole","ah","across","bed","strange","reached","ten","sound","read","rather","process","close","standing","spoke","self","opinion","happy","frequently","beside","trade","presence","opened","making","limb","coming","till","soldier","formation","deep","operation","aneurysm","affairs","wanted","show","thus","raised","field","slavery","english","stopped","repeated","family","wished","rest","turning","perhaps","happened","following","seeing","colonies","applied","true","answer","muscles","talking","period","occur","neck","events","affected","revolution","kind","won","else","able","foot","cut","rapidly","call","appeared","southern","lower","led","husband","german","associated","york","terrible","abscess","returned","lymph","least","spread","middle","local","company","reason","noticed","features","attention","wall","return","ff","campaign","tumours","re","merely","whose","turn","steps","silent","water","effect","wounds","window","therefore","laid","giving","subject","speaking","soft","person","federal","size","dinner","waiting","strength","honor","hear","doctor","daughter","believe","quickly","placed","immediately","colonial","trying","questions","dark","conversation","street","hard","city","view","measures","feet","usual","removed","doing","bolkonski","sir","paper","lady","former","foreign","fell","civil","brother","account","six","republican","nearly","glanced","forces","child","fine","enough","town","particularly","closed","character","single","severe","hardly","court","considerable","afraid","tears","sides","please","freedom","coat","symptoms","knee","joints","syphilis","seat","nature","meet","human","ground","france","cancer","society","remarked","nation","gangrene","covered","boy","acute","strong","soul","rights","neither","changes","artery","although","swelling","spirit","washington","tone","thin","reply","hours","grew","girl","fear","adjutant","pale","late","helene","bring","mouth","except","dead","considered","according","area","yourself","faces","smiling","remember","feel","village","someone","rostovs","need","fresh","clinical","special","plan","lesions","ulcer","smiled","contrary","members","hour","attack","listened","friends","finally","employed","bridge","bagration","various","pus","bad","pass","membrane","ve","takes","occurs","haemorrhage","growing","europe","drew","primary","pavlovna","muscle","doubt","syphilitic","independence","described","convention","command","glad","change","appear","wrote","voices","showed","relations","powers","nerves","hope","decided","causes","virginia","terms","suppuration","secondary","russians","ordered","difficult","st","probably","fixed","drawn","unable","says","republicans","opening","minutes","lips","liable","killed","fingers","direction","struck","run","natural","leg","governor","frightened","complete","study","staff","smoke","sister","holding","capital","moving","loss","happiness","greater","cry","colonel","carriage","blue","beginning","mademoiselle","keep","serious","remain","method","master","idea","firm","direct","declared","running","step","simple","sarcoma","relation","pleasure","indeed","increased","heavy","group","consists","prepared","marked","influence","ill","further","dress","camp","vessel","thinking","property","lead","instead","alpatych","age","silence","matters","leaders","industry","duty","diseases","uncle","march","manner","living","expressed","chair","appearance","veins","seems","prevent","passing","chiefly","changed","term","story","slowly","popular","lines","besides","seven","produced","lord","leaving","attended","angry","victory","office","observed","mikhaylovna","low","dry","activity","upper","months","injury","effort","east","clearly","cells","bourienne","tendon","similar","sight","poor","latter","historians","established","dressing","tm","silver","series","pay","loved","live","excellency","eight","corner","wait","peasants","everybody","divided","destroyed","captain","broken","future","expected","thoughts","shoulders","organisms","jefferson","gold","book","tariff","straight","rostopchin","fall","danger","ball","uniform","thirty","sure","resulting","kissed","explain","prisoners","pressed","portion","finger","easy","control","subcutaneous","rule","purpose","occurred","majority","chronic","asking","remembered","produce","health","filled","economic","clock","arrived","ulcers","presented","persons","individual","hot","election","commerce","certainly","quiet","meeting","lying","legs","interests","exclaimed","distance","articular","written","western","weeks","spite","section","region","post","massachusetts","mamma","importance","houses","handsome","generals","follow","earth","church","administration","vein","shoulder","seem"];
+
+const WORD_HUNTER_DETAILS = {
+  the:['el / la / los / las','article','The book is on the table.','El libro está sobre la mesa.'],
+  of:['de','preposition','A cup of coffee, please.','Una taza de café, por favor.'],
+  and:['y','conjunction','I work and study every day.','Trabajo y estudio todos los días.'],
+  to:['a / hacia / para','preposition','I am going to work.','Voy al trabajo.'],
+  in:['en / dentro de','preposition','My keys are in the bag.','Mis llaves están en el bolso.'],
+  a:['un / una','article','I need a minute.','Necesito un minuto.'],
+  that:['eso / ese / que','determiner','I know that place.','Conozco ese lugar.'],
+  he:['él','pronoun','He works from home.','Él trabaja desde casa.'],
+  was:['era / estaba / fue','verb · past of be','The movie was good.','La película estuvo buena.'],
+  it:['eso / ello','pronoun','It is very important.','Eso es muy importante.'],
+  his:['su / de él','possessive','His phone is new.','Su teléfono es nuevo.'],
+  is:['es / está','verb · form of be','She is at home.','Ella está en casa.'],
+  with:['con','preposition','I live with my family.','Vivo con mi familia.'],
+  as:['como / mientras','preposition','Use this box as a table.','Usa esta caja como mesa.'],
+  i:['yo','pronoun','I study English every day.','Yo estudio inglés todos los días.'],
+  had:['tenía / tuve / había','verb · past of have','I had a busy day.','Tuve un día ocupado.'],
+  for:['para / por / durante','preposition','This gift is for you.','Este regalo es para ti.'],
+  at:['en / a','preposition','Meet me at the station.','Encuéntrame en la estación.'],
+  by:['por / junto a / antes de','preposition','I will finish by Friday.','Terminaré antes del viernes.'],
+  on:['en / sobre','preposition','The phone is on the desk.','El teléfono está sobre el escritorio.'],
+  not:['no','adverb','I am not tired.','No estoy cansado.'],
+  be:['ser / estar','verb','Be careful with that box.','Ten cuidado con esa caja.'],
+  from:['de / desde','preposition','I am from Colombia.','Soy de Colombia.'],
+  but:['pero','conjunction','I am tired, but I will continue.','Estoy cansado, pero continuaré.'],
+  you:['tú / usted / ustedes','pronoun','You can do it.','Tú puedes hacerlo.'],
+  or:['o','conjunction','Tea or coffee?','¿Té o café?'],
+  her:['ella / su / la','pronoun','I called her yesterday.','La llamé ayer.'],
+  him:['él / lo / le','pronoun','I gave him the key.','Le di la llave.'],
+  which:['cuál / que','pronoun','Which one do you prefer?','¿Cuál prefieres?'],
+  were:['eran / estaban / fueron','verb · past of be','They were at work.','Ellos estaban en el trabajo.'],
+  all:['todo / todos','determiner','All the doors are closed.','Todas las puertas están cerradas.'],
+  this:['esto / este / esta','determiner','This lesson is useful.','Esta lección es útil.'],
+  she:['ella','pronoun','She speaks English well.','Ella habla inglés bien.'],
+  they:['ellos / ellas','pronoun','They live nearby.','Ellos viven cerca.'],
+  are:['son / están','verb · form of be','We are ready.','Estamos listos.'],
+  have:['tener / haber','verb','I have a question.','Tengo una pregunta.'],
+  said:['dijo / dijeron','verb · past of say','She said hello.','Ella dijo hola.'],
+  an:['un / una','article','I have an idea.','Tengo una idea.'],
+  one:['uno / una','number','I need one more day.','Necesito un día más.'],
+  who:['quién / que','pronoun','Who is calling?','¿Quién está llamando?'],
+  so:['así que / tan','conjunction','I was tired, so I went home.','Estaba cansado, así que fui a casa.'],
+  what:['qué / cuál','pronoun','What do you need?','¿Qué necesitas?'],
+  there:['allí / hay','adverb','There is a store nearby.','Hay una tienda cerca.'],
+  their:['su / sus / de ellos','possessive','Their house is beautiful.','Su casa es hermosa.'],
+  when:['cuándo / cuando','adverb','When do you start work?','¿Cuándo empiezas a trabajar?'],
+  been:['sido / estado','verb · participle of be','I have been very busy.','He estado muy ocupado.'],
+  may:['puede que / poder','modal verb','It may rain today.','Puede que llueva hoy.'],
+  if:['si','conjunction','Call me if you need help.','Llámame si necesitas ayuda.'],
+  no:['no / ningún','determiner','There is no problem.','No hay ningún problema.'],
+  up:['arriba / hacia arriba','adverb','Stand up, please.','Ponte de pie, por favor.'],
+  my:['mi / mis','possessive','My name is Kevin.','Mi nombre es Kevin.'],
+  them:['ellos / ellas / los / las','pronoun','I saw them yesterday.','Los vi ayer.'],
+  into:['dentro de / hacia','preposition','Put it into the box.','Ponlo dentro de la caja.'],
+  more:['más','determiner','I need more time.','Necesito más tiempo.'],
+  out:['afuera / fuera','adverb','Let us go out tonight.','Salgamos esta noche.'],
+  would:['haría / gustaría','modal verb','I would like some water.','Me gustaría un poco de agua.'],
+  me:['me / mí','pronoun','Can you help me?','¿Puedes ayudarme?'],
+  we:['nosotros / nosotras','pronoun','We are learning together.','Estamos aprendiendo juntos.'],
+  did:['hizo / hicieron','verb · past of do','What did you say?','¿Qué dijiste?'],
+  only:['solo / solamente','adverb','I only need five minutes.','Solo necesito cinco minutos.'],
+  could:['podría / podía','modal verb','Could you repeat that?','¿Podrías repetir eso?'],
+  now:['ahora','adverb','I am ready now.','Estoy listo ahora.'],
+  man:['hombre','noun','That man is my neighbor.','Ese hombre es mi vecino.'],
+  its:['su / de eso','possessive','The company changed its name.','La empresa cambió su nombre.'],
+  has:['tiene / ha','verb · form of have','She has a new job.','Ella tiene un trabajo nuevo.'],
+  will:['hará / auxiliar de futuro','modal verb','I will call you tomorrow.','Te llamaré mañana.'],
+  then:['entonces / luego','adverb','Finish your work, then rest.','Termina tu trabajo y luego descansa.'],
+  some:['algunos / algo de','determiner','I need some information.','Necesito algo de información.'],
+  time:['tiempo / vez','noun','Do you have time today?','¿Tienes tiempo hoy?'],
+  after:['después de','preposition','We can talk after work.','Podemos hablar después del trabajo.'],
+  do:['hacer / auxiliar','verb','What do you do?','¿A qué te dedicas?'],
+  other:['otro / otra','adjective','Try the other option.','Prueba la otra opción.'],
+  about:['sobre / acerca de','preposition','Tell me about your day.','Cuéntame sobre tu día.'],
+  such:['tal / semejante','determiner','I have never seen such a place.','Nunca he visto un lugar así.'],
+  before:['antes de','preposition','Wash your hands before eating.','Lávate las manos antes de comer.'],
+  very:['muy','adverb','This is very useful.','Esto es muy útil.'],
+  how:['cómo','adverb','How does it work?','¿Cómo funciona?'],
+  should:['debería','modal verb','You should get some rest.','Deberías descansar.'],
+  over:['sobre / encima de / terminado','preposition','The meeting is over.','La reunión terminó.'],
+  your:['tu / su / tus / sus','possessive','What is your name?','¿Cuál es tu nombre?'],
+  these:['estos / estas','determiner','These shoes are comfortable.','Estos zapatos son cómodos.'],
+  new:['nuevo / nueva','adjective','I started a new course.','Empecé un curso nuevo.'],
+  than:['que / de lo que','conjunction','This is better than before.','Esto es mejor que antes.'],
+  any:['algún / cualquier / nada de','determiner','Do you have any questions?','¿Tienes alguna pregunta?'],
+  those:['esos / esas / aquellos','determiner','Those people are waiting.','Esas personas están esperando.'],
+  well:['bien','adverb','You did very well.','Lo hiciste muy bien.'],
+  old:['viejo / antiguo / de edad','adjective','This building is very old.','Este edificio es muy antiguo.'],
+  first:['primero / primera','adjective','This is my first class.','Esta es mi primera clase.'],
+  two:['dos','number','I have two brothers.','Tengo dos hermanos.'],
+  down:['abajo / hacia abajo','adverb','Please sit down.','Por favor, siéntate.'],
+  face:['cara / enfrentar','noun / verb','Wash your face with cold water.','Lávate la cara con agua fría.'],
+  see:['ver','verb','I can see the mountains.','Puedo ver las montañas.'],
+  can:['poder','modal verb','I can help you.','Puedo ayudarte.'],
+  like:['gustar / como','verb / preposition','I like this song.','Me gusta esta canción.'],
+  our:['nuestro / nuestra','possessive','Our team is ready.','Nuestro equipo está listo.'],
+  same:['mismo / misma','adjective','We have the same idea.','Tenemos la misma idea.'],
+  know:['saber / conocer','verb','I know the answer.','Sé la respuesta.'],
+  without:['sin','preposition','Do not leave without your keys.','No salgas sin tus llaves.'],
+  went:['fui / fue / fueron','verb · past of go','I went to the gym yesterday.','Fui al gimnasio ayer.'],
+  made:['hizo / hecho','verb · past of make','I made breakfast this morning.','Preparé el desayuno esta mañana.'],
+  little:['poco / pequeño','adjective','I have a little time.','Tengo un poco de tiempo.'],
+  long:['largo / mucho tiempo','adjective','It was a long day.','Fue un día largo.'],
+  where:['dónde / donde','adverb','Where do you live?','¿Dónde vives?'],
+  under:['debajo de','preposition','The shoes are under the bed.','Los zapatos están debajo de la cama.'],
+  must:['deber / tener que','modal verb','You must be careful.','Debes tener cuidado.'],
+  even:['incluso / aun','adverb','Even small steps matter.','Incluso los pasos pequeños importan.'],
+  come:['venir','verb','Come here, please.','Ven aquí, por favor.'],
+  still:['todavía / aún','adverb','I am still learning.','Todavía estoy aprendiendo.'],
+  most:['la mayoría / más','determiner','Most people need practice.','La mayoría de las personas necesita práctica.'],
+  go:['ir','verb','I go to work at eight.','Voy al trabajo a las ocho.'],
+  thought:['pensó / pensamiento','verb / noun','I thought about your idea.','Pensé en tu idea.'],
+  people:['personas / gente','noun','Many people work from home.','Muchas personas trabajan desde casa.'],
+  life:['vida','noun','Learning is part of life.','Aprender es parte de la vida.'],
+  again:['otra vez / de nuevo','adverb','Please say it again.','Por favor, dilo otra vez.'],
+  way:['manera / camino','noun','This is a better way to learn.','Esta es una mejor manera de aprender.'],
+  another:['otro / otra','determiner','Can I have another example?','¿Puedo tener otro ejemplo?'],
+  away:['lejos / fuera','adverb','My office is ten minutes away.','Mi oficina está a diez minutos.'],
+  left:['izquierda / salió / dejó','adjective / verb','Turn left at the corner.','Gira a la izquierda en la esquina.'],
+  hand:['mano','noun','Raise your hand.','Levanta la mano.'],
+  day:['día','noun','Have a good day.','Que tengas un buen día.'],
+  through:['a través de / por','preposition','We walked through the park.','Caminamos por el parque.'],
+  great:['genial / excelente / grande','adjective','You did a great job.','Hiciste un excelente trabajo.'],
+  own:['propio / propia','adjective','I want my own business.','Quiero mi propio negocio.'],
+  also:['también','adverb','I also study technology.','También estudio tecnología.'],
+  while:['mientras / un rato','conjunction','Listen while you read.','Escucha mientras lees.'],
+  just:['solo / justo / acabar de','adverb','I just arrived home.','Acabo de llegar a casa.'],
+  say:['decir','verb','How do you say this in English?','¿Cómo se dice esto en inglés?'],
+  back:['atrás / espalda / de vuelta','adverb / noun','I will call you back.','Te devolveré la llamada.'],
+  am:['soy / estoy','verb · form of be','I am ready to begin.','Estoy listo para empezar.'],
+  good:['bueno / bien','adjective','That is a good question.','Esa es una buena pregunta.'],
+  right:['derecha / correcto','adjective','Your answer is right.','Tu respuesta es correcta.'],
+  part:['parte','noun','Practice is part of learning.','La práctica es parte del aprendizaje.'],
+  here:['aquí','adverb','Your book is here.','Tu libro está aquí.'],
+  yes:['sí','adverb','Yes, I understand.','Sí, entiendo.'],
+  us:['nos / nosotros','pronoun','She helped us yesterday.','Ella nos ayudó ayer.'],
+  something:['algo','pronoun','I need to tell you something.','Necesito decirte algo.'],
+  why:['por qué','adverb','Why are you learning English?','¿Por qué estás aprendiendo inglés?'],
+  place:['lugar','noun','This is a quiet place.','Este es un lugar tranquilo.'],
+  much:['mucho / mucha','determiner','How much time do we have?','¿Cuánto tiempo tenemos?'],
+  house:['casa','noun','My house is near the park.','Mi casa está cerca del parque.'],
+  between:['entre','preposition','The bank is between two stores.','El banco está entre dos tiendas.'],
+  every:['cada / todos','determiner','I practice every morning.','Practico cada mañana.'],
+  nothing:['nada','pronoun','There is nothing to worry about.','No hay nada de qué preocuparse.'],
+  because:['porque','conjunction','I stayed home because it was raining.','Me quedé en casa porque estaba lloviendo.'],
+  take:['tomar / llevar','verb','Take your time.','Tómate tu tiempo.'],
+  many:['muchos / muchas','determiner','I learned many new words.','Aprendí muchas palabras nuevas.'],
+  always:['siempre','adverb','I always check my schedule.','Siempre reviso mi horario.'],
+  never:['nunca','adverb','I never skip breakfast.','Nunca me salto el desayuno.'],
+  three:['tres','number','Write three sentences.','Escribe tres oraciones.'],
+  years:['años','noun','I have lived here for two years.','He vivido aquí durante dos años.'],
+  once:['una vez','adverb','I go there once a week.','Voy allí una vez por semana.'],
+  look:['mirar / parecer','verb','Look at this example.','Mira este ejemplo.'],
+  last:['último / durar','adjective / verb','This is the last question.','Esta es la última pregunta.'],
+  think:['pensar / creer','verb','I think this is useful.','Creo que esto es útil.'],
+  found:['encontré / encontrado','verb · past of find','I found my keys.','Encontré mis llaves.'],
+  too:['también / demasiado','adverb','I want to go too.','Yo también quiero ir.'],
+  might:['podría / quizá','modal verb','I might go later.','Quizá vaya más tarde.'],
+  father:['padre','noun','My father loves music.','A mi padre le encanta la música.'],
+  usually:['normalmente','adverb','I usually wake up early.','Normalmente me despierto temprano.'],
+  both:['ambos / ambas','determiner','We both like coffee.','A ambos nos gusta el café.'],
+  small:['pequeño / pequeña','adjective','Start with a small goal.','Empieza con una meta pequeña.'],
+  give:['dar','verb','Give me one example.','Dame un ejemplo.'],
+  make:['hacer / crear','verb','I make my bed every morning.','Tiendo mi cama cada mañana.'],
+  tell:['decir / contar','verb','Tell me what happened.','Cuéntame qué pasó.'],
+  already:['ya','adverb','I already finished.','Ya terminé.'],
+  love:['amar / encantar','verb','I love learning new things.','Me encanta aprender cosas nuevas.'],
+  get:['obtener / recibir / llegar / ponerse','verb','I get home at six.','Llego a casa a las seis.'],
+  end:['fin / terminar','noun / verb','The class ends at five.','La clase termina a las cinco.'],
+  few:['pocos / pocas','determiner','I have a few questions.','Tengo algunas preguntas.'],
+  everything:['todo','pronoun','Everything is ready.','Todo está listo.'],
+  often:['a menudo','adverb','I often listen to podcasts.','A menudo escucho pódcast.'],
+  put:['poner','verb','Put your phone on the table.','Pon tu teléfono sobre la mesa.'],
+  however:['sin embargo','adverb','It was difficult; however, I continued.','Fue difícil; sin embargo, continué.'],
+  sometimes:['a veces','adverb','I sometimes study at night.','A veces estudio por la noche.'],
+  country:['país','noun','Colombia is a beautiful country.','Colombia es un país hermoso.'],
+  soon:['pronto','adverb','I will see you soon.','Te veré pronto.'],
+  free:['libre / gratis','adjective','This course is free.','Este curso es gratis.'],
+  understand:['entender','verb','I understand the main idea.','Entiendo la idea principal.'],
+  each:['cada','determiner','Review each word carefully.','Repasa cada palabra con cuidado.'],
+  become:['convertirse','verb','Practice can become a habit.','La práctica puede convertirse en un hábito.'],
+  order:['orden / pedir','noun / verb','I would like to order lunch.','Me gustaría pedir el almuerzo.'],
+  night:['noche','noun','I read every night.','Leo todas las noches.'],
+  work:['trabajo / trabajar','noun / verb','I work from Monday to Friday.','Trabajo de lunes a viernes.'],
+  matter:['importar / asunto','verb / noun','Small details matter.','Los detalles pequeños importan.'],
+  world:['mundo','noun','English is used around the world.','El inglés se usa en todo el mundo.'],
+  does:['hace / auxiliar','verb · form of do','What does this word mean?','¿Qué significa esta palabra?'],
+  question:['pregunta','noun','Ask one question at a time.','Haz una pregunta a la vez.'],
+  morning:['mañana','noun','I exercise in the morning.','Hago ejercicio por la mañana.'],
+  body:['cuerpo','noun','Rest helps your body recover.','Descansar ayuda a tu cuerpo a recuperarse.'],
+  later:['más tarde','adverb','I will do it later.','Lo haré más tarde.'],
+  money:['dinero','noun','I am saving money.','Estoy ahorrando dinero.'],
+  want:['querer','verb','I want to improve my English.','Quiero mejorar mi inglés.'],
+  things:['cosas','noun','I learned many useful things.','Aprendí muchas cosas útiles.'],
+  use:['usar / uso','verb / noun','Use this word in a sentence.','Usa esta palabra en una oración.'],
+  business:['negocio / empresa','noun','She wants to start a business.','Ella quiere iniciar un negocio.'],
+  mother:['madre','noun','My mother is at home.','Mi madre está en casa.'],
+  year:['año','noun','This year I will study more.','Este año estudiaré más.'],
+  thing:['cosa','noun','The important thing is to continue.','Lo importante es continuar.'],
+  number:['número','noun','Write your phone number here.','Escribe tu número de teléfono aquí.'],
+  leave:['salir / dejar','verb','I leave home at seven.','Salgo de casa a las siete.'],
+  word:['palabra','noun','Write the correct word.','Escribe la palabra correcta.'],
+  table:['mesa / tabla','noun','The keys are on the table.','Las llaves están sobre la mesa.'],
+  home:['casa / hogar','noun','I am going home.','Voy a casa.'],
+  find:['encontrar','verb','I cannot find my phone.','No puedo encontrar mi teléfono.'],
+  near:['cerca de','preposition','The gym is near my house.','El gimnasio está cerca de mi casa.'],
+  high:['alto / alta','adjective','The price is too high.','El precio es demasiado alto.'],
+  four:['cuatro','number','I train four days a week.','Entreno cuatro días por semana.'],
+  red:['rojo / roja','adjective','The car is red.','El carro es rojo.'],
+  important:['importante','adjective','Sleep is important for recovery.','Dormir es importante para la recuperación.'],
+  friend:['amigo / amiga','noun','My friend lives nearby.','Mi amigo vive cerca.'],
+  second:['segundo / segunda','number','This is my second attempt.','Este es mi segundo intento.'],
+  five:['cinco','number','Wait five minutes.','Espera cinco minutos.'],
+  light:['luz / ligero','noun / adjective','Turn on the light.','Enciende la luz.'],
+  next:['siguiente / próximo','adjective','What is the next step?','¿Cuál es el siguiente paso?'],
+  used:['usado / utilizó','adjective / verb','This tool is used for cutting.','Esta herramienta se usa para cortar.'],
+  different:['diferente','adjective','Try a different method.','Prueba un método diferente.'],
+  really:['realmente','adverb','I really like this lesson.','Realmente me gusta esta lección.'],
+  around:['alrededor de / aproximadamente','preposition','I wake up around six.','Me despierto aproximadamente a las seis.'],
+  best:['mejor / el mejor','adjective','Practice is the best way to improve.','Practicar es la mejor manera de mejorar.'],
+  full:['lleno / completo','adjective','The bottle is full.','La botella está llena.'],
+  better:['mejor','adjective','I feel better today.','Me siento mejor hoy.'],
+  name:['nombre','noun','What is your name?','¿Cuál es tu nombre?'],
+  since:['desde / ya que','preposition','I have worked here since 2024.','Trabajo aquí desde 2024.'],
+  road:['carretera / camino','noun','The road is closed.','La carretera está cerrada.'],
+  cold:['frío / resfriado','adjective / noun','The water is cold.','El agua está fría.'],
+  heart:['corazón','noun','Exercise is good for your heart.','El ejercicio es bueno para tu corazón.'],
+  speak:['hablar','verb','Please speak more slowly.','Por favor, habla más despacio.'],
+  ask:['preguntar / pedir','verb','Ask your tutor for an example.','Pídele un ejemplo a tu tutor.'],
+  help:['ayuda / ayudar','noun / verb','Can you help me?','¿Puedes ayudarme?'],
+  air:['aire','noun','Open the window for fresh air.','Abre la ventana para que entre aire fresco.'],
+  news:['noticias','noun','I read the news every morning.','Leo las noticias cada mañana.'],
+  service:['servicio','noun','The service was excellent.','El servicio fue excelente.'],
+  point:['punto / idea principal','noun','That is a good point.','Ese es un buen punto.'],
+  interest:['interés','noun','Technology is one of my interests.','La tecnología es uno de mis intereses.'],
+  sound:['sonido / sonar','noun / verb','That word sounds different.','Esa palabra suena diferente.'],
+  read:['leer','verb','I read for twenty minutes.','Leo durante veinte minutos.'],
+  close:['cerrar / cerca','verb / adjective','Please close the door.','Por favor, cierra la puerta.'],
+  happy:['feliz','adjective','I am happy with my progress.','Estoy feliz con mi progreso.'],
+  show:['mostrar','verb','Show me another example.','Muéstrame otro ejemplo.'],
+  family:['familia','noun','My family supports me.','Mi familia me apoya.'],
+  true:['verdadero / cierto','adjective','Is that true?','¿Eso es cierto?'],
+  answer:['respuesta / responder','noun / verb','Write your answer here.','Escribe tu respuesta aquí.'],
+  kind:['tipo / amable','noun / adjective','What kind of music do you like?','¿Qué tipo de música te gusta?'],
+  able:['capaz','adjective','I am able to explain it now.','Ahora soy capaz de explicarlo.'],
+  call:['llamar / llamada','verb / noun','Call me after work.','Llámame después del trabajo.'],
+  lower:['más bajo / bajar','adjective / verb','Lower the volume, please.','Baja el volumen, por favor.'],
+  reason:['razón','noun','What is the main reason?','¿Cuál es la razón principal?'],
+  attention:['atención','noun','Pay attention to the ending.','Presta atención a la terminación.'],
+  water:['agua','noun','Drink more water.','Bebe más agua.'],
+  person:['persona','noun','She is a kind person.','Ella es una persona amable.'],
+  size:['tamaño / talla','noun','What size do you need?','¿Qué talla necesitas?'],
+  hear:['oír / escuchar','verb','Can you hear me?','¿Puedes oírme?'],
+  believe:['creer','verb','I believe you can improve.','Creo que puedes mejorar.'],
+  dark:['oscuro / oscura','adjective','It gets dark early.','Oscurece temprano.'],
+  conversation:['conversación','noun','We had a short conversation.','Tuvimos una conversación corta.'],
+  street:['calle','noun','The bank is across the street.','El banco está al otro lado de la calle.'],
+  hard:['difícil / duro','adjective','This exercise is hard.','Este ejercicio es difícil.'],
+  city:['ciudad','noun','Bogotá is a large city.','Bogotá es una ciudad grande.'],
+  paper:['papel','noun','Write it on a piece of paper.','Escríbelo en una hoja de papel.'],
+  child:['niño / niña','noun','The child is playing outside.','El niño está jugando afuera.'],
+  fine:['bien / fino / multa','adjective','I am fine, thank you.','Estoy bien, gracias.'],
+  enough:['suficiente','determiner','That is enough for today.','Eso es suficiente por hoy.'],
+  please:['por favor','adverb','Please repeat the sentence.','Por favor, repite la oración.'],
+  freedom:['libertad','noun','Financial freedom takes planning.','La libertad financiera requiere planificación.'],
+  nature:['naturaleza','noun','I enjoy spending time in nature.','Disfruto pasar tiempo en la naturaleza.'],
+  meet:['conocer / reunirse','verb','Nice to meet you.','Mucho gusto.'],
+  human:['humano / humana','adjective','Sleep is a basic human need.','Dormir es una necesidad humana básica.'],
+  strong:['fuerte','adjective','Consistency makes you stronger.','La constancia te hace más fuerte.'],
+  fear:['miedo','noun','Do not let fear stop you.','No dejes que el miedo te detenga.'],
+  bring:['traer','verb','Bring your notebook tomorrow.','Trae tu cuaderno mañana.'],
+  remember:['recordar','verb','Remember to review your words.','Recuerda repasar tus palabras.'],
+  feel:['sentir / sentirse','verb','How do you feel today?','¿Cómo te sientes hoy?'],
+  need:['necesitar','verb','I need more practice.','Necesito más práctica.'],
+  plan:['plan / planear','noun / verb','I have a plan for this week.','Tengo un plan para esta semana.'],
+  hour:['hora','noun','The class lasts one hour.','La clase dura una hora.'],
+  friends:['amigos / amigas','noun','I went out with my friends.','Salí con mis amigos.'],
+  bad:['malo / mal','adjective','One bad day does not define your progress.','Un mal día no define tu progreso.'],
+  change:['cambio / cambiar','noun / verb','Small habits can change your life.','Los hábitos pequeños pueden cambiar tu vida.'],
+  hope:['esperanza / esperar','noun / verb','I hope you have a good day.','Espero que tengas un buen día.'],
+  difficult:['difícil','adjective','This word is difficult to pronounce.','Esta palabra es difícil de pronunciar.'],
+  minutes:['minutos','noun','Practice for ten minutes.','Practica durante diez minutos.'],
+  run:['correr / funcionar','verb','I run three times a week.','Corro tres veces por semana.'],
+  complete:['completo / completar','adjective / verb','Complete the mission when you are ready.','Completa la misión cuando estés listo.'],
+  study:['estudiar / estudio','verb / noun','I study English at night.','Estudio inglés por la noche.'],
+  keep:['mantener / guardar','verb','Keep practicing every week.','Sigue practicando cada semana.'],
+  idea:['idea','noun','That is an interesting idea.','Esa es una idea interesante.'],
+  step:['paso','noun','Take one step at a time.','Da un paso a la vez.'],
+  simple:['simple / sencillo','adjective','Start with a simple sentence.','Empieza con una oración sencilla.'],
+  health:['salud','noun','Exercise improves your health.','El ejercicio mejora tu salud.'],
+  clock:['reloj','noun','Look at the clock.','Mira el reloj.'],
+  hot:['caliente / caluroso','adjective','The coffee is hot.','El café está caliente.'],
+  quiet:['tranquilo / silencioso','adjective','I need a quiet place to study.','Necesito un lugar tranquilo para estudiar.'],
+  weeks:['semanas','noun','I have practiced for three weeks.','He practicado durante tres semanas.'],
+  future:['futuro','noun','I am preparing for the future.','Me estoy preparando para el futuro.'],
+  book:['libro','noun','This book is easy to read.','Este libro es fácil de leer.'],
+  sure:['seguro / segura','adjective','Are you sure?','¿Estás seguro?'],
+  explain:['explicar','verb','Can you explain it again?','¿Puedes explicarlo otra vez?'],
+  easy:['fácil','adjective','This example is easy to understand.','Este ejemplo es fácil de entender.'],
+  control:['control / controlar','noun / verb','Focus on what you can control.','Concéntrate en lo que puedes controlar.'],
+  purpose:['propósito','noun','What is the purpose of this exercise?','¿Cuál es el propósito de este ejercicio?'],
+  produce:['producir','verb','Try to produce a complete sentence.','Intenta producir una oración completa.'],
+  live:['vivir / en vivo','verb / adjective','I live in Colombia.','Vivo en Colombia.'],
+  wait:['esperar','verb','Wait a moment, please.','Espera un momento, por favor.'],
+  broken:['roto / dañando','adjective','The screen is broken.','La pantalla está rota.'],
+  danger:['peligro','noun','That sign warns of danger.','Ese aviso advierte del peligro.'],
+  rule:['regla','noun','Learn the rule, then practice it.','Aprende la regla y luego practícala.'],
+  earth:['Tierra / tierra','noun','The Earth moves around the Sun.','La Tierra gira alrededor del Sol.'],
+  seem:['parecer','verb','This lesson seems easier now.','Esta lección parece más fácil ahora.']
+};
+function wordHunterDetails(word) {
+  const row=WORD_HUNTER_DETAILS[wordHunterKey(word)];
+  return row ? {meaning:row[0],part:row[1],example:row[2],exampleEs:row[3]} : null;
+}
+
+function wordHunterRows() { return languageProfileArray('language_word_deck_v1'); }
+async function saveWordHunterRows(rows) { const value=JSON.stringify(rows.slice(-1800)); await api('/api/profile',{body:{key:'language_word_deck_v1',value}}); S.profile=S.profile||{}; S.profile.language_word_deck_v1=value; }
+function wordHunterKey(v) { return String(v||'').trim().toLowerCase(); }
+function wordHunterDatePlus(days) { const d=new Date(); d.setDate(d.getDate()+days); return localISO(d); }
+function wordHunterBuiltInState() {
+  const pf=S.profile||{};
+  try { const x=JSON.parse(pf.language_word_core_state_v1||'{}'); return x&&typeof x==='object'?x:{}; } catch(_){ return {}; }
+}
+async function saveWordHunterBuiltInState(state) {
+  const value=JSON.stringify(state); await api('/api/profile',{body:{key:'language_word_core_state_v1',value}}); S.profile=S.profile||{}; S.profile.language_word_core_state_v1=value;
+}
+function wordHunterPersonalMap() { const m=new Map(); wordHunterRows().forEach(x=>m.set(wordHunterKey(x.word||x.correct),x)); return m; }
+function wordHunterDueCards(limit=10) {
+  const today=hoyLocal(), personal=wordHunterRows().filter(x=>x.status!=='Mastered' && (!x.due||x.due<=today)).sort((a,b)=>String(a.due||'').localeCompare(String(b.due||''))||(+b.priority||0)-(+a.priority||0));
+  const state=wordHunterBuiltInState(), personalMap=wordHunterPersonalMap(), built=[];
+  for (let i=0;i<WORD_HUNTER_CORE_1000.length && personal.length+built.length<limit;i++) {
+    const word=WORD_HUNTER_CORE_1000[i], st=state[word]||{}, details=wordHunterDetails(word);
+    if (!details || personalMap.has(word) || st.status==='Mastered') continue;
+    if (!st.due || st.due<=today) built.push({id:'core:'+word,word,correct:word,wrong:'',meaning:st.meaning||details.meaning,part:details.part,example:st.example||details.example,exampleEs:details.exampleEs,source:'Core vocabulary',status:st.status||'New',due:st.due||today,core:true,index:i+1});
+  }
+  return personal.concat(built).slice(0,limit);
+}
+function wordHunterCounts() {
+  const rows=wordHunterRows(), state=wordHunterBuiltInState();
+  return {due:wordHunterDueCards(10).length,learning:rows.filter(x=>x.status!=='Mastered').length+Object.values(state).filter(x=>x.status&&x.status!=='Mastered').length,mastered:rows.filter(x=>x.status==='Mastered').length+Object.values(state).filter(x=>x.status==='Mastered').length};
+}
+async function addWordHunterCard(data={}) {
+  const word=String(data.word||data.correct||'').trim(); if(!word)return false;
+  const rows=wordHunterRows(), key=wordHunterKey(word), existing=rows.find(x=>wordHunterKey(x.word||x.correct)===key);
+  const payload={id:existing?.id||`word-${Date.now()}`,word,wrong:String(data.wrong||'').trim(),meaning:String(data.meaning||'').trim(),example:String(data.example||'').trim(),source:data.source||'Personal',status:'Learning',due:hoyLocal(),interval:0,reviews:+existing?.reviews||0,priority:data.priority||2,created_at:existing?.created_at||hoyLocal(),updated_at:hoyLocal()};
+  if(existing) Object.assign(existing,payload); else rows.push(payload);
+  await saveWordHunterRows(rows); return true;
+}
+async function addWordHunterManual() {
+  const r=await modal({icon:'Aa',title:'Add word or expression',text:'Save spelling, meaning and one useful example. Personal errors receive priority in daily review.',fields:[
+    {type:'text',label:'Correct word or short expression',placeholder:'because'},
+    {type:'text',label:'Your incorrect spelling · optional',placeholder:'becouse'},
+    {type:'text',label:'Meaning in Spanish or your own words',placeholder:'porque'},
+    {type:'text',label:'Example · optional',placeholder:'I stayed home because it was raining.'}
+  ],okText:'Add to deck',lockClose:true,draftKey:'word_hunter_add'});
+  if(!r)return false; if(!String(r[0]||'').trim()){toast('The correct word is required.');return false;}
+  await addWordHunterCard({word:r[0],wrong:r[1],meaning:r[2],example:r[3],source:r[1]?'Personal error':'Manual',priority:r[1]?5:3}); toast('Aa Word added to today’s review deck.'); renderEnglish(); return true;
+}
+async function rateWordHunterCard(card,rating) {
+  const gaps={again:1,hard:2,good:4,easy:7};
+  if(card.core){const state=wordHunterBuiltInState(), current=state[card.word]||{}, mult=rating==='again'?1:rating==='hard'?1.5:rating==='good'?2:3, next=Math.max(gaps[rating],Math.round((+current.interval||1)*mult)); state[card.word]={...current,status:rating==='easy'&&(+current.reviews||0)>=2?'Mastered':'Learning',reviews:(+current.reviews||0)+1,interval:next,due:wordHunterDatePlus(next),updated_at:hoyLocal()}; await saveWordHunterBuiltInState(state);}
+  else {const rows=wordHunterRows(), row=rows.find(x=>x.id===card.id);if(!row)return;const mult=rating==='again'?1:rating==='hard'?1.5:rating==='good'?2:3,next=Math.max(gaps[rating],Math.round((+row.interval||1)*mult));row.reviews=(+row.reviews||0)+1;row.interval=next;row.due=wordHunterDatePlus(next);row.status=rating==='easy'&&row.reviews>=3?'Mastered':'Learning';row.updated_at=hoyLocal();await saveWordHunterRows(rows);}
+}
+function openWordHunterReview() {
+  let queue=wordHunterDueCards(10), pos=0, revealed=false; const previous=document.activeElement,back=document.createElement('div');back.className='modal-back word-hunter-back modal-back-stacked';
+  const close=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();renderEnglish();},240)};
+  const draw=()=>{if(pos>=queue.length){back.innerHTML=`<div class="modal-card word-review-card"><div class="language-mission-top"><div><span>WORD HUNTER</span><h3>Review complete</h3></div><button class="language-mission-close">✕</button></div><div class="word-review-finish">◆ ${queue.length} cards reviewed today.</div><div class="language-notebook-footer"><button class="btn-ghost" data-word-close>Finish</button></div></div>`;back.querySelectorAll('.language-mission-close,[data-word-close]').forEach(x=>x.onclick=close);return;}
+    const c=queue[pos], details=c.core?wordHunterDetails(c.word):null, meaning=c.meaning||details?.meaning||'Add a Spanish meaning from the library.', part=c.part||details?.part||'', example=c.example||details?.example||'', exampleEs=c.exampleEs||details?.exampleEs||''; back.innerHTML=`<div class="modal-card word-review-card"><div class="language-mission-top"><div><span>WORD HUNTER · ${pos+1}/${queue.length}</span><h3>${c.source==='Personal error'?'Spelling recovery':'Vocabulary review'}</h3></div><button class="language-mission-close">✕</button></div><div class="word-card-face"><small>${c.core?'DAILY VOCABULARY':'PERSONAL ERROR'}</small><strong>${esc(c.word||c.correct)}</strong>${!revealed&&c.wrong?`<span>Your error: ${esc(c.wrong)}</span>`:''}${revealed?`<div class="word-card-answer">${c.wrong?`<p><b>Your error:</b> ${esc(c.wrong)}</p>`:''}<p><b>Correct:</b> ${esc(c.word||c.correct)}</p><p><b>Significado:</b> ${esc(meaning)}</p>${part?`<p><b>Tipo:</b> ${esc(part)}</p>`:''}${example?`<div class="word-example-pair"><em>${esc(example)}</em>${exampleEs?`<span>${esc(exampleEs)}</span>`:''}</div>`:''}<p class="word-card-task">Say or write one new sentence using <b>${esc(c.word||c.correct)}</b>.</p></div>`:''}</div><div class="word-review-actions">${revealed?'<button data-rate="again">Again</button><button data-rate="hard">Hard</button><button data-rate="good">Good</button><button data-rate="easy">Easy</button>':'<button class="btn-gold" data-reveal>Show answer</button>'}</div></div>`;
+    back.querySelector('.language-mission-close').onclick=close; const rev=back.querySelector('[data-reveal]');if(rev)rev.onclick=()=>{revealed=true;draw();};back.querySelectorAll('[data-rate]').forEach(b=>b.onclick=async()=>{b.disabled=true;await rateWordHunterCard(c,b.dataset.rate);pos++;revealed=false;draw();});
+  };
+  document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));
+}
+function openWordHunterLibrary() {
+  const previous=document.activeElement,back=document.createElement('div');back.className='modal-back word-hunter-back modal-back-stacked';
+  const draw=()=>{const rows=wordHunterRows().slice().sort((a,b)=>(a.status==='Mastered')-(b.status==='Mastered')||String(b.updated_at).localeCompare(String(a.updated_at)));const items=rows.length?rows.map(x=>`<article class="language-note-card ${x.status==='Mastered'?'mastered':''}" data-word-id="${esc(x.id)}"><div><small>${esc(x.source||'Personal')} · ${esc(x.status||'Learning')}</small><b>${esc(x.word||x.correct)}</b>${x.wrong?`<span>${esc(x.wrong)} → ${esc(x.word||x.correct)}</span>`:''}${x.meaning?`<em>${esc(x.meaning)}</em>`:''}</div><div class="language-note-actions"><button data-word-master>${x.status==='Mastered'?'Reopen':'Learned'}</button><button data-word-delete>✕</button></div></article>`).join(''):'<div class="language-notebook-empty">No personal words yet. Core vocabulary appears gradually in daily reviews.</div>';back.innerHTML=`<div class="modal-card language-notebook-card"><div class="language-mission-top"><div><span>WORD HUNTER ARCHIVE</span><h3>Personal vocabulary</h3></div><button class="language-mission-close">✕</button></div><div class="language-notebook-list">${items}</div><div class="language-notebook-footer"><button class="btn-ghost" data-word-add>＋ Add word</button></div></div>`;bind();};
+  const close=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();renderEnglish();},240)};
+  const bind=()=>{back.querySelector('.language-mission-close').onclick=close;back.querySelector('[data-word-add]').onclick=async()=>{if(await addWordHunterManual())draw();};back.querySelectorAll('[data-word-master]').forEach(btn=>btn.onclick=async()=>{const rows=wordHunterRows(),row=rows.find(x=>x.id===btn.closest('[data-word-id]').dataset.wordId);if(!row)return;row.status=row.status==='Mastered'?'Learning':'Mastered';row.due=row.status==='Mastered'?'9999-12-31':hoyLocal();await saveWordHunterRows(rows);draw();});back.querySelectorAll('[data-word-delete]').forEach(btn=>btn.onclick=async()=>{if(!await confirmModal('Delete word','Remove this personal card permanently?',true))return;let rows=wordHunterRows().filter(x=>x.id!==btn.closest('[data-word-id]').dataset.wordId);await saveWordHunterRows(rows);draw();});};
+  document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));
+}
+
+async function openWordHunterHelp() {
+  await modal({icon:'Aa',title:'How Word Hunter works',text:'Word Hunter is independent from the daily English mission. Review up to 10 due cards whenever you want. Personal spelling errors appear first. Show the answer, read the Spanish meaning and bilingual example, then produce your own sentence. Again, Hard, Good and Easy only schedule the next review; they do not affect the English check.',fields:[],okText:'Understood',cancelText:null,lockClose:true});
+}
+
 function languageLearningContext() {
   const errors = languageErrors().filter(x => x.status !== 'Mastered').sort((a,b)=>(+b.count||1)-(+a.count||1)).slice(0,3);
   const phrases = languagePhrases().filter(x => x.confidence !== 'Mastered').slice(-3).reverse();
-  return { errors, phrases };
+  const words = wordHunterDueCards(3);
+  return { errors, phrases, words };
 }
 async function addLanguageError() {
-  const r = await modal({ icon:'✎', title:'Add recurring error', text:'Save a real mistake from your tutor session. Repeated mistakes are merged instead of duplicated.', fields:[
-    {type:'text',label:'Your original sentence',placeholder:'Yesterday I go to work.'},
-    {type:'text',label:'Correct sentence',placeholder:'Yesterday I went to work.'},
-    {type:'text',label:'Short rule or focus',placeholder:'Use the past form after yesterday.'}
-  ], okText:'Save error' });
+  const r = await modal({ icon:'✎', title:'Add English error', text:'Save either one misspelled word or a complete sentence. Word errors can enter Word Hunter automatically.', fields:[
+    {type:'select',label:'Error type',options:[{v:'word',t:'Word / spelling'},{v:'sentence',t:'Sentence / grammar'}]},
+    {type:'text',label:'What you wrote or heard incorrectly',placeholder:'becouse / Yesterday I go to work.'},
+    {type:'text',label:'Correct form',placeholder:'because / Yesterday I went to work.'},
+    {type:'text',label:'Meaning, rule or context · optional',placeholder:'porque / Use the past form after yesterday.'}
+  ], okText:'Save error', lockClose:true, draftKey:'language_error' });
   if (!r) return false;
-  const wrong=String(r[0]||'').trim(), correct=String(r[1]||'').trim(), rule=String(r[2]||'').trim();
-  if (!wrong || !correct) { toast('Original and corrected sentences are required.'); return false; }
+  const kind=r[0]||'word',wrong=String(r[1]||'').trim(),correct=String(r[2]||'').trim(),rule=String(r[3]||'').trim();
+  if (!wrong || !correct) { toast('Incorrect and correct forms are required.'); return false; }
   const rows=languageErrors();
   const existing=rows.find(x=>String(x.wrong||'').toLowerCase()===wrong.toLowerCase() && String(x.correct||'').toLowerCase()===correct.toLowerCase());
-  if (existing) { existing.count=(+existing.count||1)+1; existing.rule=rule||existing.rule||''; existing.status='Learning'; existing.updated_at=hoyLocal(); }
-  else rows.push({id:`err-${Date.now()}`,wrong,correct,rule,count:1,status:'Learning',updated_at:hoyLocal()});
-  await saveLanguageProfileArray('language_errors_v1',rows); toast('✎ Error saved for future missions.'); return true;
+  if (existing) { existing.count=(+existing.count||1)+1; existing.rule=rule||existing.rule||''; existing.kind=kind||existing.kind||'sentence'; existing.status='Learning'; existing.updated_at=hoyLocal(); }
+  else rows.push({id:`err-${Date.now()}`,kind,wrong,correct,rule,count:1,status:'Learning',updated_at:hoyLocal()});
+  await saveLanguageProfileArray('language_errors_v1',rows);
+  if(kind==='word' && !correct.includes(' ')) await addWordHunterCard({word:correct,wrong,meaning:rule,source:'Personal error',priority:5});
+  toast(kind==='word'?'✎ Error saved and added to Word Hunter.':'✎ Error saved for future missions.'); return true;
 }
 async function addLanguagePhrase() {
   const cfg=languageHunterProfile();
@@ -351,7 +741,7 @@ async function addLanguagePhrase() {
     {type:'text',label:'Meaning in your own words',placeholder:'Estoy esperando con ganas el fin de semana.'},
     {type:'text',label:'Personal example',placeholder:"I'm looking forward to starting my new course."},
     {type:'select',label:'Source',options:['American School Way','AI conversation','YouTube','Series','Website','Real conversation','Other'].map(v=>({v,t:v}))}
-  ], okText:'Save phrase' });
+  ], okText:'Save phrase', lockClose:true, draftKey:'language_phrase' });
   if (!r) return false;
   const phrase=String(r[0]||'').trim(); if(!phrase){toast('The phrase is required.');return false;}
   const rows=languagePhrases();
@@ -366,7 +756,7 @@ function openLanguageNotebook(kind) {
   const back=document.createElement('div'); back.className='modal-back language-notebook-back';
   const draw=()=>{
     const rows=isError?languageErrors():languagePhrases();
-    const items=rows.length?rows.slice().reverse().map(x=>isError?`<article class="language-note-card ${x.status==='Mastered'?'mastered':''}" data-note-id="${esc(x.id)}"><div><small>${x.status==='Mastered'?'MASTERED':'LEARNING'} · repeated ${+x.count||1}×</small><b>${esc(x.wrong)}</b><span>${esc(x.correct)}</span>${x.rule?`<em>${esc(x.rule)}</em>`:''}</div><div class="language-note-actions"><button data-note-toggle>${x.status==='Mastered'?'Reopen':'Mastered'}</button><button data-note-delete aria-label="Delete">✕</button></div></article>`:`<article class="language-note-card ${x.confidence==='Mastered'?'mastered':''}" data-note-id="${esc(x.id)}"><div><small>${esc(x.source||'Other')} · ${x.confidence||'Learning'}</small><b>${esc(x.phrase)}</b>${x.meaning?`<span>${esc(x.meaning)}</span>`:''}${x.example?`<em>${esc(x.example)}</em>`:''}</div><div class="language-note-actions"><button data-note-toggle>${x.confidence==='Mastered'?'Reopen':'Mastered'}</button><button data-note-delete aria-label="Delete">✕</button></div></article>`).join(''):`<div class="language-notebook-empty">${isError?'No recurring errors saved yet.':'No useful phrases saved yet.'}</div>`;
+    const items=rows.length?rows.slice().reverse().map(x=>isError?`<article class="language-note-card ${x.status==='Mastered'?'mastered':''}" data-note-id="${esc(x.id)}"><div><small>${x.kind==='word'?'WORD':'SENTENCE'} · ${x.status==='Mastered'?'MASTERED':'LEARNING'} · repeated ${+x.count||1}×</small><b>${esc(x.wrong)}</b><span>${esc(x.correct)}</span>${x.rule?`<em>${esc(x.rule)}</em>`:''}</div><div class="language-note-actions"><button data-note-toggle>${x.status==='Mastered'?'Reopen':'Mastered'}</button><button data-note-delete aria-label="Delete">✕</button></div></article>`:`<article class="language-note-card ${x.confidence==='Mastered'?'mastered':''}" data-note-id="${esc(x.id)}"><div><small>${esc(x.source||'Other')} · ${x.confidence||'Learning'}</small><b>${esc(x.phrase)}</b>${x.meaning?`<span>${esc(x.meaning)}</span>`:''}${x.example?`<em>${esc(x.example)}</em>`:''}</div><div class="language-note-actions"><button data-note-toggle>${x.confidence==='Mastered'?'Reopen':'Mastered'}</button><button data-note-delete aria-label="Delete">✕</button></div></article>`).join(''):`<div class="language-notebook-empty">${isError?'No recurring errors saved yet.':'No useful phrases saved yet.'}</div>`;
     back.innerHTML=`<div class="modal-card language-notebook-card"><div class="language-mission-top"><div><span>LANGUAGE HUNTER NOTEBOOK</span><h3>${isError?'Recurring errors':'Useful phrases'}</h3></div><button type="button" class="language-mission-close">✕</button></div><div class="language-notebook-list">${items}</div><div class="language-notebook-footer"><button class="btn-ghost" data-note-add>${isError?'＋ Add error':'＋ Add phrase'}</button></div></div>`;
     bind();
   };
@@ -377,7 +767,7 @@ function openLanguageNotebook(kind) {
     back.querySelectorAll('[data-note-toggle]').forEach(btn=>btn.onclick=async()=>{const card=btn.closest('[data-note-id]');const rows=isError?languageErrors():languagePhrases();const row=rows.find(x=>x.id===card.dataset.noteId);if(!row)return;if(isError)row.status=row.status==='Mastered'?'Learning':'Mastered';else row.confidence=row.confidence==='Mastered'?'Learning':'Mastered';row.updated_at=hoyLocal();await saveLanguageProfileArray(isError?'language_errors_v1':'language_phrases_v1',rows);draw();});
     back.querySelectorAll('[data-note-delete]').forEach(btn=>btn.onclick=async()=>{const card=btn.closest('[data-note-id]');const ok=await confirmModal('Delete note','This learning note will be removed permanently.',true);if(!ok)return;let rows=isError?languageErrors():languagePhrases();rows=rows.filter(x=>x.id!==card.dataset.noteId);await saveLanguageProfileArray(isError?'language_errors_v1':'language_phrases_v1',rows);draw();});
   };
-  document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));back.onclick=e=>{if(e.target===back)close();};
+  document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));back.onclick=e=>{if(e.target===back)e.preventDefault();};
 }
 
 async function editLanguageSource(existing = null) {
@@ -393,7 +783,7 @@ async function editLanguageSource(existing = null) {
       {type:'text',label:'Pages or material',value:cfg.pages || '',placeholder:'76–77 / video title'},
       {type:'text',label:'Topics',value:cfg.topic || '',placeholder:'Present continuous; daily routines; vocabulary'},
       {type:'text',label:'Grammar focuses',value:cfg.grammar || '',placeholder:'Present continuous; question forms'}
-    ], okText:existing ? 'Save and activate' : 'Add and activate'
+    ], okText:existing ? 'Save and activate' : 'Add and activate', lockClose:true, draftKey:existing ? 'language_source_edit' : 'language_source_add'
   });
   if (!result) return false;
   if (!String(result[1] || '').trim() || !String(result[5] || '').trim()) {
@@ -442,8 +832,9 @@ function languageTutorPrompt(wd, minutes = 25) {
   const learning = languageLearningContext();
   const errorText = learning.errors.length ? learning.errors.map((x,i)=>`${i+1}. ${x.wrong} → ${x.correct}${x.rule ? ` (${x.rule})` : ''}`).join('\n') : 'No recurring errors saved yet.';
   const phraseText = learning.phrases.length ? learning.phrases.map((x,i)=>`${i+1}. ${x.phrase}${x.example ? ` — ${x.example}` : ''}`).join('\n') : 'No useful phrases saved yet.';
+  const wordText = learning.words.length ? learning.words.map((x,i)=>`${i+1}. ${x.word||x.correct}${x.wrong ? ` (previous error: ${x.wrong})` : ''}`).join('\n') : 'No priority words due today.';
   const previous = languageSessions().slice(-1)[0] || {};
-  return `You are my Language Hunter English tutor.\n\nTODAY\nDay: ${DIAS[wd]}\nMission: ${titulo}\nVerified level: ${verified}\nCurrent target: ${target}\nAvailable time: ${minutes} minutes\n\nSTUDY LESSON\nBook: ${cfg.book || 'Not specified'}\nBook level: ${cfg.level || 'Not specified'}\nUnit: ${cfg.unit || 'Not specified'}\nPages: ${cfg.pages || 'Not specified'}\nTopics: ${cfg.topic || 'Not specified'}\nGrammar focuses: ${cfg.grammar || 'Not specified'}\n\nMISSION STEPS\n${pasos.map((p,i)=>`${i+1}. ${p.s}: ${p.how}`).join('\n')}\n\nRECURRING ERRORS TO RETRAIN\n${errorText}\n\nUSEFUL PHRASES TO REUSE\n${phraseText}\n\nPREVIOUS SESSION\nMain issue: ${previous.issue || 'No previous issue logged'}\nHomework: ${previous.homework || 'No pending homework'}\n\nRULES\nSpeak mainly in English. Ask one question at a time. Make me produce English before explaining. Correct the most important errors, ask me to retry the corrected form, deliberately reuse the saved phrases, and finish with the exact LANGUAGE HUNTER SESSION REPORT plus a compact APP LOG line.`;
+  return `You are my Language Hunter English tutor.\n\nTODAY\nDay: ${DIAS[wd]}\nMission: ${titulo}\nVerified level: ${verified}\nCurrent target: ${target}\nAvailable time: ${minutes} minutes\n\nSTUDY LESSON\nBook: ${cfg.book || 'Not specified'}\nBook level: ${cfg.level || 'Not specified'}\nUnit: ${cfg.unit || 'Not specified'}\nPages: ${cfg.pages || 'Not specified'}\nTopics: ${cfg.topic || 'Not specified'}\nGrammar focuses: ${cfg.grammar || 'Not specified'}\n\nMISSION STEPS\n${pasos.map((p,i)=>`${i+1}. ${p.s}: ${p.how}`).join('\n')}\n\nRECURRING ERRORS TO RETRAIN\n${errorText}\n\nUSEFUL PHRASES TO REUSE\n${phraseText}\n\nWORDS TO RETRAIN\n${wordText}\n\nPREVIOUS SESSION\nMain issue: ${previous.issue || 'No previous issue logged'}\nHomework: ${previous.homework || 'No pending homework'}\n\nRULES\nSpeak mainly in English. Ask one question at a time. Make me produce English before explaining. Correct the most important errors, ask me to retry the corrected form, deliberately reuse the saved phrases, and finish with the exact LANGUAGE HUNTER SESSION REPORT plus a compact APP LOG line.`;
 }
 
 function copyLanguageTutorPrompt(wd) {
@@ -527,7 +918,7 @@ async function importLanguageTutorReport(wd) {
     icon:'↳', title:'Import AI session result',
     text:'After finishing with your AI tutor, paste its complete LANGUAGE HUNTER SESSION REPORT here. The app previews it, then saves minutes, difficulty, corrections, phrases and homework for future missions.',
     fields:[{type:'textarea',label:'Tutor report',rows:14,placeholder:'LANGUAGE HUNTER SESSION REPORT\n\nDate: ...'}],
-    okText:'Analyze report'
+    okText:'Analyze report', lockClose:true, draftKey:'language_tutor_report'
   });
   if (!pasted || !String(pasted[0] || '').trim()) return false;
   const parsed = parseTutorReport(pasted[0]);
@@ -549,7 +940,7 @@ async function importLanguageTutorReport(wd) {
       {type:'select',label:'Difficulty',value:parsed.difficulty,options:['Easy','Appropriate','Hard'].map(v=>({v,t:v}))},
       {type:'text',label:'Main issue',value:parsed.weakness || parsed.recurring || '',placeholder:'Main weakness'},
       {type:'textarea',label:'APP LOG',rows:3,value:parsed.log || '',placeholder:'Compact tutor summary'}
-    ], okText:'Save imported session'
+    ], okText:'Save imported session', lockClose:true, draftKey:'language_import_preview'
   });
   if (!reviewed) return false;
   const rows = languageSessions();
@@ -571,7 +962,8 @@ async function importLanguageTutorReport(wd) {
       for (const item of validErrors) {
         const existing = errors.find(x=>String(x.wrong||'').toLowerCase()===item.wrong.toLowerCase() && String(x.correct||'').toLowerCase()===item.correct.toLowerCase());
         if (existing) { existing.count=(+existing.count||1)+1; existing.status='Learning'; existing.updated_at=hoyLocal(); }
-        else errors.push({id:`err-${Date.now()}-${errors.length}`,wrong:item.wrong,correct:item.correct,rule:parsed.weakness || '',count:1,status:'Learning',updated_at:hoyLocal()});
+        else errors.push({id:`err-${Date.now()}-${errors.length}`,kind:(!item.wrong.includes(' ')&&!item.correct.includes(' '))?'word':'sentence',wrong:item.wrong,correct:item.correct,rule:parsed.weakness || '',count:1,status:'Learning',updated_at:hoyLocal()});
+        if(!item.wrong.includes(' ')&&!item.correct.includes(' ')) await addWordHunterCard({word:item.correct,wrong:item.wrong,meaning:parsed.weakness||'',source:'Personal error',priority:5});
       }
       await saveLanguageProfileArray('language_errors_v1', errors);
       const phrases = languagePhrases();
@@ -593,7 +985,7 @@ function openLanguageSessionHistory() {
   const items = rows.length ? rows.map(x=>`<article class="language-history-item"><div><small>${esc(x.date||'')} · ${esc(x.day||'')}</small><b>${esc(x.skill||'Language mission')}</b><span>${+x.minutes||0} min · ${esc(x.difficulty||'Appropriate')}</span><em>${esc(x.book||'')}${x.unit?' · '+esc(x.unit):''}${x.topic?' · '+esc(x.topic):''}</em></div><div><small>MAIN ISSUE</small><b>${esc(x.issue||'No issue logged')}</b>${x.homework?`<em>${esc(x.homework)}</em>`:''}</div></article>`).join('') : '<div class="language-notebook-empty">No tutor sessions saved yet.</div>';
   back.innerHTML=`<div class="modal-card language-history-card"><div class="language-mission-top"><div><span>LANGUAGE HUNTER ARCHIVE</span><h3>Tutor sessions</h3></div><button type="button" class="language-mission-close">✕</button></div><div class="language-history-list">${items}</div></div>`;
   const close=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();},250)};
-  document.body.appendChild(back);document.body.classList.add('modal-open');requestAnimationFrame(()=>back.classList.add('show'));back.querySelector('.language-mission-close').onclick=close;back.onclick=e=>{if(e.target===back)close();};
+  document.body.appendChild(back);document.body.classList.add('modal-open');requestAnimationFrame(()=>back.classList.add('show'));back.querySelector('.language-mission-close').onclick=close;back.onclick=e=>{if(e.target===back)e.preventDefault();};
 }
 
 async function saveLanguageSessionReport(wd) {
@@ -609,7 +1001,7 @@ async function saveLanguageSessionReport(wd) {
       {type:'text',label:'Main issue',placeholder:'Irregular verbs'},
       {type:'number',label:'New useful phrases',min:0,max:50,placeholder:'3'},
       {type:'text',label:'Tutor APP LOG (optional)',placeholder:'Speaking · 20 min · Past simple...'}
-    ], okText:'Save report', cancelText:'Skip report'
+    ], okText:'Save report', cancelText:'Skip report', lockClose:true, draftKey:'language_manual_report'
   });
   if (!r) return;
   let sessions=languageSessions();
@@ -633,7 +1025,7 @@ function openLanguageMissionModal(day, wd) {
       <div class="language-source-strip"><div><small>ACTIVE LESSON · ${cfg.sourceCount} SAVED</small><b>${esc(cfg.book)}${cfg.level?' · '+esc(cfg.level):''}</b><span>${esc(cfg.unit||'No unit')}${cfg.pages?' · pages '+esc(cfg.pages):''}</span></div><button type="button" data-language-edit-source>Edit</button></div>
       <div class="language-topic-line"><span>${esc(cfg.topic)}</span>${cfg.grammar?`<b>${esc(cfg.grammar)}</b>`:''}</div>
       <div class="language-mission-steps">${stepRows}</div>
-      <div class="language-notebook-toolbar"><button type="button" data-language-errors>✎ Errors <b>${languageErrors().filter(x=>x.status!=='Mastered').length}</b></button><button type="button" data-language-phrases>◆ Phrases <b>${languagePhrases().length}</b></button><button type="button" data-language-history>▤ Sessions <b>${languageSessions().length}</b></button></div>
+      <div class="language-notebook-toolbar language-notebook-toolbar-three"><button type="button" data-language-errors>✎ Errors <b>${languageErrors().filter(x=>x.status!=='Mastered').length}</b></button><button type="button" data-language-phrases>◆ Phrases <b>${languagePhrases().length}</b></button><button type="button" data-language-history>▤ Sessions <b>${languageSessions().length}</b></button></div>
       <div class="language-mission-actions language-mission-actions-v123"><button type="button" class="btn-ghost" data-language-ai>Copy AI tutor prompt</button><button type="button" class="btn-ghost" data-language-import>Import AI session result</button><button type="button" class="m-ok language-complete" disabled>Complete mission ✓</button></div>
       <small class="language-save-note">Every step is saved immediately. Close and continue later without losing progress.</small>
     </div>`;
@@ -643,7 +1035,7 @@ function openLanguageMissionModal(day, wd) {
     refresh();
     const close=(val)=>{ if(closed)return; closed=true; back.classList.remove('show'); setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previousFocus?.focus?.();},280);resolve(val); };
     back.querySelector('.language-mission-close').onclick=()=>close(false);
-    back.onclick=e=>{if(e.target===back)close(false);};
+    back.onclick=e=>{if(e.target===back)e.preventDefault();};
     back.querySelector('[data-language-ai]').onclick=()=>copyLanguageTutorPrompt(wd);
     back.querySelector('[data-language-errors]').onclick=()=>openLanguageNotebook('errors');
     back.querySelector('[data-language-phrases]').onclick=()=>openLanguageNotebook('phrases');
@@ -877,7 +1269,7 @@ function snapshotDeudasVivas() {
   return set;
 }
 
-function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Confirm', danger = false, extraBtn = null, cancelText = null }) {
+function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Confirm', danger = false, extraBtn = null, cancelText = null, lockClose = false, draftKey = null }) {
   return new Promise((resolve) => {
     const previousFocus = document.activeElement;
     const back = document.createElement('div');
@@ -921,7 +1313,7 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
       resolve(val);
     };
     const onKeyDown = (ev) => {
-      if (ev.key === 'Escape') { ev.preventDefault(); close(null); return; }
+      if (ev.key === 'Escape') { ev.preventDefault(); if (!lockClose) close(null); return; }
       if (ev.key !== 'Tab') return;
       const focusables = [...back.querySelectorAll('button,input,select,textarea,[href]')].filter(el => !el.disabled && el.offsetParent !== null);
       if (!focusables.length) return;
@@ -931,6 +1323,7 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
     };
     document.addEventListener('keydown', onKeyDown);
     back.querySelector('.m-ok').onclick = () => {
+      if (draftKey) localStorage.removeItem('lifeos_draft_' + draftKey);
       if (fields.length) {
         const vals = [...back.querySelectorAll('[data-i]')].map(el =>
           el.dataset.money ? el.value.replace(/\./g, '').replace(/[^0-9-]/g, '') : el.value);
@@ -940,8 +1333,20 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
     const extra = back.querySelector('.m-extra');
     if (extra) extra.onclick = () => close('EXTRA');
     const cancel = back.querySelector('.m-cancel');
-    if (cancel) cancel.onclick = () => close(null);
-    back.onclick = (e) => { if (e.target === back) close(null); };
+    if (cancel) cancel.onclick = () => { if (draftKey) localStorage.removeItem('lifeos_draft_' + draftKey); close(null); };
+    back.onclick = (e) => { if (e.target === back && !lockClose) close(null); };
+    if (draftKey && fields.length) {
+      const storageKey = 'lifeos_draft_' + draftKey;
+      try {
+        const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+        if (Array.isArray(saved)) [...back.querySelectorAll('[data-i]')].forEach((el,i)=>{ if(saved[i] != null && String(saved[i]) !== '') el.value=String(saved[i]); });
+      } catch (_) {}
+      const saveDraft = () => {
+        const vals=[...back.querySelectorAll('[data-i]')].map(el=>el.value);
+        localStorage.setItem(storageKey, JSON.stringify(vals));
+      };
+      back.querySelectorAll('[data-i]').forEach(el=>{el.addEventListener('input',saveDraft);el.addEventListener('change',saveDraft);});
+    }
     // formateo de miles en vivo para campos money
     back.querySelectorAll('[data-money]').forEach(inp => {
       inp.addEventListener('input', () => {
@@ -4807,6 +5212,10 @@ function renderEnglish() {
       <div class="eng-compact-meta"><span>📘 ${esc(t.book)}</span><span>🎬 ${esc(t.subs)}</span><span>⏱ ${totalMinutes} min logged</span></div>
       <details class="eng-insights"><summary>Progress <small>${languageSessions.length} sessions · next focus: ${esc(leastSkill)}</small></summary><div class="eng-skill-mini">${skillNames.slice(0,4).map(k=>`<button type="button" title="${skillStats[k].sessions} sessions">${k}<b>${skillStats[k].minutes}m</b></button>`).join('')}</div><p class="hint">Detailed history stays in Sessions, Errors and Phrases. Your verified CEFR level changes only after an assessment.</p></details>
     </div>
+    <div class="word-hunter-summary">
+      <div><span>WORD HUNTER</span><b>${wordHunterCounts().due} due today</b><small>${wordHunterCounts().learning} learning · ${wordHunterCounts().mastered} mastered</small></div>
+      <div class="word-hunter-summary-actions"><button id="wordHunterReview">Review</button><button id="wordHunterAdd" title="Add word">＋</button><button id="wordHunterLibrary" title="Open library">Library</button><button id="wordHunterHelp" class="word-hunter-help" title="How Word Hunter works">?</button></div>
+    </div>
     <div class="eng-blocks eng-blocks-compact">
       <div class="eng-block">🗣 <b>Speak</b><span>Mon & Fri</span></div>
       <div class="eng-block">🎧 <b>Listen</b><span>Tue & Sat</span></div>
@@ -4831,6 +5240,11 @@ function renderEnglish() {
 }
 
 document.addEventListener('click', async (e) => {
+
+  if (e.target.id === 'wordHunterReview') { openWordHunterReview(); return; }
+  if (e.target.id === 'wordHunterAdd') { await addWordHunterManual(); return; }
+  if (e.target.id === 'wordHunterLibrary') { openWordHunterLibrary(); return; }
+  if (e.target.id === 'wordHunterHelp') { await openWordHunterHelp(); return; }
   if (e.target.id === 'engNextBtn') {
     const pf = S.profile || {};
     const qIdx = +(pf.eng_q || 0);

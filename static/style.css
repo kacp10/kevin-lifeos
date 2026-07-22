@@ -3899,3 +3899,18 @@ body.hunter-profile-open {
   .set-log,.set-timer{min-width:44px;min-height:44px;font-size:1rem}
   .set-row input{min-height:44px}
 }
+
+
+/* V132 · Word Hunter */
+.word-hunter-summary{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:12px 0;padding:13px 15px;border:1px solid rgba(93,229,178,.2);border-radius:15px;background:linear-gradient(135deg,rgba(93,229,178,.075),rgba(245,206,99,.035))}.word-hunter-summary>div:first-child{display:grid;gap:2px}.word-hunter-summary span{font-size:9px;letter-spacing:1.5px;font-weight:950;color:#6fe5b7}.word-hunter-summary b{font-size:15px}.word-hunter-summary small{font-size:10px;color:var(--muted)}.word-hunter-summary-actions{display:flex;gap:7px}.word-hunter-summary-actions button{min-width:38px;height:38px;padding:0 12px;border:1px solid rgba(245,206,99,.25);border-radius:11px;background:rgba(245,206,99,.07);color:#f5ce63;font-weight:900;cursor:pointer}.word-hunter-back{z-index:10090}.word-review-card{width:min(560px,calc(100vw - 24px));padding:0;text-align:left;overflow:hidden;border:1px solid rgba(93,229,178,.28);background:linear-gradient(160deg,rgba(18,23,39,.995),rgba(8,13,23,.995))}.word-card-face{min-height:280px;display:grid;place-content:center;gap:12px;padding:28px;text-align:center}.word-card-face>small{font-size:9px;letter-spacing:1.7px;color:#6fe5b7;font-weight:950}.word-card-face>strong{font-size:clamp(32px,8vw,58px);letter-spacing:.02em;color:#f5d878;overflow-wrap:anywhere}.word-card-face>span{color:#efaaaa}.word-card-answer{display:grid;gap:7px;margin-top:8px;padding:14px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.025);text-align:left}.word-card-answer p{margin:0}.word-card-answer em{font-style:normal;color:#aee8d1}.word-review-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:0 20px 20px}.word-review-actions button{min-height:42px;border:1px solid rgba(255,255,255,.1);border-radius:11px;background:rgba(255,255,255,.04);color:#e7ecf7;font-weight:850;cursor:pointer}.word-review-actions .btn-gold{grid-column:1/-1}.word-review-finish{padding:54px 24px;text-align:center;color:#6fe5b7;font-size:18px;font-weight:900}.language-notebook-toolbar{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:600px){.word-hunter-summary{align-items:flex-start}.word-hunter-summary-actions{flex-wrap:wrap;justify-content:flex-end}.word-hunter-summary-actions button:first-child{min-width:76px}.word-card-face{min-height:250px;padding:22px 16px}.word-review-actions{grid-template-columns:repeat(2,1fr);padding:0 15px 15px}.word-review-actions .btn-gold{grid-column:1/-1}.language-notebook-toolbar{grid-template-columns:1fr 1fr}}
+
+
+/* V133 · independent bilingual Word Hunter */
+.language-notebook-toolbar-three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.word-hunter-summary-actions .word-hunter-help{min-width:38px;padding:0;border-radius:50%}
+.word-example-pair{display:grid;gap:4px;padding:10px 12px;border-left:2px solid rgba(93,229,178,.55);background:rgba(93,229,178,.045);border-radius:0 10px 10px 0}
+.word-example-pair em{font-style:normal;color:#dff7ee;font-weight:750}
+.word-example-pair span{font-size:12px;color:#9ca9bc}
+.word-card-task{margin-top:5px!important;padding-top:10px;border-top:1px solid rgba(255,255,255,.08);color:#f5d878}
+@media(max-width:600px){.language-notebook-toolbar-three{grid-template-columns:1fr}.word-hunter-summary{display:grid}.word-hunter-summary-actions{justify-content:flex-start;width:100%}.word-hunter-summary-actions button{flex:1}.word-hunter-summary-actions .word-hunter-help{flex:0 0 38px}}
