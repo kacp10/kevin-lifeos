@@ -19,7 +19,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 133  # V133 separates Word Hunter from missions and adds bilingual contextual cards; must match FRONT_V in static/app.js
+VERSION = 134  # V134 preserves cross-month streaks, rest-day logic and mobile visual consistency; must match FRONT_V in static/app.js
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -1348,8 +1348,10 @@ def state():
     abonos = sorted(abonos_core + abonos_extra, key=lambda a: a['id'], reverse=True)[:30]
     habits = [dict(r) for r in d.execute('SELECT * FROM habits')]
     gym_sets = [dict(r) for r in d.execute('SELECT * FROM gym_sets ORDER BY date, id')]
+    # Return the complete mark history. The frontend filters the visible month, while
+    # streaks, Gym totals and achievements must continue across month boundaries.
     marks = [f"{r['habit_id']}|{r['day']}" for r in d.execute(
-        "SELECT habit_id, day FROM habit_marks WHERE day LIKE ?", (month + '%',))]
+        "SELECT habit_id, day FROM habit_marks ORDER BY day, habit_id")]
     history = [dict(r) for r in d.execute(
         'SELECT * FROM months_history ORDER BY label')]
     dreams = [dict(r) for r in d.execute(
