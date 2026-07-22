@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 133;
+const FRONT_V = 134;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1895,13 +1895,15 @@ function renderGym() {
   const toGo = (curW != null && goalW != null) ? +(curW - goalW).toFixed(1) : null;
   const exHabit = (S.habits || []).find(h => h.name === 'Exercise');
   const exStreak = exHabit ? rachaHabito(exHabit.id, new Set(S.marks || []), [6]) : 0;
+  const totalTrainingDays = new Set((S.gym_sets || []).map(x => x.date).filter(Boolean)).size;
   const card = (label, val, sub) => `<div class="card gym-card"><label>${label}</label><strong>${val}</strong>${sub ? `<small>${sub}</small>` : ''}</div>`;
   panel.innerHTML =
     card('Current weight', curW != null ? curW + ' kg' : '—', curW == null ? 'log it when you have it' : '') +
     card('Goal weight', goalW != null ? goalW + ' kg' : '—', eg ? (eg.auto ? '✨ auto · tap Edit to override' : 'set by you') : 'add your height for auto') +
     card('To go', toGo != null ? (toGo > 0 ? toGo + ' kg' : '🎉 reached!') : '—', '') +
     card('Weeks in', semanas, startDate ? 'since ' + startDate : 'set a start date') +
-    card('🔥 Training streak', exStreak + (exStreak === 1 ? ' day' : ' days'), 'from your Exercise habit');
+    card('Training days', totalTrainingDays, 'lifetime · never resets monthly') +
+    card('🔥 Training streak', exStreak + (exStreak === 1 ? ' day' : ' days'), 'rests and weekends do not break it');
 
   // objetivo
   const goalBox = document.getElementById('gymGoal');
@@ -4090,20 +4092,26 @@ function renderHabitos() {
   });
   $('#habitGrid').innerHTML = html;
 
-  const done = S.marks.length;
+  // Monthly score uses only this month's marks, while streaks keep the complete history.
+  const currentMonthMarks = (S.marks || []).filter(key => String(key).split('|')[1]?.startsWith(ym + '-'));
+  const done = currentMonthMarks.length;
   const restDates = lifeRestDates();
-  let countedDays = 0;
-  for (let d = 1; d <= elapsed; d++) {
-    const iso = `${ym}-${String(d).padStart(2, '0')}`;
-    const dow = new Date(iso + 'T12:00:00').getDay();
-    if (dow !== 0 && !restDates.has(iso)) countedDays++;
+  let denominator = 0;
+  const eligibleCalendarDays = new Set();
+  for (const h of (S.habits || [])) {
+    const exercise = h.name === 'Exercise';
+    for (let d = 1; d <= elapsed; d++) {
+      const iso = `${ym}-${String(d).padStart(2, '0')}`;
+      const dow = new Date(iso + 'T12:00:00').getDay();
+      const rest = dow === 0 || (exercise && dow === 6) || restDates.has(iso);
+      if (!rest) { denominator++; eligibleCalendarDays.add(iso); }
+    }
   }
-  const denominator = Math.max(1, S.habits.length * countedDays);
-  const globalPct = done / denominator;
+  const globalPct = Math.min(1, done / Math.max(1, denominator));
   $('#habitStats').innerHTML = `
-    <div class="card green"><label>x marked this month</label><strong>${done}</strong></div>
-    <div class="card gold"><label>Month completion</label><strong>${pct(globalPct)}</strong></div>
-    <div class="card"><label>Counted days</label><strong>${countedDays} / ${elapsed}</strong></div>`;
+    <div class="card green"><label>Marks this month</label><strong>${done}</strong></div>
+    <div class="card gold"><label>Haki completion</label><strong>${pct(globalPct)}</strong></div>
+    <div class="card"><label>Active days</label><strong>${eligibleCalendarDays.size} / ${elapsed}</strong></div>`;
   $('#closeMonth').dataset.pct = globalPct;
   $('#closeMonth').dataset.label = monthName;
 }

@@ -3914,3 +3914,33 @@ body.hunter-profile-open {
 .word-example-pair span{font-size:12px;color:#9ca9bc}
 .word-card-task{margin-top:5px!important;padding-top:10px;border-top:1px solid rgba(255,255,255,.08);color:#f5d878}
 @media(max-width:600px){.language-notebook-toolbar-three{grid-template-columns:1fr}.word-hunter-summary{display:grid}.word-hunter-summary-actions{justify-content:flex-start;width:100%}.word-hunter-summary-actions button{flex:1}.word-hunter-summary-actions .word-hunter-help{flex:0 0 38px}}
+
+/* ===== V134 · Hunter polish, mobile symmetry and persistent streak UI ===== */
+@media (max-width:700px){
+  .academy-actions{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px;width:100%}
+  .academy-actions .btn,.academy-actions .btn-ghost,.academy-actions button{width:100%!important;min-width:0!important;height:44px;min-height:44px;padding:0 8px!important;display:inline-flex;align-items:center;justify-content:center;text-align:center;white-space:nowrap;border-radius:12px}
+  .academy-book-btn{width:44px!important;min-width:44px!important}
+  .word-hunter-summary-actions{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;width:100%}
+  .word-hunter-summary-actions button,.word-hunter-summary-actions button:first-child,.word-hunter-summary-actions .word-hunter-help{width:100%!important;min-width:0!important;max-width:none!important;height:42px;flex:none!important;border-radius:11px!important;padding:0 6px!important}
+}
+
+/* Habits keeps its grid but gains a compact Hunter field-board identity. */
+#habits .panel,#tab-habits .panel,.habits-panel{position:relative;overflow:hidden;border-color:rgba(93,229,178,.22);background:radial-gradient(circle at 100% 0,rgba(93,229,178,.075),transparent 33%),linear-gradient(155deg,rgba(16,22,35,.98),rgba(9,13,24,.98))}
+#habits .panel:before,#tab-habits .panel:before,.habits-panel:before{content:"HUNTER DISCIPLINE GRID";display:block;margin:0 0 10px;color:var(--gold);font-size:.58rem;font-weight:950;letter-spacing:.16em}
+.habit-grid{width:100%;border-collapse:separate;border-spacing:3px}
+.habit-grid th{font-size:.64rem;color:var(--mut);padding:4px 2px}
+.habit-grid td.hname{position:sticky;left:0;z-index:2;background:rgba(12,17,29,.97);border-right:1px solid rgba(245,206,99,.12);border-radius:8px;padding:7px 9px;font-weight:850}
+.habit-grid td.cell{min-width:25px;height:25px;border:1px solid rgba(255,255,255,.08);border-radius:7px;background:rgba(255,255,255,.025);transition:transform .15s ease,border-color .15s ease,background .15s ease}
+.habit-grid td.cell.on{background:linear-gradient(135deg,#2bb58e,#65e1ba);box-shadow:0 0 13px rgba(93,229,178,.2);border-color:rgba(111,229,183,.8)}
+.habit-grid td.cell.today{outline:1px solid var(--gold);box-shadow:0 0 0 2px rgba(245,206,99,.08)}
+#habitStats .card{border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.028)}
+#habitStats .card.green{border-color:rgba(93,229,178,.22)}
+#habitStats .card.gold{border-color:rgba(245,206,99,.24)}
+@media(max-width:700px){.habit-grid{font-size:.72rem}.habit-grid td.cell{min-width:23px;height:23px}.habit-grid td.hname{max-width:118px;overflow:hidden;text-overflow:ellipsis}}
+
+/* Wishlist inputs now match the acquisition-board visual system. */
+.wish-money-grid label{display:grid;gap:6px;min-width:0}.wish-money-grid label span{font-size:.58rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);font-weight:850}
+.wish-money-grid input,.wishlist-tab input,.wishlist-tab select,.wishlist-tab textarea{width:100%;min-width:0;box-sizing:border-box;border:1px solid rgba(245,206,99,.2)!important;border-radius:11px!important;background:linear-gradient(145deg,rgba(255,255,255,.055),rgba(255,255,255,.025))!important;color:var(--text)!important;min-height:42px;padding:10px 12px!important;outline:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.015)}
+.wish-money-grid input:focus,.wishlist-tab input:focus,.wishlist-tab select:focus,.wishlist-tab textarea:focus{border-color:rgba(93,229,178,.58)!important;box-shadow:0 0 0 3px rgba(93,229,178,.09),inset 0 0 0 1px rgba(93,229,178,.08)}
+.wish-money-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media(max-width:520px){.wish-money-grid{grid-template-columns:1fr}.wish-card-actions{display:grid;grid-template-columns:1fr;gap:8px}.wish-card-actions button{width:100%;min-height:42px}}
