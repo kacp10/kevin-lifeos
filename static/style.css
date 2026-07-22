@@ -3874,3 +3874,28 @@ body.hunter-profile-open {
 .block-actions{display:grid;gap:8px}.block-actions button{padding:10px;border-radius:10px;border:1px solid rgba(78,255,163,.28);background:rgba(78,255,163,.06);color:var(--txt);font-weight:800}.block-actions button:nth-child(2){background:var(--accent);color:#07120d;border-color:var(--accent)}
 .gym-measure-help{width:100%;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid rgba(255,255,255,.08);border-radius:11px;background:rgba(255,255,255,.025);color:var(--mut);font-size:.76rem}.gym-measure-help b{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;border:1px solid rgba(78,255,163,.4);color:var(--accent)}
 @media(max-width:600px){.gym-block-pill{order:3}.block-score{gap:5px}.block-score>div{padding:9px 4px}.gym-block-card{max-height:88vh}}
+
+
+/* V131 · mobile-first Gym timer */
+.gym-timer-float{flex-direction:column;align-items:stretch;gap:10px;transition:transform .2s ease,opacity .2s ease,border-color .2s ease}
+.gym-timer-main{display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;border:0;background:transparent;color:inherit;padding:0;text-align:left;cursor:pointer}
+.gym-timer-main small{max-width:230px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gym-timer-main b{font-size:.78rem;color:var(--mut)}
+.gym-timer-actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.gym-timer-actions button{min-height:42px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.06);color:#fff;font-weight:800;cursor:pointer}
+.gym-timer-float.complete{border-color:rgba(255,210,80,.75);box-shadow:0 14px 40px rgba(0,0,0,.45),0 0 26px rgba(255,210,80,.18)}
+.gym-timer-float.complete strong{color:#ffe17a}
+.gym-timer-float.minimized{min-width:220px;padding:10px 12px;gap:0}
+.gym-timer-float.minimized .gym-timer-actions{display:none}
+.gym-timer-float.minimized .gym-timer-main span{display:flex;align-items:center;gap:12px}
+.gym-timer-float.minimized .gym-timer-main small{margin:0}
+.gym-timer-float.minimized .gym-timer-main strong{font-size:1.15rem}
+@media(max-width:600px){
+  .gym-timer-float{left:max(8px,env(safe-area-inset-left));right:max(8px,env(safe-area-inset-right));bottom:max(8px,env(safe-area-inset-bottom));width:auto;min-width:0;padding:13px 14px;border-radius:16px;z-index:10050}
+  .gym-timer-float small{font-size:.68rem}.gym-timer-float strong{font-size:2rem;margin-top:4px}
+  .gym-timer-main small{max-width:calc(100vw - 90px)}
+  .gym-timer-actions button{min-height:48px;font-size:.9rem}
+  .gym-timer-float.minimized{padding:10px 13px}
+  .set-log,.set-timer{min-width:44px;min-height:44px;font-size:1rem}
+  .set-row input{min-height:44px}
+}

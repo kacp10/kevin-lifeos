@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 130;
+const FRONT_V = 131;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1286,11 +1286,13 @@ function altsFor(origId) {
   return Object.entries(EXERCISE_DB).filter(([k, v]) => k !== origId && v.grp === orig.grp).map(([k, v]) => ({ id: k, ...v }));
 }
 let GYM_CELEBRATED_DATE = null;
+function gymCelebratedToday() { const p=getGymPrefs(); return p.workoutCelebratedDate===hoyLocal(); }
+async function markGymCelebratedToday() { const p=getGymPrefs(); p.workoutCelebratedDate=hoyLocal(); await saveGymPrefs(p); }
 
-let GYM_TIMER = { kind:null, exercise:null, endAt:0, remaining:0, interval:null, running:false };
+let GYM_TIMER = { kind:null, exercise:null, endAt:0, remaining:0, interval:null, running:false, minimized:false, completed:false };
 function gymTimerPrefs() {
   const p = getGymPrefs();
-  return { autoRest:p.autoRest !== false, sound:p.timerSound !== false, vibration:p.timerVibration !== false };
+  return { autoRest:p.autoRest !== false, sound:p.timerSound !== false, vibration:p.timerVibration !== false, minimize:p.timerMinimize === true };
 }
 function gymBeep() {
   const pref = gymTimerPrefs();
@@ -1306,33 +1308,36 @@ function formatClock(sec) { sec=Math.max(0,Math.ceil(sec)); return `${String(Mat
 function stopGymTimer(clear=true) {
   if (GYM_TIMER.interval) clearInterval(GYM_TIMER.interval);
   GYM_TIMER.interval=null; GYM_TIMER.running=false;
-  if (clear) GYM_TIMER={kind:null,exercise:null,endAt:0,remaining:0,interval:null,running:false};
+  if (clear) GYM_TIMER={kind:null,exercise:null,endAt:0,remaining:0,interval:null,running:false,minimized:false,completed:false};
   renderGymTimerBar();
 }
 function renderGymTimerBar() {
   document.querySelector('.gym-timer-float')?.remove();
   if (!GYM_TIMER.kind) return;
   const left = GYM_TIMER.running ? Math.max(0,(GYM_TIMER.endAt-Date.now())/1000) : GYM_TIMER.remaining;
-  const el=document.createElement('div'); el.className=`gym-timer-float ${GYM_TIMER.kind}`;
-  el.innerHTML=`<div><small>${GYM_TIMER.kind==='rest'?'REST TIMER':'ACTIVE TIMER'}</small><strong>${formatClock(left)}</strong></div><div class="gym-timer-actions"><button data-timer-pause>${GYM_TIMER.running?'Pause':'Resume'}</button><button data-timer-add>+15s</button><button data-timer-stop>✕</button></div>`;
+  const exName=GYM_TIMER.exercise&&EXERCISE_DB[GYM_TIMER.exercise]?EXERCISE_DB[GYM_TIMER.exercise].n:'';
+  const label=GYM_TIMER.kind==='rest'?'REST':'ACTIVE';
+  const el=document.createElement('div'); el.className=`gym-timer-float ${GYM_TIMER.kind} ${GYM_TIMER.minimized?'minimized':''} ${GYM_TIMER.completed?'complete':''}`;
+  el.innerHTML=`<button class="gym-timer-main" data-timer-toggle aria-label="${GYM_TIMER.minimized?'Expand':'Minimize'} timer"><span><small>${label}${exName?' · '+esc(exName):''}</small><strong>${GYM_TIMER.completed?'READY':formatClock(left)}</strong></span><b>${GYM_TIMER.minimized?'▲':'▼'}</b></button><div class="gym-timer-actions"><button data-timer-pause>${GYM_TIMER.running?'Pause':'Resume'}</button><button data-timer-add>+15s</button><button data-timer-stop>${GYM_TIMER.completed?'Done':'Skip'}</button></div>`;
   document.body.appendChild(el);
 }
 function startGymTimer(seconds, kind='rest', exercise=null) {
   stopGymTimer();
-  GYM_TIMER={kind,exercise,endAt:Date.now()+seconds*1000,remaining:seconds,interval:null,running:true};
+  GYM_TIMER={kind,exercise,endAt:Date.now()+seconds*1000,remaining:seconds,interval:null,running:true,minimized:gymTimerPrefs().minimize,completed:false};
   const tick=()=>{
     const left=Math.max(0,(GYM_TIMER.endAt-Date.now())/1000); GYM_TIMER.remaining=left; renderGymTimerBar();
-    if (left<=0) { const ex=GYM_TIMER.exercise; stopGymTimer(); gymBeep(); toast(kind==='rest'?'⚡ Rest complete — next set ready.':`⏱ Time complete${ex&&EXERCISE_DB[ex]?' · '+EXERCISE_DB[ex].n:''}`); }
+    if (left<=0) { const ex=GYM_TIMER.exercise; if(GYM_TIMER.interval)clearInterval(GYM_TIMER.interval); GYM_TIMER.interval=null; GYM_TIMER.running=false; GYM_TIMER.remaining=0; GYM_TIMER.completed=true; GYM_TIMER.minimized=false; renderGymTimerBar(); gymBeep(); toast(kind==='rest'?'⚡ Rest complete — next set ready.':`⏱ Time complete${ex&&EXERCISE_DB[ex]?' · '+EXERCISE_DB[ex].n:''}`); }
   };
   GYM_TIMER.interval=setInterval(tick,500); tick();
 }
 document.addEventListener('click', e=>{
-  if (e.target.closest('[data-timer-pause]')) {
+  const toggle=e.target.closest('[data-timer-toggle]'); if(toggle){e.preventDefault();e.stopPropagation();GYM_TIMER.minimized=!GYM_TIMER.minimized;renderGymTimerBar();return;}
+  if (e.target.closest('[data-timer-pause]')) { e.preventDefault(); e.stopPropagation(); if(GYM_TIMER.completed)return;
     if (GYM_TIMER.running) { GYM_TIMER.remaining=Math.max(0,(GYM_TIMER.endAt-Date.now())/1000); clearInterval(GYM_TIMER.interval); GYM_TIMER.interval=null; GYM_TIMER.running=false; renderGymTimerBar(); }
     else startGymTimer(GYM_TIMER.remaining, GYM_TIMER.kind, GYM_TIMER.exercise);
   }
-  if (e.target.closest('[data-timer-add]')) { const left=GYM_TIMER.running?Math.max(0,(GYM_TIMER.endAt-Date.now())/1000):GYM_TIMER.remaining; startGymTimer(left+15,GYM_TIMER.kind,GYM_TIMER.exercise); }
-  if (e.target.closest('[data-timer-stop]')) stopGymTimer();
+  if (e.target.closest('[data-timer-add]')) { e.preventDefault();e.stopPropagation(); if(GYM_TIMER.completed)return; const left=GYM_TIMER.running?Math.max(0,(GYM_TIMER.endAt-Date.now())/1000):GYM_TIMER.remaining; startGymTimer(left+15,GYM_TIMER.kind,GYM_TIMER.exercise); }
+  if (e.target.closest('[data-timer-stop]')) {e.preventDefault();e.stopPropagation();stopGymTimer();}
 });
 function gymInputRow(id, idx, valueW, valueR, extra=false) {
   const ex=EXERCISE_DB[id]||{}, mode=exerciseMode(id), label=extra?'Extra':`Set ${idx+1}`;
@@ -1367,9 +1372,9 @@ function renderWorkout() {
     }
     if(today.length>=shown)rows+=gymInputRow(id,shown,today[today.length-1]?.weight||'', '', true);
     const canRemove=sets>Math.max(1,today.length), ctrl=`<div class="set-ctrl">${canRemove?`<button class="set-adj" data-adj="-1" data-wd="${wd}" data-orig="${origId}" data-base="${baseSets}">− Set</button>`:'<span></span>'}<button class="set-adj" data-adj="1" data-wd="${wd}" data-orig="${origId}" data-base="${baseSets}">+ Set</button></div>`;
-    return `<div class="ex-card hunter-ex ${done?'ex-done':''}" data-ex="${id}" data-rest="${rest}"><div class="ex-top"><img class="ex-img" loading="lazy" src="${GYM_IMG}${ex.img}/0.jpg" alt="${esc(ex.n)}" onerror="if(!this.dataset.fallback){this.dataset.fallback='1';this.src='${GYM_IMG}${GYM_GROUP_IMG[ex.grp]||'Pushups'}/0.jpg'}else this.classList.add('noimg')"><div class="ex-head"><div class="ex-name">${ex.n}${done?'<span class="ex-check">✓</span>':''}</div><div class="ex-mus">${ex.m} · ${ex.eq}${swapped?' · <span class="swap-tag">replaced</span>':''}</div><div class="ex-target">${sets} sets · ${targetLabel(id,reps)} · rest ${rest}s</div></div><div class="ex-actions"><button class="replace-btn" data-replace="${origId}" data-wd="${wd}">🔄</button>${swapped?`<button class="restore-btn" data-restore="${origId}" data-wd="${wd}">↺</button>`:''}</div></div><div class="ex-coach">${last?`<div class="ex-last">Last ${last.date.slice(5)} · ${fmtSets(id,last.sets)}</div>`:'<div class="ex-last mut">No history — today sets your baseline.</div>'}<div class="ex-suggest">🎯 ${sug.text}</div>${prog?`<div class="ex-prog ${prog.cls}">${prog.text}</div>`:''}${trend?`<div class="ex-trend ${trend.cls}">${trend.text}</div>`:''}${suggestVariation?`<div class="ex-variation">Variation recommended · <button class="link-like" data-replace="${origId}" data-wd="${wd}">review options</button></div>`:''}</div><div class="ex-sets">${rows}</div>${ctrl}</div>`;
+    return `<div class="ex-card hunter-ex ${done?'ex-done':''}" data-ex="${id}" data-rest="${rest}" data-planned-sets="${sets}"><div class="ex-top"><img class="ex-img" loading="lazy" src="${GYM_IMG}${ex.img}/0.jpg" alt="${esc(ex.n)}" onerror="if(!this.dataset.fallback){this.dataset.fallback='1';this.src='${GYM_IMG}${GYM_GROUP_IMG[ex.grp]||'Pushups'}/0.jpg'}else this.classList.add('noimg')"><div class="ex-head"><div class="ex-name">${ex.n}${done?'<span class="ex-check">✓</span>':''}</div><div class="ex-mus">${ex.m} · ${ex.eq}${swapped?' · <span class="swap-tag">replaced</span>':''}</div><div class="ex-target">${sets} sets · ${targetLabel(id,reps)} · rest ${rest}s</div></div><div class="ex-actions"><button class="replace-btn" data-replace="${origId}" data-wd="${wd}">🔄</button>${swapped?`<button class="restore-btn" data-restore="${origId}" data-wd="${wd}">↺</button>`:''}</div></div><div class="ex-coach">${last?`<div class="ex-last">Last ${last.date.slice(5)} · ${fmtSets(id,last.sets)}</div>`:'<div class="ex-last mut">No history — today sets your baseline.</div>'}<div class="ex-suggest">🎯 ${sug.text}</div>${prog?`<div class="ex-prog ${prog.cls}">${prog.text}</div>`:''}${trend?`<div class="ex-trend ${trend.cls}">${trend.text}</div>`:''}${suggestVariation?`<div class="ex-variation">Variation recommended · <button class="link-like" data-replace="${origId}" data-wd="${wd}">review options</button></div>`:''}</div><div class="ex-sets">${rows}</div>${ctrl}</div>`;
   }).join('');
-  if(allDone&&(GYM_PLAN_SEL==null||GYM_PLAN_SEL==='today')&&wd===todayWd&&GYM_CELEBRATED_DATE!==hoyLocal()){GYM_CELEBRATED_DATE=hoyLocal();showWorkoutCelebration();}
+  if(allDone&&(GYM_PLAN_SEL==null||GYM_PLAN_SEL==='today')&&wd===todayWd&&GYM_CELEBRATED_DATE!==hoyLocal()&&!gymCelebratedToday()){GYM_CELEBRATED_DATE=hoyLocal();markGymCelebratedToday().catch(()=>{});showWorkoutCelebration();}
 }
 
 function showWorkoutCelebration() {
@@ -1419,9 +1424,9 @@ document.getElementById('workoutBox')?.addEventListener('click', async (e) => {
   const settings=e.target.closest('[data-gym-timer-settings]');
   if(settings){
     const p=getGymPrefs(), back=document.createElement('div'); back.className='modal-back doc-back';
-    back.innerHTML=`<div class="modal-card doc-card gym-settings-card"><div class="doc-head"><h3>◆ Gym timers</h3><button class="doc-x">✕</button></div><div class="doc-body"><label class="toggle-line"><span>Auto-start rest timer</span><input id="gymAutoRest" type="checkbox" ${p.autoRest!==false?'checked':''}></label><label class="toggle-line"><span>Sound at zero</span><input id="gymTimerSound" type="checkbox" ${p.timerSound!==false?'checked':''}></label><label class="toggle-line"><span>Vibration</span><input id="gymTimerVibration" type="checkbox" ${p.timerVibration!==false?'checked':''}></label><p class="hint">Timed exercises use seconds. Bodyweight exercises hide kilograms unless you add weight or assistance.</p><button class="m-ok" id="gymTimerSave">Save</button></div></div>`;
+    back.innerHTML=`<div class="modal-card doc-card gym-settings-card"><div class="doc-head"><h3>◆ Gym timers</h3><button class="doc-x">✕</button></div><div class="doc-body"><label class="toggle-line"><span>Auto-start rest timer</span><input id="gymAutoRest" type="checkbox" ${p.autoRest!==false?'checked':''}></label><label class="toggle-line"><span>Sound at zero</span><input id="gymTimerSound" type="checkbox" ${p.timerSound!==false?'checked':''}></label><label class="toggle-line"><span>Vibration</span><input id="gymTimerVibration" type="checkbox" ${p.timerVibration!==false?'checked':''}></label><label class="toggle-line"><span>Minimize after start</span><input id="gymTimerMinimize" type="checkbox" ${p.timerMinimize===true?'checked':''}></label><p class="hint">Timed exercises use seconds. Bodyweight exercises hide kilograms unless you add weight or assistance.</p><button class="m-ok" id="gymTimerSave">Save</button></div></div>`;
     document.body.appendChild(back); requestAnimationFrame(()=>back.classList.add('show')); const close=()=>{back.classList.remove('show');setTimeout(()=>back.remove(),250)}; back.querySelector('.doc-x').onclick=close; back.onclick=x=>{if(x.target===back)close()};
-    back.querySelector('#gymTimerSave').onclick=async()=>{p.autoRest=back.querySelector('#gymAutoRest').checked;p.timerSound=back.querySelector('#gymTimerSound').checked;p.timerVibration=back.querySelector('#gymTimerVibration').checked;await saveGymPrefs(p);close();toast('Gym timer settings saved');}; return;
+    back.querySelector('#gymTimerSave').onclick=async()=>{p.autoRest=back.querySelector('#gymAutoRest').checked;p.timerSound=back.querySelector('#gymTimerSound').checked;p.timerVibration=back.querySelector('#gymTimerVibration').checked;p.timerMinimize=back.querySelector('#gymTimerMinimize').checked;await saveGymPrefs(p);close();toast('Gym timer settings saved');}; return;
   }
   const startTimer=e.target.closest('[data-start-ex-timer]');
   if(startTimer){ const card=startTimer.closest('.ex-card'), input=card.querySelector('.set-live .set-r'), sec=Math.max(1,parseInt(input?.value,10)||parseTarget(card.querySelector('.ex-target')?.textContent).low||30); if(input&&!input.value)input.value=sec; startGymTimer(sec,'exercise',startTimer.dataset.startExTimer); return; }
@@ -1434,7 +1439,7 @@ document.getElementById('workoutBox')?.addEventListener('click', async (e) => {
     const card=log.closest('.ex-card'), row=log.closest('.set-row'), mode=exerciseMode(log.dataset.log), wInput=row.querySelector('.set-w'), rInput=row.querySelector('.set-r');
     const w=parseFloat(String(wInput?.value||'0').replace(',','.'))||0, r=parseInt(rInput?.value,10)||0;
     if(r<=0){toast(mode==='duration'||mode==='duration_weight'?'Type the seconds first ⏱':'Type the reps first 💪');return;}
-    try{const res=await api('/api/gym/set',{quiet:true,body:{date:hoyLocal(),exercise:log.dataset.log,weight:w,reps:r}});S.gym_sets=S.gym_sets||[];S.gym_sets.push({id:res.id,date:hoyLocal(),exercise:log.dataset.log,weight:w,reps:r});const rest=+card.dataset.rest||60;if(gymTimerPrefs().autoRest)startGymTimer(rest,'rest',log.dataset.log);renderWorkout();renderGym();}
+    try{const res=await api('/api/gym/set',{quiet:true,body:{date:hoyLocal(),exercise:log.dataset.log,weight:w,reps:r}});S.gym_sets=S.gym_sets||[];S.gym_sets.push({id:res.id,date:hoyLocal(),exercise:log.dataset.log,weight:w,reps:r});const rest=+card.dataset.rest||60, planned=+card.dataset.plannedSets||1, completed=gymSetsFor(log.dataset.log,hoyLocal()).length;if(gymTimerPrefs().autoRest&&completed<planned){startGymTimer(rest,'rest',log.dataset.log);toast(`Set ${completed} saved · Rest ${rest}s`);}else{stopGymTimer();toast(completed>=planned?'Exercise complete':'Set saved');}renderWorkout();renderGym();}
     catch{toast("Couldn't save that set right now.");}
     return;
   }
