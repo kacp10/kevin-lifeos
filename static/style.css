@@ -3944,3 +3944,50 @@ body.hunter-profile-open {
 .wish-money-grid input:focus,.wishlist-tab input:focus,.wishlist-tab select:focus,.wishlist-tab textarea:focus{border-color:rgba(93,229,178,.58)!important;box-shadow:0 0 0 3px rgba(93,229,178,.09),inset 0 0 0 1px rgba(93,229,178,.08)}
 .wish-money-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
 @media(max-width:520px){.wish-money-grid{grid-template-columns:1fr}.wish-card-actions{display:grid;grid-template-columns:1fr;gap:8px}.wish-card-actions button{width:100%;min-height:42px}}
+
+/* ============================================================
+   V135 · PIRATE POSITION + LEGACY AWAKENINGS
+   Original compact insignias, Hunter structure, pirate/Haki aura.
+   ============================================================ */
+.pirate-badge-svg{display:block;width:92px;height:92px;filter:drop-shadow(0 0 14px rgba(244,201,107,.22))}.pirate-badge-svg.compact{width:58px;height:58px}
+.pirate-position-panel{display:grid!important;grid-template-columns:minmax(0,1.3fr) minmax(240px,.7fr);gap:18px;align-items:center;background:radial-gradient(circle at 8% 25%,rgba(177,63,77,.16),transparent 35%),linear-gradient(145deg,rgba(8,18,26,.97),rgba(10,10,18,.98));border-color:rgba(244,201,107,.28)!important;overflow:hidden;position:relative}
+.pirate-position-panel:after{content:'☠';position:absolute;right:18px;top:-18px;font-size:110px;color:rgba(255,255,255,.025);transform:rotate(-10deg);pointer-events:none}
+.pirate-position-summary{display:flex;align-items:center;gap:16px;min-width:0}.pirate-position-summary h2{margin:3px 0 4px;font-size:clamp(1.35rem,3vw,2rem);letter-spacing:.06em;text-transform:uppercase}.pirate-position-summary p{margin:0;color:var(--muted)}.pirate-position-art{flex:0 0 auto}
+.pirate-position-next{display:grid;gap:8px;position:relative;z-index:1}.pirate-position-next>div:first-child{display:flex;justify-content:space-between;gap:10px;align-items:end}.pirate-position-next span{font-size:.68rem;letter-spacing:.16em;color:var(--gold);font-weight:800}.pirate-position-next b{font-size:.92rem}.pirate-position-next .btn-ghost{justify-self:end}
+.pirate-route-modal{display:grid;gap:10px;max-height:min(65vh,620px);overflow:auto;padding:3px 5px 8px}.pirate-route-rank{display:grid;grid-template-columns:62px 1fr;gap:12px;padding:12px;border:1px solid rgba(255,255,255,.1);border-radius:15px;background:rgba(4,10,15,.72);text-align:left}.pirate-route-rank.current{border-color:rgba(244,201,107,.7);box-shadow:inset 0 0 24px rgba(244,201,107,.08)}.pirate-route-rank.locked{opacity:.62}.pirate-route-rank span{font-size:.62rem;letter-spacing:.13em;color:var(--gold);font-weight:800}.pirate-route-rank h3{margin:2px 0;font-size:1rem;text-transform:uppercase}.pirate-route-rank p,.pirate-route-rank small{margin:0;color:var(--muted);font-size:.78rem}.pirate-route-rank ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}.pirate-route-rank li{display:flex;gap:6px;color:var(--muted);font-size:.72rem}.pirate-route-rank li b{margin-left:auto;color:inherit}.pirate-route-rank li.done{color:var(--green)}
+.pirate-awakening{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:20px;overflow:hidden;background:#02050a;opacity:0;transition:opacity .45s ease}.pirate-awakening.show{opacity:1}.pirate-awakening-sea{position:absolute;inset:0;background:radial-gradient(circle at 50% 68%,rgba(21,88,120,.35),transparent 35%),linear-gradient(180deg,#03040a 0%,#081622 65%,#02050a 100%)}.pirate-awakening-sea:after{content:'';position:absolute;left:-10%;right:-10%;bottom:4%;height:28%;background:repeating-radial-gradient(ellipse at 50% 100%,rgba(71,161,190,.22) 0 2px,transparent 3px 16px);animation:pirateSea 5s linear infinite}
+.pirate-awakening-haki{position:absolute;width:min(94vw,680px);aspect-ratio:1;border-radius:50%;background:repeating-conic-gradient(from 0deg,transparent 0 7deg,rgba(176,34,48,.22) 8deg 9deg,transparent 10deg 18deg);filter:blur(1px);animation:hakiSpin 18s linear infinite}.pirate-awakening-haki:after{content:'';position:absolute;inset:14%;border:2px solid rgba(244,201,107,.3);border-radius:50%;box-shadow:0 0 60px rgba(177,63,77,.55),inset 0 0 55px rgba(244,201,107,.08);animation:hakiPulse 1.8s ease-in-out infinite}
+.pirate-awakening-particles{position:absolute;inset:0;background-image:radial-gradient(circle,#f4c96b 0 1px,transparent 2px),radial-gradient(circle,#b13f4d 0 1px,transparent 2px);background-size:93px 93px,137px 137px;background-position:0 0,30px 20px;animation:particleRise 12s linear infinite;opacity:.55}
+.pirate-awakening-card{position:relative;z-index:2;width:min(92vw,590px);padding:clamp(24px,5vw,48px);border:1px solid rgba(244,201,107,.52);border-radius:24px;text-align:center;background:linear-gradient(160deg,rgba(6,13,20,.95),rgba(15,7,13,.97));box-shadow:0 30px 110px #000,0 0 70px rgba(177,63,77,.28);transform:scale(.82) translateY(30px);transition:transform .65s cubic-bezier(.2,.9,.2,1)}.pirate-awakening.show .pirate-awakening-card{transform:scale(1) translateY(0)}
+.pirate-awakening-kicker{font-size:.7rem;letter-spacing:.28em;color:var(--gold);font-weight:900}.pirate-awakening-emblem{display:grid;place-items:center;margin:14px auto 7px}.pirate-awakening-emblem .pirate-badge-svg{width:150px;height:150px;animation:badgeAwaken 2.4s ease-in-out infinite}.pirate-awakening h1{margin:7px 0;font-size:clamp(2rem,8vw,4.4rem);letter-spacing:.08em;line-height:.95;text-shadow:0 0 25px rgba(244,201,107,.34)}.pirate-awakening p{max-width:480px;margin:14px auto 23px;color:#d8dde4;line-height:1.55;font-size:clamp(.9rem,2vw,1.05rem)}.pirate-awakening .btn-gold{min-width:190px;min-height:48px}
+.pirate-awakening.year365 .pirate-awakening-haki{filter:hue-rotate(55deg)}.pirate-awakening.legacy730 .pirate-awakening-card{border-color:#ffd76a;box-shadow:0 30px 120px #000,0 0 95px rgba(255,215,106,.4)}
+@keyframes pirateSea{to{transform:translateX(8%)}}@keyframes hakiSpin{to{transform:rotate(360deg)}}@keyframes hakiPulse{50%{transform:scale(1.06);opacity:.65}}@keyframes particleRise{to{background-position:0 -600px,30px -900px}}@keyframes badgeAwaken{50%{transform:scale(1.07);filter:drop-shadow(0 0 28px rgba(244,201,107,.55))}}
+@media(max-width:700px){.pirate-position-panel{grid-template-columns:1fr}.pirate-position-summary{align-items:flex-start}.pirate-position-next .btn-ghost{width:100%;justify-self:stretch}.pirate-awakening{padding:12px}.pirate-awakening-card{padding:25px 18px}.pirate-awakening-emblem .pirate-badge-svg{width:118px;height:118px}.pirate-route-rank{grid-template-columns:52px 1fr;padding:10px}.pirate-badge-svg.compact{width:48px;height:48px}}
+@media(prefers-reduced-motion:reduce){.pirate-awakening-sea:after,.pirate-awakening-haki,.pirate-awakening-haki:after,.pirate-awakening-particles,.pirate-awakening-emblem .pirate-badge-svg{animation:none!important}.pirate-awakening-card{transition:none}}
+.brand-profile-entry{position:relative}.brand-pirate-position{display:inline-flex;align-items:center;gap:4px;margin-left:9px;padding:2px 7px 2px 3px;border:1px solid rgba(244,201,107,.28);border-radius:999px;background:rgba(5,12,18,.62);vertical-align:middle;color:var(--gold)}.brand-pirate-position .pirate-badge-svg.compact{width:22px;height:22px}.brand-pirate-position b{font-size:.57rem;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}@media(max-width:600px){.brand-pirate-position{display:flex;width:max-content;margin:4px 0 0;padding-right:6px}.brand-pirate-position .pirate-badge-svg.compact{width:19px;height:19px}}
+
+/* V135 header polish: current pirate position replaces the old helper subtitle. */
+.brand-profile-entry{flex-wrap:nowrap;align-items:center}
+.brand-profile-entry .brand-pirate-position{
+  display:inline-flex!important;
+  align-items:center;
+  gap:4px;
+  margin-left:9px;
+  padding:2px 7px 2px 3px;
+  border:1px solid rgba(244,201,107,.28);
+  border-radius:999px;
+  background:rgba(5,12,18,.62);
+  color:var(--gold);
+  opacity:1;
+  font:inherit;
+  letter-spacing:normal;
+  line-height:1;
+}
+.brand-profile-entry .brand-pirate-position .pirate-badge-svg.compact{width:22px;height:22px;flex:0 0 22px}
+.brand-profile-entry .brand-pirate-position b{font-size:.57rem;letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+@media(max-width:600px){
+  .brand-profile-entry{gap:3px;padding-inline:6px}
+  .brand-profile-entry .brand-pirate-position{margin-left:5px;padding:2px 6px 2px 2px}
+  .brand-profile-entry .brand-pirate-position .pirate-badge-svg.compact{width:19px;height:19px;flex-basis:19px}
+  .brand-profile-entry .brand-pirate-position b{font-size:.54rem}
+}

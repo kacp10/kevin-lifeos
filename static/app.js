@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 134;
+const FRONT_V = 135;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -267,7 +267,7 @@ function pasosInglesDelDia(wd) {
 }
 
 
-// V133 · Independent Word Hunter deck with bilingual meanings, examples and protected English missions
+// V135 · Pirate Position route + legacy milestones; V133 Word Hunter remains independent and protected
 // The learning source is entered manually so the app never invents a book page or topic.
 function languageSourceRows() {
   const pf = S.profile || {};
@@ -4066,6 +4066,32 @@ function rachaHabito(habitId, marks, extraSkipDays = []) {
   return streak;
 }
 
+// Long-term record used by Pirate Position and legacy celebrations.
+// Authorized rests never add days and never break the sequence.
+function maxHistoricalHabitStreak(habit, marks = new Set(S.marks || [])) {
+  const dates = [...marks]
+    .filter(key => String(key).startsWith(`${habit.id}|`))
+    .map(key => String(key).split('|')[1])
+    .filter(Boolean)
+    .sort();
+  if (!dates.length) return 0;
+  const first = new Date(`${dates[0]}T12:00:00`);
+  const last = new Date(`${hoyLocal()}T12:00:00`);
+  const extraSkip = habit.name === 'Exercise' ? [6] : [];
+  let run = 0, best = 0;
+  for (const d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
+    const iso = localISO(d), dow = d.getDay();
+    if (dow === 0 || extraSkip.includes(dow) || isLifeRestDate(iso)) continue;
+    if (marks.has(`${habit.id}|${iso}`)) { run += 1; best = Math.max(best, run); }
+    else run = 0;
+  }
+  return best;
+}
+function maxHistoricalDisciplineStreak() {
+  const marks = new Set(S.marks || []);
+  return Math.max(0, ...(S.habits || []).map(h => maxHistoricalHabitStreak(h, marks)));
+}
+
 function renderHabitos() {
   const today = new Date();
   const ym = hoyLocal().slice(0, 7);
@@ -4522,6 +4548,117 @@ document.addEventListener('click',async(e)=>{
   if(e.target.closest('[data-academy-complete]')&&active){const st=academyReadState();const r=await modal({icon:'◆',title:'Archive learned concept',text:`Register <b>${esc(active.name)}</b> only when you feel you understand it. There is no deadline or streak.`,fields:[{type:'text',placeholder:'Optional: what did you understand?'}],okText:'Archive concept',cancelText:'Keep studying'});if(r===null)return;const today=hoyLocal();st.sessions=(Number(st.sessions)||0)+1;st.history.push({topicId:active.id,name:active.name,domain:active.domain.name,domainKey:active.domain.key,subcategory:active.subcategory,date:today,note:String(r[0]||'').trim().slice(0,300),source:active.source||'built-in'});if(!st.mastered.includes(active.id))st.mastered.push(active.id);if(!st.doneDates.includes(today))st.doneDates.push(today);const next=academyRecommendationFromState(st,academyAllSkills(st));st.activeSkillId=next?.id||'';if(next)st.domain=next.domain.key;await academySaveState(st);renderSkillAcademy();toast('Concept moved to Knowledge Archive');return;}
 });
 
+
+/* ====== V135 · PIRATE POSITION / LEGACY ROUTE ====== */
+const PIRATE_POSITIONS = [
+  { key:'apprentice', name:'Apprentice', subtitle:'The voyage begins', symbol:'rope' },
+  { key:'subordinate', name:'Subordinate', subtitle:'Recognized crew member', symbol:'crew' },
+  { key:'first-officer', name:'First Officer', subtitle:'Authority earned through discipline', symbol:'blade' },
+  { key:'captain', name:'Captain', subtitle:'Command your own system', symbol:'helm' },
+  { key:'supernova', name:'Supernova', subtitle:'A force impossible to ignore', symbol:'star' },
+  { key:'yonko', name:'Yonko', subtitle:'An emperor of conquered territories', symbol:'crown' },
+  { key:'pirate-king', name:'Pirate King', subtitle:'The final position', symbol:'throne' }
+];
+function pirateBadgeSVG(key, compact=false) {
+  const pos=PIRATE_POSITIONS.find(x=>x.key===key)||PIRATE_POSITIONS[0];
+  const glyphs={rope:'M31 18c-8 4-10 14-4 20s17 4 19-5-5-17-15-15zm3 18c9 9 20 11 30 4',crew:'M20 42h48M27 31l8-13 13 13 13-13 8 13',blade:'M24 63L65 22l7 7-41 41zm8-2 8 8',helm:'M18 45h60M48 16v58M25 28l46 34M71 28L25 62',star:'M48 12l9 24 25 1-20 15 7 25-21-14-21 14 7-25-20-15 25-1z',crown:'M17 62l6-35 19 17 8-28 10 28 18-17 1 35z',throne:'M22 69V38l12-18 14 18 14-18 12 18v31M22 49h52'};
+  const accent={apprentice:'#91a6b6',subordinate:'#44d68a','first-officer':'#d7e8ff',captain:'#f4c96b',supernova:'#ff6b72',yonko:'#b77cff','pirate-king':'#ffd76a'}[pos.key];
+  return `<svg class="pirate-badge-svg ${compact?'compact':''}" viewBox="0 0 96 96" role="img" aria-label="${esc(pos.name)} insignia" xmlns="http://www.w3.org/2000/svg"><defs><radialGradient id="pg-${pos.key}" cx="50%" cy="45%"><stop offset="0" stop-color="${accent}" stop-opacity=".34"/><stop offset="1" stop-color="#05070d" stop-opacity="0"/></radialGradient></defs><circle cx="48" cy="48" r="43" fill="url(#pg-${pos.key})" stroke="${accent}" stroke-width="2"/><circle cx="48" cy="48" r="35" fill="#091018" stroke="${accent}" stroke-opacity=".45"/><path d="${glyphs[pos.symbol]}" fill="none" stroke="${accent}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M26 76h44" stroke="${accent}" stroke-width="2" opacity=".55"/></svg>`;
+}
+function pirateReadState() {
+  try {
+    const raw=JSON.parse((S.profile||{}).pirate_position_v1||'{}');
+    const history=Array.isArray(raw.history)?raw.history:[];
+    const claimed=PIRATE_POSITIONS.some(x=>x.key===raw.claimed)?raw.claimed:'apprentice';
+    return {claimed,history:history.length?history:[{key:'apprentice',date:raw.started_at||hoyLocal()}],started_at:raw.started_at||hoyLocal()};
+  } catch (_) { return {claimed:'apprentice',history:[{key:'apprentice',date:hoyLocal()}],started_at:hoyLocal()}; }
+}
+async function pirateSaveState(state) {
+  const value=JSON.stringify(state);
+  await api('/api/profile',{body:{key:'pirate_position_v1',value},quiet:true});
+  S.profile=S.profile||{}; S.profile.pirate_position_v1=value;
+}
+function pirateMetrics() {
+  const conqueredMonths=(S.history||[]).filter(x=>Number(x.pct||0)>=.7).length;
+  const maxStreak=maxHistoricalDisciplineStreak();
+  const achievements=(S.achievement_unlocks||[]).length;
+  const goals=(S.goals||[]).filter(g=>g.status==='Lograda 🏆'||Number(g.pct||0)>=100).length;
+  const courses=(S.courses_done||[]).length;
+  const gymDays=new Set((S.gym_sets||[]).map(x=>x.date).filter(Boolean)).size;
+  const books=(S.books||[]).filter(b=>b.status==='Terminado').length;
+  const englishDays=typeof diasInglesHechos==='function'?diasInglesHechos():0;
+  const debts=(S.debts||[]).filter(d=>(Number(d.initial||0)+compradoEn(d.name)-Number(d.abonado||0))<=0).length;
+  let academyDomains=0; try { const st=academyReadState(), map=new Map(academyAllSkills().map(x=>[x.id,x.domain.key])); academyDomains=new Set((st.mastered||[]).map(id=>map.get(id)).filter(Boolean)).size; } catch(_) {}
+  const domains=[conqueredMonths>=1,gymDays>=7,courses>=1||books>=3,englishDays>=21,goals>=1,debts>=1,academyDomains>=2].filter(Boolean).length;
+  return {conqueredMonths,maxStreak,achievements,goals,courses,gymDays,books,englishDays,debts,academyDomains,domains,haki:hakiLevelFor(conqueredMonths).key};
+}
+function pirateRequirements(metrics=pirateMetrics()) {
+  const r=(label,current,target,done=current>=target)=>({label,current,target,done});
+  return {
+    apprentice:[],
+    subordinate:[r('Conquered Haki months',metrics.conqueredMonths,1),r('Permanent archive records',metrics.achievements,1)],
+    'first-officer':[r('Conquered Haki months',metrics.conqueredMonths,3),r('Historical discipline streak',metrics.maxStreak,30),r('Developed life domains',metrics.domains,3)],
+    captain:[r('Conquered Haki months',metrics.conqueredMonths,6),r('Historical discipline streak',metrics.maxStreak,60),r('Completed expeditions',metrics.goals,2),r('Developed life domains',metrics.domains,4)],
+    supernova:[r('Conquered Haki months',metrics.conqueredMonths,12),r('Historical discipline streak',metrics.maxStreak,120),r('Permanent archive records',metrics.achievements,12),r('Developed life domains',metrics.domains,5)],
+    yonko:[r('Conquered Haki months',metrics.conqueredMonths,24),r('Historical discipline streak',metrics.maxStreak,180),r('Completed expeditions',metrics.goals,5),r('Developed life domains',metrics.domains,6),r("Conqueror's Haki",metrics.haki==='conqueror'?1:0,1)],
+    'pirate-king':[r('Conquered Haki months',metrics.conqueredMonths,36),r('Historical discipline streak',metrics.maxStreak,365),r('Permanent archive records',metrics.achievements,25),r('Completed expeditions',metrics.goals,8),r('Developed life domains',metrics.domains,7)]
+  };
+}
+function piratePositionState() {
+  const saved=pirateReadState(), metrics=pirateMetrics(), requirements=pirateRequirements(metrics);
+  const claimedIndex=Math.max(0,PIRATE_POSITIONS.findIndex(x=>x.key===saved.claimed));
+  let eligibleIndex=0;
+  PIRATE_POSITIONS.forEach((p,i)=>{if((requirements[p.key]||[]).every(x=>x.done)) eligibleIndex=i;});
+  const next=PIRATE_POSITIONS[claimedIndex+1]||null;
+  const nextReq=next?requirements[next.key]:[];
+  const pct=nextReq.length?Math.round(nextReq.reduce((sum,x)=>sum+Math.min(1,Number(x.current||0)/Math.max(1,Number(x.target||1))),0)/nextReq.length*100):100;
+  return {saved,metrics,requirements,claimedIndex,eligibleIndex,current:PIRATE_POSITIONS[claimedIndex],next,nextReq,progress:Math.max(0,Math.min(100,pct)),promotionAvailable:eligibleIndex>claimedIndex};
+}
+function pirateArchiveRecords() {
+  const st=pirateReadState();
+  let legacy={}; try{legacy=JSON.parse((S.profile||{}).pirate_legacy_v1||'{}')}catch(_){}
+  const rows=(st.history||[]).map(x=>({label:`Promoted to ${(PIRATE_POSITIONS.find(p=>p.key===x.key)||PIRATE_POSITIONS[0]).name}`,date:x.date||''}));
+  if(legacy.year365) rows.push({label:'One Year Unbroken',date:legacy.year365});
+  if(legacy.day730) rows.push({label:'Legacy Awakened · 730 days',date:legacy.day730});
+  return rows;
+}
+function applyPirateBrandBadge() {
+  const brand=document.getElementById('openHunterProfile'); if(!brand)return;
+  const st=piratePositionState();
+  // Reuse the former subtitle slot so the position is shown once, beside the brand.
+  brand.querySelectorAll('.brand-pirate-position').forEach((node,index)=>{if(index>0)node.remove();});
+  let badge=brand.querySelector('.brand-pirate-position')||brand.querySelector('small');
+  if(!badge){badge=document.createElement('small');brand.appendChild(badge);}
+  badge.className='brand-pirate-position';
+  badge.setAttribute('aria-label',`Current pirate position: ${st.current.name}`);
+  badge.innerHTML=`${pirateBadgeSVG(st.current.key,true)}<b>${esc(st.current.name)}</b>`;
+}
+function pirateRouteModal() {
+  const st=piratePositionState();
+  const rows=PIRATE_POSITIONS.map((p,i)=>{const req=st.requirements[p.key]||[], unlocked=i<=st.claimedIndex, current=i===st.claimedIndex;return `<article class="pirate-route-rank ${unlocked?'unlocked':'locked'} ${current?'current':''}">${pirateBadgeSVG(p.key,true)}<div><span>${current?'CURRENT POSITION':unlocked?'ARCHIVED':'LOCKED'}</span><h3>${esc(p.name)}</h3><p>${esc(p.subtitle)}</p>${req.length?`<ul>${req.map(x=>`<li class="${x.done?'done':''}">${x.done?'✓':'◇'} ${esc(x.label)} <b>${Math.min(x.current,x.target)}/${x.target}</b></li>`).join('')}</ul>`:'<small>Starting position.</small>'}</div></article>`}).join('');
+  modal({icon:'☠',title:'Pirate Position Route',text:`<div class="pirate-route-modal">${rows}</div><p class="hint">Positions never decrease. Authorized rest days never break discipline records. The app recognizes evidence; you claim each promotion.</p>`,okText:'Close'});
+}
+function pirateCelebrationOverlay({kind='promotion',position=null,title='',message='',onClaim=null}) {
+  document.querySelector('.pirate-awakening')?.remove();
+  const key=position?.key||kind;
+  const art=position?pirateBadgeSVG(position.key):pirateBadgeSVG(kind==='legacy730'?'pirate-king':'supernova');
+  const host=document.createElement('div'); host.className=`pirate-awakening ${kind}`;
+  host.innerHTML=`<div class="pirate-awakening-sea"></div><div class="pirate-awakening-haki"></div><div class="pirate-awakening-particles"></div><section class="pirate-awakening-card" role="dialog" aria-modal="true" aria-label="${esc(title)}"><span class="pirate-awakening-kicker">${kind==='promotion'?'POSITION AWAKENED':'LEGACY MILESTONE'}</span><div class="pirate-awakening-emblem">${art}</div><h1>${esc(title)}</h1><p>${esc(message)}</p><button class="btn-gold" data-claim-pirate>${kind==='promotion'?'Claim position':'Archive milestone'}</button></section>`;
+  document.body.appendChild(host); requestAnimationFrame(()=>host.classList.add('show')); petSayText(title,'celebrate',7000);
+  host.querySelector('[data-claim-pirate]').addEventListener('click',async()=>{const btn=host.querySelector('[data-claim-pirate]');btn.disabled=true;try{if(onClaim)await onClaim();host.classList.remove('show');setTimeout(()=>host.remove(),500);toast(kind==='promotion'?`☠ ${position.name} archived`:'◆ Legacy milestone archived');applyPirateBrandBadge();renderHunterProfile();}catch(e){btn.disabled=false;toast('Could not archive milestone','err');}});
+}
+async function checkPirateCelebrations() {
+  if(document.querySelector('.pirate-awakening'))return true;
+  if(!(S.profile||{}).pirate_position_v1){await pirateSaveState(pirateReadState());applyPirateBrandBadge();}
+  const maxStreak=maxHistoricalDisciplineStreak();
+  let legacy={};try{legacy=JSON.parse((S.profile||{}).pirate_legacy_v1||'{}')}catch(_){}
+  if(maxStreak>=730&&!legacy.day730){pirateCelebrationOverlay({kind:'legacy730',title:'LEGACY AWAKENED',message:'Two years ago, this journey began. Today, we stand one hundred times stronger.',onClaim:async()=>{legacy.day730=hoyLocal();const value=JSON.stringify(legacy);await api('/api/profile',{body:{key:'pirate_legacy_v1',value},quiet:true});S.profile.pirate_legacy_v1=value;}});return true;}
+  if(maxStreak>=365&&!legacy.year365){pirateCelebrationOverlay({kind:'year365',title:'ONE YEAR UNBROKEN',message:'365 valid days of discipline. You are no longer the person who began this journey.',onClaim:async()=>{legacy.year365=hoyLocal();const value=JSON.stringify(legacy);await api('/api/profile',{body:{key:'pirate_legacy_v1',value},quiet:true});S.profile.pirate_legacy_v1=value;}});return true;}
+  const st=piratePositionState();
+  if(st.promotionAvailable){const next=PIRATE_POSITIONS[st.claimedIndex+1];pirateCelebrationOverlay({kind:'promotion',position:next,title:next.name.toUpperCase(),message:next.subtitle+'. Your actions have changed how the crew recognizes you.',onClaim:async()=>{const saved=pirateReadState();saved.claimed=next.key;saved.history=[...(saved.history||[]),{key:next.key,date:hoyLocal()}].filter((x,i,a)=>a.findIndex(y=>y.key===x.key)===i);await pirateSaveState(saved);}});return true;}
+  return false;
+}
+
 function hunterProfileSkillStats() {
   const skillMap=new Map((S.skills||[]).map(x=>[String(x.id),x]));
   const bySkill=new Map();
@@ -4541,6 +4678,7 @@ function renderHunterProfile() {
   const books=(S.books||[]).filter(b=>b.status==='Terminado').length;
   const defeated=(S.debts||[]).filter(d=>(Number(d.initial||0)+compradoEn(d.name)-Number(d.abonado||0))<=0).length;
   const featured=(S.achievement_unlocks||[]).slice(0,4);
+  const pirate=piratePositionState(), pirateRecords=pirateArchiveRecords();
   host.innerHTML=`<div class="hunter-profile-hero"><div><span>HUNTER ASSOCIATION · PRIVATE FILE</span><h1>KEVIN · HUNTER PROFILE</h1><p>A private record of the person your daily systems are building.</p></div><div class="hunter-profile-rank rank-${rank.current.rank}"><small>GLOBAL RANK</small><b>${rank.current.rank}</b><span>${esc(rank.current.title)}</span></div></div>
   <div class="hunter-profile-grid">
     <section class="hunter-profile-license"><div id="hunterProfileLicense"></div></section>
@@ -4549,7 +4687,8 @@ function renderHunterProfile() {
   <section class="hunter-profile-stats"><div><b>${rank.xp}</b><span>Expedition XP</span></div><div><b>${finished}</b><span>Finished courses</span></div><div><b>${skills.length}</b><span>Professional skills</span></div><div><b>${unlocked}</b><span>Archive records</span></div><div><b>${defeated}</b><span>Debts defeated</span></div><div><b>${books}</b><span>Books finished</span></div></section>
   <section class="hunter-profile-section"><div class="row-between"><div><span class="profile-kicker">PROFESSIONAL SKILLS</span><h2>Training evidence</h2></div><small>Backed by finished courses${skills.some(x=>x.practiced)?' and Skill Academy practice':''}.</small></div>${skills.length?`<div class="profile-skill-grid">${skills.map(x=>`<article class="profile-skill-card"><div><b>${esc(x.name)}</b><span>${esc(x.level)}</span></div><p>${x.evidence} completed course${x.evidence===1?'':'s'}${x.practiced?' · Skill Academy mastered':''}</p></article>`).join('')}</div>`:'<div class="profile-empty">Finish a course and record its skills to build your professional profile.</div>'}</section>
   ${pending.length?`<section class="hunter-profile-section pending-review"><div><span class="profile-kicker">SKILLS PENDING REVIEW</span><h2>${pending.length} finished course${pending.length===1?' has':'s have'} no registered skills</h2></div><div class="profile-review-list">${pending.map(c=>`<button data-course-skills="${c.id}"><span>✓ ${esc(c.title)}</span><small>${esc(c.career||'Career')}</small><b>Review skills →</b></button>`).join('')}</div></section>`:''}
-  <section class="hunter-profile-section"><div><span class="profile-kicker">FEATURED ARCHIVE</span><h2>Permanent records</h2></div><div class="profile-featured-achievements">${featured.length?featured.map(x=>`<span>◆ ${esc(String(x.akey||'').replace(/-/g,' '))}</span>`).join(''):'<span>No permanent records unlocked yet.</span>'}</div></section>
+  <section class="hunter-profile-section pirate-position-panel"><div class="pirate-position-summary"><div class="pirate-position-art">${pirateBadgeSVG(pirate.current.key)}</div><div><span class="profile-kicker">PIRATE POSITION</span><h2>${esc(pirate.current.name)}</h2><p>${esc(pirate.current.subtitle)} · ${esc(hakiLevelFor(pirate.metrics.conqueredMonths).name)}</p></div></div><div class="pirate-position-next"><div><span>${pirate.next?'NEXT POSITION':'FINAL POSITION'}</span><b>${pirate.next?esc(pirate.next.name):'The throne is yours'}</b></div><div class="mini-bar green"><i style="width:${pirate.progress}%"></i></div><button class="btn-ghost" data-open-pirate-route>View route</button></div></section>
+  <section class="hunter-profile-section"><div><span class="profile-kicker">FEATURED ARCHIVE</span><h2>Permanent records</h2></div><div class="profile-featured-achievements">${[...pirateRecords.slice(-3).map(x=>`<span>☠ ${esc(x.label)}${x.date?` · ${esc(x.date)}`:''}</span>`),...featured.map(x=>`<span>◆ ${esc(String(x.akey||'').replace(/-/g,' '))}</span>`)].join('')||'<span>No permanent records unlocked yet.</span>'}</div></section>
   <section class="hunter-profile-section knowledge-archive-summary"><div class="row-between"><div><span class="profile-kicker">HUNTER KNOWLEDGE ARCHIVE</span><h2>Learned concepts</h2></div><button class="btn-ghost" data-open-knowledge-archive>Open archive</button></div><p>${academyReadState().history.length} practice record${academyReadState().history.length===1?'':'s'} preserved permanently. Completed topics stay out of the pending catalogue.</p></section>
   <section class="hunter-profile-haki haki-panel">
     <div id="hakiShowcase" class="haki-showcase" aria-live="polite"></div>
@@ -4560,7 +4699,7 @@ function renderHunterProfile() {
 }
 function openHunterProfile(){const screen=document.getElementById('hunterProfileScreen');if(!screen)return;renderHunterProfile();screen.classList.add('open');screen.setAttribute('aria-hidden','false');document.body.classList.add('hunter-profile-open');window.scrollTo({top:0,behavior:'smooth'});}
 function closeHunterProfile(){const screen=document.getElementById('hunterProfileScreen');if(!screen)return;screen.classList.remove('open');screen.setAttribute('aria-hidden','true');document.body.classList.remove('hunter-profile-open');}
-document.addEventListener('click',e=>{if(e.target.closest('#openHunterProfile'))openHunterProfile();if(e.target.closest('#closeHunterProfile'))closeHunterProfile();});
+document.addEventListener('click',e=>{if(e.target.closest('#openHunterProfile'))openHunterProfile();if(e.target.closest('#closeHunterProfile'))closeHunterProfile();if(e.target.closest('[data-open-pirate-route]'))pirateRouteModal();});
 
 function hunterLicenseState() {
   const months = (S.history || []).filter(h => h.pct >= 0.7).length;
@@ -6782,31 +6921,32 @@ function languageLevelCheckAdvice() {
 // It does not invent progress, alter data or call an external AI service.
 function kevinAdvisorMessage() {
   try {
+    const pirateGreeting = `Welcome back, ${piratePositionState().current.name} Kevin. `;
     const reminder = scheduledReminder();
-    if (reminder) return reminder.msg;
+    if (reminder) return pirateGreeting + reminder.msg;
 
     const levelAdvice = languageLevelCheckAdvice();
-    if (levelAdvice) return levelAdvice;
+    if (levelAdvice) return pirateGreeting + levelAdvice;
 
     const academy = academyReadState();
     const active = academyAllSkills().find(x => x.id === academy.activeSkillId);
     const today = hoyLocal();
     if (active && !academy.doneDates.includes(today)) {
       const ix = Math.min(Number(academy.sessions) || 0, active.practices.length - 1);
-      return `🎯 Today's training: ${active.name}. ${active.practices[ix]}`;
+      return pirateGreeting + `🎯 Today's training: ${active.name}. ${active.practices[ix]}`;
     }
 
     const openGoals = (S.goals || [])
       .filter(g => g.status !== 'Lograda 🏆' && Number(g.pct || 0) < 100)
       .sort((a,b) => Number(b.pct || 0) - Number(a.pct || 0));
     const actionable = openGoals.find(g => String(g.next_step || '').trim());
-    if (actionable) return `🗺️ Next expedition move: ${actionable.next_step}`;
+    if (actionable) return pirateGreeting + `🗺️ Next expedition move: ${actionable.next_step}`;
 
     const hakiMonths = (S.history || []).filter(h => Number(h.pct || 0) >= 0.7).length;
-    if (hakiMonths < 2) return `⚡ Hunter License requirement: conquer ${2 - hakiMonths} more Haki month${2 - hakiMonths === 1 ? '' : 's'}.`;
+    if (hakiMonths < 2) return pirateGreeting + `⚡ Hunter License requirement: conquer ${2 - hakiMonths} more Haki month${2 - hakiMonths === 1 ? '' : 's'}.`;
 
     const intel = academyDailyIntel();
-    return `◈ ${intel.domain}: ${intel.text}`;
+    return pirateGreeting + `◈ ${intel.domain}: ${intel.text}`;
   } catch (_error) {
     return 'One deliberate action is enough to move today forward.';
   }
@@ -6842,9 +6982,10 @@ function applyTabImages() {
 
 load().then(() => {
   applyTabImages();
+  applyPirateBrandBadge();
   renderPet();
   // al abrir la app: si hay una cita en la ventana de 3 días, el robot la recuerda; si no, saluda
-  setTimeout(() => { if (!petCheckAppointments()) petSayText(kevinAdvisorMessage(), 'idle', 6500); }, 900);
+  setTimeout(async () => { const celebrated=await checkPirateCelebrations(); if (!celebrated && !petCheckAppointments()) petSayText(kevinAdvisorMessage(), 'idle', 7200); }, 900);
 });
 
 // v102: el respaldo usa una descarga nativa para no depender del estado de la SPA.
