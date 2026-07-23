@@ -19,7 +19,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 134  # V134 preserves cross-month streaks, rest-day logic and mobile visual consistency; must match FRONT_V in static/app.js
+VERSION = 135  # V135 adds the persistent Pirate Position route, robot rank greetings and legacy milestone celebrations; must match FRONT_V in static/app.js
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
