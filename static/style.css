@@ -3954,7 +3954,7 @@ body.hunter-profile-open {
 .pirate-position-panel:after{content:'☠';position:absolute;right:18px;top:-18px;font-size:110px;color:rgba(255,255,255,.025);transform:rotate(-10deg);pointer-events:none}
 .pirate-position-summary{display:flex;align-items:center;gap:16px;min-width:0}.pirate-position-summary h2{margin:3px 0 4px;font-size:clamp(1.35rem,3vw,2rem);letter-spacing:.06em;text-transform:uppercase}.pirate-position-summary p{margin:0;color:var(--muted)}.pirate-position-art{flex:0 0 auto}
 .pirate-position-next{display:grid;gap:8px;position:relative;z-index:1}.pirate-position-next>div:first-child{display:flex;justify-content:space-between;gap:10px;align-items:end}.pirate-position-next span{font-size:.68rem;letter-spacing:.16em;color:var(--gold);font-weight:800}.pirate-position-next b{font-size:.92rem}.pirate-position-next .btn-ghost{justify-self:end}
-.pirate-route-modal{display:grid;gap:10px;max-height:min(65vh,620px);overflow:auto;padding:3px 5px 8px}.pirate-route-rank{display:grid;grid-template-columns:62px 1fr;gap:12px;padding:12px;border:1px solid rgba(255,255,255,.1);border-radius:15px;background:rgba(4,10,15,.72);text-align:left}.pirate-route-rank.current{border-color:rgba(244,201,107,.7);box-shadow:inset 0 0 24px rgba(244,201,107,.08)}.pirate-route-rank.locked{opacity:.62}.pirate-route-rank span{font-size:.62rem;letter-spacing:.13em;color:var(--gold);font-weight:800}.pirate-route-rank h3{margin:2px 0;font-size:1rem;text-transform:uppercase}.pirate-route-rank p,.pirate-route-rank small{margin:0;color:var(--muted);font-size:.78rem}.pirate-route-rank ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}.pirate-route-rank li{display:flex;gap:6px;color:var(--muted);font-size:.72rem}.pirate-route-rank li b{margin-left:auto;color:inherit}.pirate-route-rank li.done{color:var(--green)}
+.pirate-route-modal{display:grid;gap:10px;max-height:none;overflow:visible;padding:3px 5px 8px}.pirate-route-rank{display:grid;grid-template-columns:62px 1fr;gap:12px;padding:12px;border:1px solid rgba(255,255,255,.1);border-radius:15px;background:rgba(4,10,15,.72);text-align:left}.pirate-route-rank.current{border-color:rgba(244,201,107,.7);box-shadow:inset 0 0 24px rgba(244,201,107,.08)}.pirate-route-rank.locked{opacity:.62}.pirate-route-rank span{font-size:.62rem;letter-spacing:.13em;color:var(--gold);font-weight:800}.pirate-route-rank h3{margin:2px 0;font-size:1rem;text-transform:uppercase}.pirate-route-rank p,.pirate-route-rank small{margin:0;color:var(--muted);font-size:.78rem}.pirate-route-rank ul{list-style:none;margin:8px 0 0;padding:0;display:grid;gap:4px}.pirate-route-rank li{display:flex;gap:6px;color:var(--muted);font-size:.72rem}.pirate-route-rank li b{margin-left:auto;color:inherit}.pirate-route-rank li.done{color:var(--green)}
 .pirate-awakening{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:20px;overflow:hidden;background:#02050a;opacity:0;transition:opacity .45s ease}.pirate-awakening.show{opacity:1}.pirate-awakening-sea{position:absolute;inset:0;background:radial-gradient(circle at 50% 68%,rgba(21,88,120,.35),transparent 35%),linear-gradient(180deg,#03040a 0%,#081622 65%,#02050a 100%)}.pirate-awakening-sea:after{content:'';position:absolute;left:-10%;right:-10%;bottom:4%;height:28%;background:repeating-radial-gradient(ellipse at 50% 100%,rgba(71,161,190,.22) 0 2px,transparent 3px 16px);animation:pirateSea 5s linear infinite}
 .pirate-awakening-haki{position:absolute;width:min(94vw,680px);aspect-ratio:1;border-radius:50%;background:repeating-conic-gradient(from 0deg,transparent 0 7deg,rgba(176,34,48,.22) 8deg 9deg,transparent 10deg 18deg);filter:blur(1px);animation:hakiSpin 18s linear infinite}.pirate-awakening-haki:after{content:'';position:absolute;inset:14%;border:2px solid rgba(244,201,107,.3);border-radius:50%;box-shadow:0 0 60px rgba(177,63,77,.55),inset 0 0 55px rgba(244,201,107,.08);animation:hakiPulse 1.8s ease-in-out infinite}
 .pirate-awakening-particles{position:absolute;inset:0;background-image:radial-gradient(circle,#f4c96b 0 1px,transparent 2px),radial-gradient(circle,#b13f4d 0 1px,transparent 2px);background-size:93px 93px,137px 137px;background-position:0 0,30px 20px;animation:particleRise 12s linear infinite;opacity:.55}
@@ -3990,4 +3990,53 @@ body.hunter-profile-open {
   .brand-profile-entry .brand-pirate-position{margin-left:5px;padding:2px 6px 2px 2px}
   .brand-profile-entry .brand-pirate-position .pirate-badge-svg.compact{width:19px;height:19px;flex-basis:19px}
   .brand-profile-entry .brand-pirate-position b{font-size:.54rem}
+}
+/* V135 style fix · Pirate Position Route uses only the parent modal scroll. */
+@media(max-width:700px){
+  .modal-card:has(.pirate-route-modal){
+    width:min(94vw,560px);
+    max-height:calc(100dvh - 24px);
+    padding:18px 14px 16px;
+    overscroll-behavior:contain;
+  }
+  .pirate-route-modal{
+    width:100%;
+    min-width:0;
+    padding:2px 0 8px;
+  }
+  .pirate-route-rank{
+    grid-template-columns:44px minmax(0,1fr);
+    gap:10px;
+    min-width:0;
+  }
+  .pirate-route-rank>div{min-width:0}
+  .pirate-route-rank h3,
+  .pirate-route-rank p,
+  .pirate-route-rank li{overflow-wrap:anywhere}
+  .pirate-route-rank li{align-items:flex-start}
+  .pirate-route-rank li b{white-space:nowrap}
+}
+
+/* V135 style fix · Pirate skull remains an internal shadow on every screen. */
+.pirate-position-panel::after{
+  top:50%;
+  right:12px;
+  transform:translateY(-50%) rotate(-10deg);
+  color:rgba(255,255,255,.025);
+  opacity:1;
+  line-height:1;
+  filter:blur(.2px) drop-shadow(0 0 18px rgba(177,63,77,.08));
+  z-index:0;
+}
+.pirate-position-panel > *{position:relative;z-index:1}
+@media(max-width:700px){
+  .pirate-position-panel::after{
+    top:auto;
+    right:-4px;
+    bottom:-18px;
+    transform:rotate(-12deg);
+    font-size:92px;
+    color:rgba(255,255,255,.022);
+    filter:blur(.35px) drop-shadow(0 0 14px rgba(177,63,77,.07));
+  }
 }
