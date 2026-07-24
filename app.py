@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 138  # V138 stabilizes Hunter Library book modals and forces a fresh frontend cache; must match FRONT_V in static/app.js
+VERSION = 139  # V139 fixes book creation on PostgreSQL and adds explicit subcategory selection; must match FRONT_V in static/app.js
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -3136,11 +3136,27 @@ def book_new():
         pages = max(0, int(j.get('pages') or 0))
     except (TypeError, ValueError):
         pages = 0
-    cur = db().execute('INSERT INTO books (title,status,pages,author,category,subcategory,cover_url,external_id,cover_source) VALUES (?,?,?,?,?,?,?,?,?)',
-                       (title,status,pages,*vals))
-    db().commit()
-    book_id = int(cur.lastrowid)
-    created = db().execute('SELECT * FROM books WHERE id=?', (book_id,)).fetchone()
+    con = db()
+    try:
+        params = (title, status, pages, *vals)
+        if db_layer.IS_PG:
+            # PostgreSQL cursors do not expose sqlite's lastrowid. RETURNING keeps
+            # the same record and preserves all existing book progress/data.
+            row = con.execute(
+                'INSERT INTO books (title,status,pages,author,category,subcategory,cover_url,external_id,cover_source) '
+                'VALUES (?,?,?,?,?,?,?,?,?) RETURNING id', params).fetchone()
+            book_id = int(row['id'])
+        else:
+            cur = con.execute(
+                'INSERT INTO books (title,status,pages,author,category,subcategory,cover_url,external_id,cover_source) '
+                'VALUES (?,?,?,?,?,?,?,?,?)', params)
+            book_id = int(cur.lastrowid)
+        con.commit()
+    except Exception:
+        con.rollback()
+        logger.exception('Book creation failed for title=%r', title)
+        return jsonify(error='The book could not be created. Reload the app and try again.'), 500
+    created = con.execute('SELECT * FROM books WHERE id=?', (book_id,)).fetchone()
     return jsonify(ok=True, id=book_id, book=dict(created) if created else {'id': book_id, 'title': title})
 
 
