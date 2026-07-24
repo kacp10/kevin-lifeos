@@ -4287,3 +4287,54 @@ body.hunter-profile-open {
   .book-detail-actions{grid-template-columns:1fr}
   .book-detail-actions .del-x{grid-column:auto}
 }
+
+/* V138 · Hunter Library history + reading curve restored */
+.library-archive-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hunter-icon-action{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:42px;white-space:nowrap}
+.hunter-icon-action span{font-size:1rem;filter:drop-shadow(0 0 7px rgba(91,255,157,.35))}
+.reading-history-modal,.reading-curve-modal{text-align:left}
+.reading-history-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:8px 0 14px}
+.reading-history-stats>div{padding:13px;border:1px solid rgba(95,230,158,.22);border-radius:14px;background:linear-gradient(145deg,rgba(8,24,21,.88),rgba(23,18,44,.78));box-shadow:inset 0 0 18px rgba(50,255,156,.035)}
+.reading-history-stats b{display:block;color:#f6bd39;font-size:1.22rem}
+.reading-history-stats span{display:block;margin-top:3px;color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.08em}
+.reading-year-warning{margin:8px 0 12px;padding:10px 12px;border:1px solid rgba(246,189,57,.25);border-radius:12px;background:rgba(246,189,57,.08);color:#f7d479}
+.reading-year-list{display:grid;gap:9px}
+.reading-year-group{padding:12px 13px;border:1px solid rgba(126,105,195,.25);border-radius:14px;background:rgba(12,15,29,.62)}
+.reading-year-group header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px}
+.reading-year-group header b{color:#76f2ae;font-size:1rem}
+.reading-year-group header span{color:var(--muted);font-size:.82rem}
+.reading-year-group>div{display:flex;flex-wrap:wrap;gap:6px}
+.reading-year-group>div span{padding:5px 8px;border-radius:999px;background:rgba(91,255,157,.07);border:1px solid rgba(91,255,157,.12);font-size:.78rem;line-height:1.25}
+.hunter-empty-note{padding:18px;border:1px dashed rgba(126,105,195,.28);border-radius:14px;color:var(--muted);text-align:center}
+.reading-curve-peak{margin-bottom:10px;padding:10px 12px;border:1px solid rgba(246,189,57,.22);border-radius:12px;background:rgba(246,189,57,.07)}
+.reading-curve-scroll{overflow-x:auto;border:1px solid rgba(95,230,158,.16);border-radius:15px;background:linear-gradient(180deg,rgba(7,21,19,.82),rgba(17,14,35,.82));padding:8px}
+.reading-curve-scroll svg{display:block;width:100%;min-width:420px;height:auto;color:#66e89e}
+.reading-curve-line{stroke:#f6bd39;stroke-width:4;stroke-linecap:round;stroke-linejoin:round;filter:drop-shadow(0 0 5px rgba(246,189,57,.32))}
+.reading-curve-dot{fill:#6af0a4;filter:drop-shadow(0 0 4px rgba(106,240,164,.42))}
+@media(max-width:760px){
+ .library-archive-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%}
+ .library-archive-actions [data-book-missing]{grid-column:1/-1;width:100%}
+ .hunter-icon-action{width:100%;min-width:0}
+ .reading-history-stats{grid-template-columns:1fr 1fr}
+}
+@media(max-width:420px){
+ .reading-history-stats{grid-template-columns:1fr}
+ .reading-year-group header{align-items:flex-start;flex-direction:column;gap:3px}
+}
+
+/* V138 UI polish — subdued +10 reading action */
+.hunter-book-actions .book-plus-btn,
+.book-detail-actions .book-plus-btn{
+  background:linear-gradient(145deg,rgba(85,113,103,.16),rgba(21,30,34,.72));
+  border-color:rgba(114,199,164,.24);
+  color:#cce9dd;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.035);
+}
+.hunter-book-actions .book-plus-btn:hover,
+.book-detail-actions .book-plus-btn:hover{
+  background:linear-gradient(145deg,rgba(95,137,120,.22),rgba(24,36,39,.82));
+  border-color:rgba(114,199,164,.42);
+  color:#effbf6;
+}
+.hunter-book-actions .book-plus-btn:active,
+.book-detail-actions .book-plus-btn:active{transform:translateY(1px)}
