@@ -427,25 +427,10 @@
   <div id="animeArchive" class="anime-archive-grid"></div>
 </section>
 
-<!-- ============ LIBROS ============ -->
+<!-- ============ HUNTER LIBRARY ============ -->
 <section id="tab-libros" class="tab">
-  <h1>📚 Books</h1>
-  <form id="bookNew" class="abono-form" style="margin-bottom:14px">
-    <input id="bkTitle" placeholder="Book title" required>
-    <button class="btn-gold" type="submit">+ Add book</button>
-  </form>
-  <div class="anime-filter" id="bookFilter">
-    <button data-f="all" class="active">All</button>
-    <button data-f="Por comprar">To buy</button>
-    <button data-f="Por leer">To read</button>
-    <button data-f="Leyendo">Reading</button>
-    <button data-f="Terminado">Finished</button>
-  </div>
-  <div class="abono-form" style="margin:0 0 14px">
-    <button class="btn-gold" type="button" id="bookHistoryBtn">📚 History by year</button>
-    <button class="btn-ghost" type="button" id="bookChartBtn">📈 Reading curve</button>
-  </div>
-  <div class="panel scroll-x"><table class="table" id="bookTable"></table></div>
+  <div class="tab-title-row"><h1>📚 Hunter Library</h1><button class="btn-gold" type="button" data-book-add>+ Add book</button></div>
+  <div id="bookLibrary"></div>
 </section>
 
 <!-- ============ ACHIEVEMENTS ============ -->
