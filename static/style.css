@@ -4240,3 +4240,50 @@ body.hunter-profile-open {
   .anime-cover-recovery { grid-template-columns:1fr; }
   .anime-cover-recovery .anime-cover-stop { grid-column:1; }
 }
+
+/* V137 · Hunter Library */
+.tab-title-row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}.tab-title-row h1{margin:0}
+.hunter-library-hero{position:relative;display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:18px;border:1px solid rgba(215,168,75,.32);border-radius:18px;background:linear-gradient(135deg,rgba(15,28,25,.96),rgba(10,15,19,.96));overflow:hidden}.hunter-library-hero:after{content:'📚';position:absolute;right:18px;bottom:-24px;font-size:92px;opacity:.045;filter:grayscale(1)}.hunter-library-hero span,.book-detail-hero small{font-size:.72rem;letter-spacing:.18em;color:var(--accent,#d7a84b)}.hunter-library-hero h2{margin:4px 0}.hunter-library-hero p{margin:0;opacity:.7}
+.current-reading-grid,.hunter-book-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px;margin-top:14px}.current-reading-grid{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.hunter-book-card{display:grid;grid-template-columns:92px minmax(0,1fr);gap:13px;padding:12px;border:1px solid rgba(255,255,255,.09);border-radius:16px;background:rgba(8,14,16,.78);cursor:pointer;transition:transform .18s,border-color .18s}.hunter-book-card:hover{transform:translateY(-2px);border-color:rgba(215,168,75,.4)}.hunter-book-card.compact{border-color:rgba(70,220,150,.25)}
+.hunter-book-cover{width:92px;aspect-ratio:2/3;border-radius:10px;overflow:hidden;background:linear-gradient(150deg,rgba(215,168,75,.18),rgba(30,70,62,.35));display:grid;place-items:center;font-size:2rem}.hunter-book-cover.large{width:126px}.hunter-book-cover img{width:100%;height:100%;object-fit:cover}.hunter-book-cover.cover-failed:after{content:'📚';font-size:2rem}
+.hunter-book-info{min-width:0}.hunter-book-info small{display:block;color:#83d8b4;font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hunter-book-info h3{margin:5px 0 2px;font-size:1rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hunter-book-info p{margin:0 0 8px;opacity:.65;font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hunter-book-progress{height:5px;border-radius:999px;background:rgba(255,255,255,.08);overflow:hidden;margin:9px 0 6px}.hunter-book-progress i{display:block;height:100%;background:linear-gradient(90deg,#4dd49b,#d7a84b)}.hunter-book-meta,.hunter-book-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:.76rem}.hunter-book-actions{margin-top:9px}.hunter-book-actions button{min-height:34px;padding:6px 10px;flex:1}
+.library-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:15px 0}.library-toolbar .anime-filter{flex:1}.library-toolbar select{min-height:40px;background:rgba(8,14,16,.9);color:inherit;border:1px solid rgba(215,168,75,.28);border-radius:10px;padding:0 10px}
+.hunter-book-detail{width:min(720px,94vw);max-height:88vh;overflow-y:auto}.book-detail-hero{display:flex;gap:18px;align-items:flex-start;margin-bottom:16px}.book-detail-hero h2{margin:5px 0}.book-detail-hero p{margin:0 0 7px;opacity:.72}.inline-edit{border:0;background:transparent;color:var(--accent,#d7a84b);cursor:pointer}.book-detail-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.book-detail-fields label{display:grid;gap:5px;font-size:.75rem;opacity:.86}.book-detail-fields input,.book-detail-fields select{width:100%;min-height:42px;background:rgba(8,14,16,.92);color:inherit;border:1px solid rgba(215,168,75,.25);border-radius:10px;padding:8px}.book-detail-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px}.book-detail-actions>*{flex:1;min-width:120px}
+@media(max-width:600px){.tab-title-row{align-items:center}.tab-title-row h1{font-size:1.25rem}.current-reading-grid,.hunter-book-grid{grid-template-columns:1fr}.hunter-book-card{grid-template-columns:78px minmax(0,1fr)}.hunter-book-cover{width:78px}.library-toolbar{display:grid;grid-template-columns:1fr}.library-toolbar .anime-filter{overflow-x:auto;display:flex;flex-wrap:nowrap}.book-detail-hero{gap:12px}.hunter-book-cover.large{width:96px}.book-detail-fields{grid-template-columns:1fr}.hunter-book-detail{width:100%;max-height:92dvh;border-radius:18px 18px 0 0;margin-top:auto}.book-detail-actions>*{min-width:calc(50% - 6px)}}
+
+/* V138 hotfix · Hunter Library clarity and symmetry */
+.book-cover-target{display:inline-block;margin:0 0 7px;color:#dfe9e5;font-size:.9rem;line-height:1.45}.book-cover-target b{color:#f4c454;overflow-wrap:anywhere}
+.hunter-book-info{display:flex;flex-direction:column;min-height:100%}
+.hunter-book-info h3{margin:5px 0 4px;font-size:1rem;line-height:1.24;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;word-break:normal}
+.hunter-book-info p{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.3}
+.hunter-book-progress{margin-top:auto}
+.hunter-book-actions{align-self:stretch}
+.hunter-book-actions button{display:flex;align-items:center;justify-content:center}
+.hunter-book-detail{padding:24px}
+.book-detail-hero{display:grid;grid-template-columns:126px minmax(0,1fr);align-items:center;gap:22px;padding:4px 2px 18px;border-bottom:1px solid rgba(255,255,255,.08)}
+.book-detail-hero>div:last-child{min-width:0}
+.book-detail-hero h2{display:flex;align-items:flex-start;gap:8px;margin:6px 0;font-size:clamp(1.25rem,3vw,1.8rem);line-height:1.18;overflow-wrap:anywhere}
+.book-detail-hero h2 .inline-edit{flex:0 0 auto;margin-top:1px}
+.book-detail-hero p,.book-detail-hero span{overflow-wrap:anywhere}
+.book-detail-fields{margin-top:18px;align-items:end}
+.book-detail-fields label{min-width:0}
+.book-detail-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-items:stretch}
+.book-detail-actions>*{min-width:0;min-height:42px;display:flex;align-items:center;justify-content:center}
+@media(max-width:600px){
+  .hunter-book-card{align-items:start}
+  .hunter-book-info h3{font-size:.98rem}
+  .hunter-book-detail{padding:20px 16px 18px}
+  .book-detail-hero{grid-template-columns:88px minmax(0,1fr);gap:14px;align-items:start}
+  .hunter-book-cover.large{width:88px}
+  .book-detail-hero h2{font-size:1.18rem}
+  .book-detail-actions{grid-template-columns:1fr 1fr}
+  .book-detail-actions .del-x{grid-column:1/-1}
+}
+@media(max-width:390px){
+  .book-detail-hero{grid-template-columns:1fr;text-align:center}
+  .hunter-book-cover.large{width:104px;margin:0 auto}
+  .book-detail-hero h2{justify-content:center}
+  .book-detail-actions{grid-template-columns:1fr}
+  .book-detail-actions .del-x{grid-column:auto}
+}

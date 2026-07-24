@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 136;
+const FRONT_V = 138;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -4484,7 +4484,7 @@ const ACADEMY_DOMAINS = [
 const ACADEMY_TARGET = 7;
 function academyBuiltinSkills(){return ACADEMY_DOMAINS.flatMap(d=>d.topics.map(t=>({domain:d,id:t[0],name:t[1],subcategory:t[2],summary:t[3],questions:t[4],books:t[5],source:'built-in',practices:[`Research ${t[1]} and answer the guiding questions.`]})));}
 function academyReadState(){
-  const raw=(S.profile||{}).hunter_academy_state;let st={activeSkillId:'',sessions:0,doneDates:[],mastered:[],startedOn:hoyLocal(),domain:'mind',history:[],saved:[],intelLang:'en',customTopics:[],importedPacks:[]};
+  const raw=(S?.profile||{}).hunter_academy_state;let st={activeSkillId:'',sessions:0,doneDates:[],mastered:[],startedOn:hoyLocal(),domain:'mind',history:[],saved:[],intelLang:'en',customTopics:[],importedPacks:[]};
   if(raw){try{st={...st,...JSON.parse(raw)}}catch(_e){}}
   st.history=Array.isArray(st.history)?st.history:[];st.saved=Array.isArray(st.saved)?st.saved:[];st.mastered=Array.isArray(st.mastered)?st.mastered:[];st.doneDates=Array.isArray(st.doneDates)?st.doneDates:[];st.customTopics=Array.isArray(st.customTopics)?st.customTopics:[];st.importedPacks=Array.isArray(st.importedPacks)?st.importedPacks:[];
   const all=academyAllSkills(st);if(!all.some(x=>x.id===st.activeSkillId)){const first=academyRecommendationFromState(st,all);st.activeSkillId=first?.id||'';st.domain=first?.domain?.key||st.domain;}
@@ -4697,7 +4697,7 @@ function renderHunterProfile() {
   renderHunterLicense('hunterProfileLicense');
   renderHaki();
 }
-function openHunterProfile(){const screen=document.getElementById('hunterProfileScreen');if(!screen)return;renderHunterProfile();screen.classList.add('open');screen.setAttribute('aria-hidden','false');document.body.classList.add('hunter-profile-open');window.scrollTo({top:0,behavior:'smooth'});}
+function openHunterProfile(){const screen=document.getElementById('hunterProfileScreen');if(!screen)return;if(!S){toast('Hunter Profile is still loading…','warn');return;}renderHunterProfile();screen.classList.add('open');screen.setAttribute('aria-hidden','false');document.body.classList.add('hunter-profile-open');window.scrollTo({top:0,behavior:'smooth'});}
 function closeHunterProfile(){const screen=document.getElementById('hunterProfileScreen');if(!screen)return;screen.classList.remove('open');screen.setAttribute('aria-hidden','true');document.body.classList.remove('hunter-profile-open');}
 document.addEventListener('click',e=>{if(e.target.closest('#openHunterProfile'))openHunterProfile();if(e.target.closest('#closeHunterProfile'))closeHunterProfile();if(e.target.closest('[data-open-pirate-route]'))pirateRouteModal();});
 
@@ -4774,7 +4774,7 @@ const HUNTER_GLOBAL_RANKS = [
   { rank:'S', min:1000, title:'Dark Continent Hunter' }
 ];
 function hunterGlobalRankState() {
-  const goals = S.goals || [];
+  const goals = S?.goals || [];
   const xp = Math.round(goals.reduce((sum, g) => sum + Math.max(0, Math.min(100, Number(g.pct || 0))), 0));
   let currentIndex = 0;
   HUNTER_GLOBAL_RANKS.forEach((r, i) => { if (xp >= r.min) currentIndex = i; });
@@ -5036,7 +5036,7 @@ function renderHakiChart() {
 
 /* ---------- METAS ---------- */
 function renderGoals() {
-  const goals = S.goals || [];
+  const goals = S?.goals || [];
   const won = goals.filter(g => g.status === 'Lograda 🏆').length;
   const fuego = goals.filter(g => g.status === 'En proceso 🔥').length;
   const pending = goals.filter(g => g.status === 'Pendiente').length;
@@ -6636,133 +6636,78 @@ document.addEventListener('change', async e => {
 });
 
 
-/* ---------- LIBROS ---------- */
-let BOOK_FILTRO = 'all';
-const BOOK_STATES = [
-  ['Por comprar', 'To buy'], ['Por leer', 'To read'],
-  ['Leyendo', 'Reading'], ['Terminado', 'Finished']
-];
-function finishedBooksByYear() {
-  const grouped = new Map();
-  (S.books || []).forEach(b => {
-    if (b.status !== 'Terminado') return;
-    const year = Number(b.read_year || 0);
-    if (!Number.isInteger(year) || year < 1900) return;
-    if (!grouped.has(year)) grouped.set(year, []);
-    grouped.get(year).push(b);
-  });
-  grouped.forEach(books => books.sort((a, b) => String(a.title || '').localeCompare(String(b.title || ''), 'es')));
-  return [...grouped.entries()].sort((a, b) => a[0] - b[0]);
+/* ---------- HUNTER LIBRARY · BOOKS ---------- */
+let BOOK_FILTRO='all', BOOK_CATEGORY='all';
+const BOOK_STATES=[['Por comprar','To buy'],['Por leer','To read'],['Leyendo','Reading'],['Terminado','Finished']];
+const BOOK_CATEGORIES={
+  'Technology':['Programming','Data & AI','Cloud & DevOps','Cybersecurity','Hardware & Software'],
+  'Human Mind':['Psychology','Neuroscience','Personal Development'],
+  'World & Culture':['History','International Relations','Countries & Cultures','General Knowledge'],
+  'Finance & Business':['Personal Finance','Economics','Business'],
+  'Science':['Physics','Chemistry','Mathematics'],
+  'Learning':['Study Techniques','Productivity','Critical Thinking'],
+  'Literature':['Fiction','Classic Literature','Poetry'],
+  'Biography':['Biography','Memoir'],
+  'English':['Grammar','Vocabulary','Reading Practice'],
+  'Other':['General']
+};
+function bookCover(b){return String(b?.cover_url||'').trim();}
+function bookProgress(b){const pages=+b.pages||0,current=b.status==='Terminado'?pages:(+b.current||0);return pages?Math.min(100,Math.round(current/pages*100)):0;}
+function bookCategoryOptions(selected=''){return Object.keys(BOOK_CATEGORIES).map(c=>`<option ${c===selected?'selected':''}>${esc(c)}</option>`).join('');}
+function bookSubOptions(category,selected=''){return (BOOK_CATEGORIES[category]||['General']).map(c=>`<option ${c===selected?'selected':''}>${esc(c)}</option>`).join('');}
+function bookCard(b,compact=false){const p=bookProgress(b),cover=bookCover(b);return `<article class="hunter-book-card ${compact?'compact':''}" data-book-card-id="${b.id}">
+  <div class="hunter-book-cover">${cover?`<img src="${esc(cover)}" alt="${esc(b.title)}" loading="lazy" onerror="this.closest('.hunter-book-cover').classList.add('cover-failed');this.remove()">`:'<span>📚</span>'}</div>
+  <div class="hunter-book-info"><small>${esc(b.category||'General Knowledge')}${b.subcategory?' · '+esc(b.subcategory):''}</small><h3>${esc(b.title)}</h3>${b.author?`<p>${esc(b.author)}</p>`:''}
+  <div class="hunter-book-progress"><i style="width:${p}%"></i></div><div class="hunter-book-meta"><span>${esc(BOOK_STATES.find(x=>x[0]===b.status)?.[1]||b.status||'To read')}</span><b>${+b.current||0}${b.pages?' / '+b.pages:''}</b></div>
+  <div class="hunter-book-actions">${b.status==='Leyendo'?`<button type="button" class="btn-gold" data-book-plus="${b.id}">+10 pages</button>`:''}<button type="button" class="btn-ghost" data-book-open="${b.id}">Open</button></div></div></article>`;}
+function renderLibros(){
+ const all=S.books||[], reading=all.filter(b=>b.status==='Leyendo');
+ const filtered=all.filter(b=>(BOOK_FILTRO==='all'||b.status===BOOK_FILTRO)&&(BOOK_CATEGORY==='all'||(b.category||'General Knowledge')===BOOK_CATEGORY));
+ const counts={};all.forEach(b=>{const c=b.category||'General Knowledge';counts[c]=(counts[c]||0)+1;});
+ const host=$('#bookLibrary'); if(!host)return;
+ host.innerHTML=`<section class="hunter-library-hero"><div><span>HUNTER LIBRARY</span><h2>${reading.length?'Current reading':'Your personal archive'}</h2><p>${all.filter(b=>b.status==='Terminado').length} finished · ${reading.length} reading · ${all.filter(b=>b.status==='Por leer').length} pending</p></div><button class="academy-help" data-book-help>?</button></section>
+ ${reading.length?`<div class="current-reading-grid">${reading.slice(0,3).map(b=>bookCard(b,true)).join('')}</div>`:''}
+ <div class="library-toolbar"><div id="bookFilter" class="anime-filter">${[['all','All'],...BOOK_STATES].map(([v,t])=>`<button data-f="${v}" class="${BOOK_FILTRO===v?'active':''}">${t}</button>`).join('')}</div><select id="bookCategoryFilter"><option value="all">All categories</option>${Object.keys(counts).sort().map(c=>`<option value="${esc(c)}" ${BOOK_CATEGORY===c?'selected':''}>${esc(c)} · ${counts[c]}</option>`).join('')}</select><button class="btn-ghost" data-book-missing>Find missing covers</button></div>
+ <div class="hunter-book-grid">${filtered.map(b=>bookCard(b)).join('')||'<div class="academy-empty-route">No books in this view.</div>'}</div>`;
 }
-function renderLibros() {
-  const pasa = (b) => BOOK_FILTRO === 'all' || (b.status || 'Por leer') === BOOK_FILTRO;
-  const lista = (S.books || []).filter(pasa);
-  const currentYear = new Date().getFullYear();
-  $('#bookTable').innerHTML =
-    '<tr><th>Title</th><th>Status</th><th>Year read</th><th>Pages</th><th>On page</th><th>Progress</th><th></th></tr>' +
-    lista.map(b => {
-      const p = b.pages ? Math.min((b.status === 'Terminado' ? b.pages : b.current) / b.pages, 1) : 0;
-      const year = Number(b.read_year || 0);
-      const needsYear = b.status === 'Terminado' && !year;
-      return `<tr class="${needsYear ? 'book-needs-year' : ''}"><td>${esc(b.title)}${needsYear ? '<span class="book-year-missing">Year needed</span>' : ''}</td>
-        <td><select class="book-status" data-id="${b.id}">
-          ${BOOK_STATES.map(([v, t]) => `<option value="${v}" ${v === b.status ? 'selected' : ''}>${t}</option>`).join('')}
-        </select></td>
-        <td><input class="book-year pg-input" type="number" min="1900" max="${currentYear}" placeholder="year" value="${year || ''}" data-id="${b.id}" data-f="read_year" title="Year this book was finished"></td>
-        <td><input class="pg-input" type="number" min="0" placeholder="total" value="${b.pages || ''}" data-id="${b.id}" data-f="pages"></td>
-        <td><input class="pg-input" type="number" min="0" placeholder="page" value="${b.current || ''}" data-id="${b.id}" data-f="current"></td>
-        <td><div class="mini-bar green" style="width:90px"><i style="width:${p * 100}%"></i></div></td>
-        <td><button class="del-x" data-type="book" data-id="${b.id}">✕</button></td></tr>`;
-    }).join('');
-}
-function showBookHistory() {
-  const groups = finishedBooksByYear().slice().reverse();
-  const finished = (S.books || []).filter(b => b.status === 'Terminado');
-  const unassigned = finished.filter(b => !Number(b.read_year || 0)).length;
-  const total = groups.reduce((sum, [, books]) => sum + books.length, 0);
-  const best = groups.length ? groups.reduce((a, b) => b[1].length > a[1].length ? b : a) : null;
-  const rows = groups.length ? groups.map(([year, books]) => `
-    <div style="padding:10px 0;border-bottom:1px solid rgba(128,128,128,.22);text-align:left">
-      <div style="display:flex;justify-content:space-between;gap:12px"><b>${year}</b><span>${books.length} book${books.length === 1 ? '' : 's'}</span></div>
-      <div style="opacity:.75;margin-top:4px;font-size:.92em">${books.map(b => esc(b.title)).join(' · ')}</div>
-    </div>`).join('') : '<div style="padding:16px 0;opacity:.7">No finished books have a year assigned yet.</div>';
-  modal({ icon: '📚', title: 'Books read by year', okText: 'Close', text: `
-    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:8px 0 12px">
-      <div style="padding:10px;border:1px solid rgba(128,128,128,.22);border-radius:10px"><b>${total}</b><br><span style="opacity:.7">with year</span></div>
-      <div style="padding:10px;border:1px solid rgba(128,128,128,.22);border-radius:10px"><b>${best ? best[0] : '—'}</b><br><span style="opacity:.7">best year${best ? ` · ${best[1].length}` : ''}</span></div>
-    </div>${unassigned ? `<div style="margin:8px 0;padding:8px;border-radius:8px;background:rgba(255,180,0,.12)">⚠ ${unassigned} finished book${unassigned === 1 ? '' : 's'} still need${unassigned === 1 ? 's' : ''} a year.</div>` : ''}${rows}` });
-}
-function showBookChart() {
-  const groups = finishedBooksByYear();
-  if (!groups.length) {
-    modal({ icon: '📈', title: 'Reading curve', text: 'Assign a year to at least one finished book to build the chart.', okText: 'Close' });
-    return;
+async function searchBookMatches(query){try{const data=await api('/api/book/search?q='+encodeURIComponent(query),{method:'GET'});if(data?.providers?.length&&!data.providers.some(p=>p.ok))toast('Book providers unavailable. URL and upload still work.','warn');return data?.results||[];}catch(e){toast('Book search unavailable. URL and upload still work.','warn');return [];}}
+async function chooseBookCover(query,displayTitle=query){
+  const results=await searchBookMatches(query);
+  const choices=results.map((r,i)=>({v:String(i),t:`${r.title}${r.author?' — '+r.author:''}${r.pages?' · '+r.pages+' pages':''}`}));
+  choices.push({v:'none',t:'Continue without cover'});
+  choices.push({v:'url',t:'Use external image URL'});
+  choices.push({v:'upload',t:'Upload image from device'});
+  const safeBookTitle=esc(String(displayTitle||query||'Untitled book').trim());
+  const r=await modal({icon:'📚',title:'Find book cover',text:results.length?`<span class="book-cover-target">For: <b>${safeBookTitle}</b></span><br>Select the correct match or continue without a cover.`:`<span class="book-cover-target">For: <b>${safeBookTitle}</b></span><br>No automatic match found. You can continue, use a URL, or upload an image.`,fields:[{type:'select',label:'Cover source',options:choices}],okText:'Continue'});
+  if(!r)return null;
+  if(r[0]==='none')return {skip:true};
+  if(r[0]==='url'){
+    const u=await modal({icon:'🔗',title:'External cover URL',text:'Paste a direct HTTPS image URL, not a Google results page.',fields:[{label:'Image URL',placeholder:'https://.../cover.jpg'}],okText:'Use cover'});
+    const url=String(u?.[0]||'').trim();
+    return url?{cover_url:url,source:'External URL'}:{skip:true};
   }
-  const minYear = groups[0][0], maxYear = groups[groups.length - 1][0];
-  const counts = new Map(groups.map(([year, books]) => [year, books.length]));
-  const data = [];
-  for (let year = minYear; year <= maxYear; year++) data.push([year, counts.get(year) || 0]);
-  const W = 620, H = 280, left = 46, right = 18, top = 24, bottom = 42;
-  const maxCount = Math.max(1, ...data.map(d => d[1]));
-  const x = (i) => data.length === 1 ? (left + W - right) / 2 : left + i * (W - left - right) / (data.length - 1);
-  const y = (v) => H - bottom - v * (H - top - bottom) / maxCount;
-  const points = data.map((d, i) => `${x(i)},${y(d[1])}`).join(' ');
-  const area = `${left},${H-bottom} ${points} ${x(data.length - 1)},${H-bottom}`;
-  const labels = data.map((d, i) => `<text x="${x(i)}" y="${H-16}" text-anchor="middle" font-size="12" fill="currentColor" opacity=".7">${d[0]}</text>`).join('');
-  const dots = data.map((d, i) => `<g><circle cx="${x(i)}" cy="${y(d[1])}" r="5" fill="var(--accent,#d7a84b)"/><text x="${x(i)}" y="${y(d[1])-10}" text-anchor="middle" font-size="12" fill="currentColor">${d[1]}</text></g>`).join('');
-  const grid = Array.from({length:maxCount+1}, (_, v) => {
-    const yy = y(v);
-    return `<line x1="${left}" y1="${yy}" x2="${W-right}" y2="${yy}" stroke="currentColor" opacity=".1"/><text x="${left-10}" y="${yy+4}" text-anchor="end" font-size="11" fill="currentColor" opacity=".6">${v}</text>`;
-  }).join('');
-  const peak = groups.reduce((a, b) => b[1].length > a[1].length ? b : a);
-  modal({ icon: '📈', title: 'Reading curve', okText: 'Close', text: `
-    <div style="text-align:left;margin-bottom:8px">Peak: <b>${peak[0]}</b> with <b>${peak[1].length}</b> book${peak[1].length === 1 ? '' : 's'}.</div>
-    <div style="overflow-x:auto"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Books read per year" style="width:100%;min-width:420px;height:auto;color:inherit">
-      ${grid}<polygon points="${area}" fill="var(--accent,#d7a84b)" opacity=".10"/><polyline points="${points}" fill="none" stroke="var(--accent,#d7a84b)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>${dots}${labels}
-    </svg></div>` });
+  if(r[0]==='upload')return {upload:true};
+  return results[Number(r[0])]||{skip:true};
 }
-document.addEventListener('click', (e) => {
-  const b = e.target.closest('#bookFilter button');
-  if (!b) return;
-  BOOK_FILTRO = b.dataset.f;
-  document.querySelectorAll('#bookFilter button').forEach(x => x.classList.remove('active'));
-  b.classList.add('active');
-  renderLibros();
+async function uploadBookCover(b){const input=document.createElement('input');input.type='file';input.accept='image/jpeg,image/png,image/webp,image/gif';return new Promise(resolve=>{input.onchange=async()=>{const f=input.files?.[0];if(!f){resolve(false);return;}const fd=new FormData();fd.append('cover',f);try{const res=await fetch(`/api/book/${b.id}/cover-upload`,{method:'POST',body:fd});const data=await res.json();if(!res.ok)throw new Error(data.error||'Upload failed');b.cover_url=data.cover_url;b.cover_source=data.cover_source;toast('📚 Cover saved');resolve(true);}catch(e){toast(e.message,'error');resolve(false);}};input.click();});}
+async function applyBookChoice(b,choice){if(!choice)return false;if(choice.upload)return uploadBookCover(b);for(const [field,value] of Object.entries({cover_url:choice.cover_url||'',external_id:choice.external_id||'',cover_source:choice.source||''}))await api('/api/book',{body:{id:b.id,field,value}});Object.assign(b,{cover_url:choice.cover_url,external_id:choice.external_id,cover_source:choice.source});if(choice.title&&choice.title.toLowerCase()!==String(b.title).toLowerCase()){const ok=await confirmModal('Update book title',`Use <b>${esc(choice.title)}</b> instead of <b>${esc(b.title)}</b>?`,false);if(ok){await api('/api/book',{body:{id:b.id,field:'title',value:choice.title}});b.title=choice.title;}}if(choice.author&&!b.author){await api('/api/book',{body:{id:b.id,field:'author',value:choice.author}});b.author=choice.author;}if(choice.pages&&!b.pages){await api('/api/book',{body:{id:b.id,field:'pages',value:choice.pages}});b.pages=choice.pages;}return true;}
+async function openBookDetails(id){const b=(S?.books||[]).find(x=>+x.id===+id);if(!b){toast('Book not found. Reload the library.','error');return;}const cat=b.category||'General Knowledge';const back=document.createElement('div');back.className='modal-back book-detail-back';back.innerHTML=`<div class="modal-card hunter-book-detail"><button class="modal-x">✕</button><div class="book-detail-hero"><div class="hunter-book-cover large">${bookCover(b)?`<img src="${esc(bookCover(b))}" alt="${esc(b.title)}">`:'<span>📚</span>'}</div><div><small>BOOK FILE</small><h2>${esc(b.title)} <button class="inline-edit" data-book-rename="${b.id}">✎</button></h2><p>${esc(b.author||'Author not set')}</p><span>${esc(cat)}${b.subcategory?' · '+esc(b.subcategory):''}</span></div></div>
+ <div class="book-detail-fields"><label>Status<select data-book-field="status" data-book-id="${b.id}">${BOOK_STATES.map(([v,t])=>`<option value="${v}" ${v===b.status?'selected':''}>${t}</option>`).join('')}</select></label><label>Total pages<input type="number" min="0" value="${b.pages||''}" data-book-field="pages" data-book-id="${b.id}"></label><label>Current page<input type="number" min="0" value="${b.current||''}" data-book-field="current" data-book-id="${b.id}"></label><label>Category<select data-book-field="category" data-book-id="${b.id}">${bookCategoryOptions(cat)}</select></label><label>Subcategory<select data-book-field="subcategory" data-book-id="${b.id}">${bookSubOptions(cat,b.subcategory)}</select></label></div>
+ <div class="book-detail-actions"><button class="btn-gold" data-book-plus="${b.id}">+10 pages</button><button class="btn-ghost" data-book-cover="${b.id}">Change cover</button><button class="del-x" data-type="book" data-id="${b.id}">Delete</button></div></div>`;document.body.appendChild(back);document.body.classList.add('modal-open');requestAnimationFrame(()=>back.classList.add('show'));const closeBookDetail=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back.show'))document.body.classList.remove('modal-open');},220);};back.querySelector('.modal-x').onclick=closeBookDetail;}
+async function addBookFlow(){const first=await modal({icon:'📚',title:'Add book',fields:[{label:'Title',placeholder:'Book title'},{label:'Author · optional',placeholder:'Author'}],okText:'Find book'});if(!first)return;const title=String(first[0]||'').trim(),author=String(first[1]||'').trim();if(!title)return;const choice=await chooseBookCover([title,author].filter(Boolean).join(' '),title);if(choice===null)return;const cat=await modal({icon:'◆',title:'Organize book',fields:[{type:'select',label:'Category',options:Object.keys(BOOK_CATEGORIES).map(c=>({v:c,t:c}))},{type:'select',label:'Status',options:BOOK_STATES.map(([value,label])=>({v:value,t:label}))},{type:'number',label:'Total pages · optional',min:0}],okText:'Add to library'});if(!cat)return;const category=cat[0]||'Other';const created=await api('/api/book/new',{body:{title:choice?.title||title,author:choice?.author||author,category,subcategory:(BOOK_CATEGORIES[category]||['General'])[0],status:cat[1],pages:+cat[2]||choice?.pages||0,cover_url:(choice?.upload||choice?.skip)?'':(choice?.cover_url||''),external_id:(choice?.upload||choice?.skip)?'':(choice?.external_id||''),cover_source:(choice?.upload||choice?.skip)?'':(choice?.source||'')}});if(choice?.upload&&created?.book){await uploadBookCover(created.book);}await load();}
+document.addEventListener('click',async e=>{
+ const f=e.target.closest('#bookFilter button');if(f){BOOK_FILTRO=f.dataset.f;renderLibros();return;}
+ const plus=e.target.closest('[data-book-plus]');if(plus){e.preventDefault();e.stopPropagation();const b=(S.books||[]).find(x=>+x.id===+plus.dataset.bookPlus);if(!b)return;const next=Math.min((+b.pages||Infinity),(+b.current||0)+10);await api('/api/book',{body:{id:b.id,field:'current',value:Number.isFinite(next)?next:(+b.current||0)+10}});await load();return;}
+ if(e.target.closest('[data-book-add]')){e.preventDefault();e.stopPropagation();await addBookFlow();return;}
+ const cover=e.target.closest('[data-book-cover]');if(cover){const b=(S.books||[]).find(x=>+x.id===+cover.dataset.bookCover);const ch=await chooseBookCover(`${b.title} ${b.author||''}`,b.title);if(await applyBookChoice(b,ch)){document.querySelector('.book-detail-back')?.remove();document.body.classList.remove('modal-open');await load();openBookDetails(b.id);}return;}
+ const rename=e.target.closest('[data-book-rename]');if(rename){const b=(S.books||[]).find(x=>+x.id===+rename.dataset.bookRename);const r=await modal({icon:'✎',title:'Edit book',fields:[{label:'Title',value:b.title},{label:'Author',value:b.author||''}],okText:'Save'});if(r){for(const [field,value] of [['title',r[0]],['author',r[1]]])await api('/api/book',{body:{id:b.id,field,value}});document.querySelector('.book-detail-back')?.remove();document.body.classList.remove('modal-open');await load();openBookDetails(b.id);}return;}
+ if(e.target.closest('[data-book-missing]')){for(const b of (S.books||[]).filter(x=>!bookCover(x))){const ch=await chooseBookCover(`${b.title} ${b.author||''}`,b.title);if(!ch)break;await applyBookChoice(b,ch);}await load();return;}
+ if(e.target.closest('[data-book-help]')){await modal({icon:'?',title:'Hunter Library',text:'Covers and categories organize your collection. Reading progress remains yours and is stored locally. External services are used only to find book metadata and images.',okText:'Close'});return;}
+ const openButton=e.target.closest('button[data-book-open]');if(openButton){e.preventDefault();e.stopPropagation();openBookDetails(openButton.dataset.bookOpen);return;}
+ const card=e.target.closest('article[data-book-card-id]');if(card&&!e.target.closest('button,input,select,textarea,a,label')){e.preventDefault();e.stopPropagation();openBookDetails(card.dataset.bookCardId);return;}
 });
-$('#bookHistoryBtn').addEventListener('click', showBookHistory);
-$('#bookChartBtn').addEventListener('click', showBookChart);
-$('#bookTable').addEventListener('change', async (e) => {
-  const control = e.target;
-  const id = +control.dataset.id;
-  const previous = (S.books || []).find(x => x.id === id) || {};
-  await withBusy(control, async () => {
-    try {
-      if (control.classList.contains('book-status')) {
-        await api('/api/book', { body: { id, field: 'status', value: control.value } });
-      } else if (control.classList.contains('pg-input')) {
-        const f = control.dataset.f, val = +control.value || 0;
-        if (f === 'read_year' && previous.read_year && val && val !== Number(previous.read_year)) {
-          const ok = await confirmModal('Replace reading year', `Change <b>${esc(previous.title)}</b> from <b>${previous.read_year}</b> to <b>${val}</b>?`, false);
-          if (!ok) { control.value = previous.read_year; return; }
-        }
-        await api('/api/book', { body: { id, field: f, value: val } });
-        if (f !== 'read_year') {
-          const pages = f === 'pages' ? val : (previous.pages || 0);
-          const current = f === 'current' ? val : (previous.current || 0);
-          if (pages > 0 && current >= pages)
-            await api('/api/book', { body: { id, field: 'status', value: 'Terminado' } });
-          else if (current > 0 && previous.status !== 'Terminado' && previous.status !== 'Leyendo')
-            await api('/api/book', { body: { id, field: 'status', value: 'Leyendo' } });
-        }
-      }
-      toast('📚 Book updated');
-      await load();
-    } catch (err) {
-      renderLibros();
-      throw err;
-    }
-  });
-});
+document.addEventListener('change',async e=>{const el=e.target.closest('[data-book-field]');if(!el)return;const b=(S.books||[]).find(x=>+x.id===+el.dataset.bookId);if(!b)return;const field=el.dataset.bookField,value=field==='pages'||field==='current'?+el.value||0:el.value;await api('/api/book',{body:{id:b.id,field,value}});b[field]=value;if(field==='category'){const sub=el.closest('.book-detail-fields').querySelector('[data-book-field="subcategory"]');sub.innerHTML=bookSubOptions(value,'');await api('/api/book',{body:{id:b.id,field:'subcategory',value:sub.value}});}await load();});
+document.addEventListener('change',e=>{if(e.target.id==='bookCategoryFilter'){BOOK_CATEGORY=e.target.value;renderLibros();}});
 
 /* ---------- BORRAR (nivel superior) ---------- */
 const DEL_MSG = {
@@ -6845,12 +6790,15 @@ $('#dreamNew').addEventListener('submit', async (e) => {
   load();
 });
 
-$('#bookNew').addEventListener('submit', async (e) => {
+// V137 hotfix: the old inline book form no longer exists in Hunter Library.
+// Keep this listener optional for backward compatibility with older index.html files.
+const legacyBookForm = $('#bookNew');
+if (legacyBookForm) legacyBookForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const form = e.currentTarget;
   const submit = e.submitter || form.querySelector('[type="submit"]');
   await withBusy(submit, async () => {
-    const title = $('#bkTitle').value.trim();
+    const title = $('#bkTitle')?.value?.trim() || '';
     if (!title) { toast('Write the book title', 'warn'); return; }
     await api('/api/book/new', { body: { title } });
     form.reset();
