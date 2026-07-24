@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 135;
+const FRONT_V = 136;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -4882,7 +4882,6 @@ function renderAchievements() {
     { id:'proof-of-mastery', category:'PROFESSIONAL', rarity:'Legendary', icon:'◉', name:'Proof of Mastery', desc:'Back the same skill with completed training and Skill Academy practice.', current:combinedMasterySkills, target:1, secret:true },
 
     { id:'training-arc', category:'BODY', rarity:'Uncommon', icon:'🏋', name:'Training Arc', desc:'Log gym training on seven different days.', current:gymSessions, target:7 },
-    { id:'anime-archive', category:'LIFE', rarity:'Rare', icon:'★', name:'Anime Archivist', desc:'Complete ten anime series.', current:completedAnime, target:10, secret:true },
     { id:'dream-saver', category:'DREAMS', rarity:'Uncommon', icon:'🐷', name:'Saver', desc:'Save 500K toward your dreams.', current:savedForDreams, target:500000, format:'money' },
     { id:'big-saver', category:'DREAMS', rarity:'Epic', icon:'💎', name:'Big Saver', desc:'Save 2M toward your dreams.', current:savedForDreams, target:2000000, format:'money' }
   ].map(item => {
@@ -6359,131 +6358,283 @@ $('#dreamList').addEventListener('click', async (e) => {
   load();
 });
 
-/* ---------- ANIME ---------- */
+/* ---------- ANIME HUNTER ARCHIVE · V136 ---------- */
 const A_TEMPS = ['t1', 't2', 't3', 't4', 't5', 't6', 't7'];
-const A_EXTRA = [['peliculas', 'Pelis'], ['ovas', 'Ovas'], ['especiales', 'Esp']];
-// cuántas columnas de temporada mostrar: 5 por defecto, más si algún anime tiene t6/t7 con datos
-function tempsVisibles() {
-  let n = 5;
-  for (const a of S.animes) {
-    if (numTotal(a.t7) > 0 || (a.v_t7 || 0) > 0) { n = 7; break; }
-    if (numTotal(a.t6) > 0 || (a.v_t6 || 0) > 0) n = Math.max(n, 6);
-  }
-  return n;
-}
-function animeBloques() {
-  const n = tempsVisibles();
-  return A_TEMPS.slice(0, n).map((f, i) => [f, 'T' + (i + 1)]).concat(A_EXTRA);
-}
-const numTotal = (v) => {            // "25" -> 25 ; "35/170" -> 35 ; "" -> 0
+const A_EXTRA = [['peliculas', 'Movies'], ['ovas', 'OVAs'], ['especiales', 'Specials']];
+const ANIME_STATES = [
+  ['', '—'], ['Viéndolo 👀', 'Watching'], ['En emisión 📡', 'Airing'],
+  ['Pendiente', 'Pending'], ['Finalizado ✅', 'Finished']
+];
+const numTotal = (v) => {
   const m = String(v ?? '').match(/\d+/);
   return m ? +m[0] : 0;
 };
+function animeBloques() {
+  return A_TEMPS.map((f, i) => [f, `Season ${i + 1}`]).concat(A_EXTRA);
+}
 function animeCompleto(a) {
-  const todos = A_TEMPS.concat(A_EXTRA.map(x => x[0]));
-  const conDatos = todos.filter(f => numTotal(a[f]) > 0);
-  if (!conDatos.length) return false;
-  return conDatos.every(f => (a['v_' + f] || 0) >= numTotal(a[f]));
+  const conDatos = animeBloques().map(([f]) => f).filter(f => numTotal(a[f]) > 0);
+  return conDatos.length > 0 && conDatos.every(f => (+a['v_' + f] || 0) >= numTotal(a[f]));
+}
+function animeProgress(a) {
+  const blocks = animeBloques().filter(([f]) => numTotal(a[f]) > 0);
+  const total = blocks.reduce((sum, [f]) => sum + numTotal(a[f]), 0);
+  const watched = blocks.reduce((sum, [f]) => sum + Math.min(+a['v_' + f] || 0, numTotal(a[f])), 0);
+  return { watched, total, pct: total ? Math.min(100, Math.round(watched / total * 100)) : 0 };
+}
+function animeNextBlock(a) {
+  return animeBloques().find(([f]) => numTotal(a[f]) > 0 && (+a['v_' + f] || 0) < numTotal(a[f])) || null;
+}
+function animeCover(a) {
+  return String(a.cover_url || '').trim();
+}
+function animeFallback(title = '') {
+  const letter = String(title || '?').trim().charAt(0).toUpperCase() || '?';
+  return `<div class="anime-cover-fallback"><span>◆</span><b>${esc(letter)}</b></div>`;
+}
+function animeCoverHtml(a, cls = '') {
+  const src = animeCover(a);
+  if (!src) return animeFallback(a.name);
+  return `<img class="anime-cover ${cls}" src="${esc(src)}" alt="${esc(a.name)} cover" loading="lazy" referrerpolicy="no-referrer" onerror="this.outerHTML='<div class=&quot;anime-cover-fallback&quot;><span>◆</span><b>${esc(String(a.name || '?').charAt(0).toUpperCase())}</b></div>'">`;
+}
+function animeStatusLabel(state) {
+  return (ANIME_STATES.find(([v]) => v === (state || '')) || ['', 'Pending'])[1];
+}
+function animeCard(a, { current = false, rank = null } = {}) {
+  const p = animeProgress(a);
+  const next = animeNextBlock(a);
+  const quick = next ? `<button type="button" class="anime-quick-add" data-anime-plus="${a.id}" aria-label="Add one episode">＋1</button>` : '';
+  const rankTag = rank ? `<span class="anime-rank">${rank === 1 ? '♛ 1' : '#' + rank}</span>` : '';
+  return `<article class="anime-card ${current ? 'anime-card-current' : ''}" data-anime-card="${a.id}">
+    <button type="button" class="anime-cover-button" data-anime-open="${a.id}" aria-label="Open ${esc(a.name)}">${animeCoverHtml(a)}${rankTag}</button>
+    <div class="anime-card-body">
+      <div class="anime-card-top"><span class="anime-status">${esc(animeStatusLabel(a.estado))}</span>${a.score != null ? `<b class="anime-score">★ ${esc(a.score)}</b>` : ''}</div>
+      <h3>${esc(a.name)}</h3>
+      <div class="anime-progress-line"><span>${p.total ? `${p.watched} / ${p.total}` : 'No episode total'}</span><b>${p.total ? p.pct + '%' : '—'}</b></div>
+      <div class="mini-bar anime-mini-bar"><i style="width:${p.pct}%"></i></div>
+      <div class="anime-card-actions">${quick}<button type="button" class="btn-ghost" data-anime-open="${a.id}">Open</button></div>
+    </div>
+  </article>`;
+}
+async function syncAnimeCompletion(a) {
+  const complete = animeCompleto(a);
+  if (complete && a.estado !== 'Finalizado ✅') {
+    await api('/api/anime', { body: { id: a.id, field: 'estado', value: 'Finalizado ✅' } });
+    a.estado = 'Finalizado ✅';
+  } else if (!complete && a.estado === 'Finalizado ✅') {
+    await api('/api/anime', { body: { id: a.id, field: 'estado', value: 'Viéndolo 👀' } });
+    a.estado = 'Viéndolo 👀';
+  }
 }
 function renderAnime() {
-  // auto-finalizar: si está completo y no marcado Finalizado, lo marca solo
-  for (const a of S.animes) {
-    const completo = animeCompleto(a);
-    if (completo && a.estado !== 'Finalizado ✅') {
-      api('/api/anime', { body: { id: a.id, field: 'estado', value: 'Finalizado ✅' } });
+  const list = S.animes || [];
+  for (const a of list) {
+    const complete = animeCompleto(a);
+    if (complete && a.estado !== 'Finalizado ✅') {
       a.estado = 'Finalizado ✅';
-    } else if (!completo && a.estado === 'Finalizado ✅') {
-      // le salió temporada nueva: vuelve a "Viéndolo" automáticamente
-      api('/api/anime', { body: { id: a.id, field: 'estado', value: 'Viéndolo 👀' } });
+      api('/api/anime', { body: { id:a.id, field:'estado', value:'Finalizado ✅' } }).catch(()=>{});
+    } else if (!complete && a.estado === 'Finalizado ✅') {
       a.estado = 'Viéndolo 👀';
+      api('/api/anime', { body: { id:a.id, field:'estado', value:'Viéndolo 👀' } }).catch(()=>{});
     }
   }
-  const viendo = S.animes.filter(a => a.estado === 'Viéndolo 👀').length;
-  const fin = S.animes.filter(a => a.estado === 'Finalizado ✅').length;
+  const watching = list.filter(a => a.estado === 'Viéndolo 👀' || a.estado === 'En emisión 📡');
+  const finished = list.filter(a => a.estado === 'Finalizado ✅').length;
   $('#animeStats').innerHTML = `
-    <div class="card gold"><label>Watching now 👀</label><strong>${viendo}</strong></div>
-    <div class="card green"><label>Finished ✅</label><strong>${fin}</strong></div>
-    <div class="card"><label>In the list</label><strong>${S.animes.length}</strong></div>`;
-  const pasa = (a) => ANIME_FILTRO === 'todos' || (a.estado || 'Pendiente') === ANIME_FILTRO
+    <div class="card gold"><label>Watching</label><strong>${watching.length}</strong></div>
+    <div class="card green"><label>Finished</label><strong>${finished}</strong></div>
+    <div class="card"><label>Archive</label><strong>${list.length}</strong></div>`;
+  $('#animeCurrent').innerHTML = watching.length
+    ? watching.slice(0, 3).map(a => animeCard(a, { current: true })).join('')
+    : `<div class="anime-empty-state"><span>◇</span><b>No current expedition</b><small>Choose a pending anime or add a new one.</small></div>`;
+  const pass = (a) => ANIME_FILTRO === 'todos' || (a.estado || 'Pendiente') === ANIME_FILTRO
     || (ANIME_FILTRO === 'Pendiente' && !a.estado);
-  const ranked = S.animes.filter(a => a.score != null && pasa(a));
-  const rest = S.animes.filter(a => a.score == null && pasa(a));
-  const estados = ['', 'Viéndolo 👀', 'En emisión 📡', 'Finalizado ✅', 'Pendiente'];
-  const estLabel = { '': '—', 'Viéndolo 👀': 'Watching 👀', 'En emisión 📡': 'Airing 📡',
-    'Finalizado ✅': 'Finished ✅', 'Pendiente': 'Pending' };
-  const celda = (a, f) => {
-    const total = numTotal(a[f]);
-    const visto = a['v_' + f] || 0;
-    const done = total && visto >= total;
-    return `<td><div class="ep-box">
-      <input class="v-in ${done ? 'full' : ''}" type="number" min="0" data-id="${a.id}" data-f="v_${f}" value="${total ? visto : ''}" placeholder="–" title="voy en">
-      <span class="sep">de</span>
-      <input class="t-in" type="number" min="0" data-id="${a.id}" data-f="${f}" value="${esc(a[f])}" placeholder="–" title="total">
-    </div></td>`;
-  };
-  const BLOQUES = animeBloques();
-  const nTemps = tempsVisibles();
-  const fila = (a, rank) => {
-    const estadoCls = { 'Viéndolo 👀': 'watching', 'Finalizado ✅': 'finished',
-      'En emisión 📡': 'airing', 'Pendiente': 'pending' }[a.estado] || '';
-    // botón +temporada: aparece si el anime usa todas las temps visibles y aún puede crecer
-    const usadas = A_TEMPS.slice(0, nTemps).filter(f => numTotal(a[f]) > 0).length;
-    const puedeMas = usadas >= nTemps && nTemps < 7;
-    const addBtn = puedeMas
-      ? `<button class="add-temp" data-id="${a.id}" data-next="t${nTemps + 1}" title="Add new season">+ season</button>` : '';
-    return `<tr class="${estadoCls}">
-      <td class="${rank === 1 ? 'rank-1' : ''}">${rank ? (rank === 1 ? '👑 1' : '#' + rank) : '—'}</td>
-      <td class="an-name ${rank === 1 ? 'rank-1' : ''}">${esc(a.name)} ${addBtn}</td>` +
-    BLOQUES.map(([f]) => celda(a, f)).join('') +
-    `<td><select class="a-edit" data-id="${a.id}" data-f="estado">
-      ${estados.map(s => `<option value="${s}" ${(a.estado || '') === s ? 'selected' : ''}>${estLabel[s]}</option>`).join('')}</select></td>
-    <td><input class="a-edit score-input" type="number" step="0.1" min="0" max="100"
-        data-f="score" data-id="${a.id}" value="${a.score ?? ''}" placeholder="0-100"></td>
-    <td><button class="del-x" data-type="anime" data-id="${a.id}">✕</button></td></tr>`;
-  };
-  const ths = BLOQUES.map(([, lbl]) => `<th>${lbl}</th>`).join('');
+  const visible = list.filter(pass).sort((a, b) => {
+    if (a.score != null && b.score != null) return +b.score - +a.score;
+    if (a.score != null) return -1;
+    if (b.score != null) return 1;
+    return String(a.name || '').localeCompare(String(b.name || ''), 'es');
+  });
   let rank = 0;
-  $('#animeTable').innerHTML =
-    '<tr><th>TOP</th><th>Anime</th>' + ths + '<th>Status</th><th>Pt</th><th></th></tr>' +
-    ranked.map(a => fila(a, ++rank)).join('') +
-    rest.map(a => fila(a, 0)).join('');
+  $('#animeArchive').innerHTML = visible.length
+    ? visible.map(a => animeCard(a, { rank: a.score != null ? ++rank : null })).join('')
+    : `<div class="anime-empty-state"><span>◇</span><b>No matches</b><small>Change the archive filter.</small></div>`;
 }
-$('#animeTable').addEventListener('click', async (e) => {
-  const btn = e.target.closest('.add-temp');
-  if (!btn) return;
-  const next = btn.dataset.next;
-  const lbl = 'T' + next.slice(1);
-  const r = await modal({ icon: '✨', title: 'Nueva temporada',
-    text: `How many episodes does <b>${lbl}</b> have? It will be added only to this anime.`,
-    fields: [{ type: 'number', placeholder: 'Episodios de ' + lbl, min: 1 }], okText: 'Add ' + lbl });
-  if (!r || !r[0]) return;
-  await api('/api/anime', { body: { id: +btn.dataset.id, field: next, value: r[0] } });
-  toast('✨ ' + lbl + ' added.');
-  load();
-});
-document.addEventListener('click', (e) => {
-  const b = e.target.closest('#animeFilter button');
-  if (!b) return;
-  ANIME_FILTRO = b.dataset.f;
-  document.querySelectorAll('#animeFilter button').forEach(x => x.classList.remove('active'));
-  b.classList.add('active');
+async function animeIncrement(id) {
+  const a = (S.animes || []).find(x => +x.id === +id);
+  if (!a) return;
+  const next = animeNextBlock(a);
+  if (!next) { toast('This anime has no pending episodes.', 'warn'); return; }
+  const [field, label] = next;
+  const value = Math.min(numTotal(a[field]), (+a['v_' + field] || 0) + 1);
+  await api('/api/anime', { body: { id: a.id, field: 'v_' + field, value } });
+  a['v_' + field] = value;
+  await syncAnimeCompletion(a);
+  toast(`📺 ${esc(label)} · ${value}/${numTotal(a[field])}`);
   renderAnime();
-});
-// al hacer foco en "voy en" o "total" que muestre 0, se vacía para escribir directo
-document.addEventListener('focus', (e) => {
-  if (e.target.matches('.v-in, .t-in') && e.target.value === '0') {
-    e.target.select();   // selecciona el 0; al teclear lo reemplaza al instante
+}
+function openAnimeDetails(id) {
+  const a = (S.animes || []).find(x => +x.id === +id);
+  if (!a) return;
+  const previous = document.activeElement;
+  const back = document.createElement('div');
+  back.className = 'modal-back anime-detail-back';
+  const blocks = animeBloques();
+  const rows = blocks.map(([f, label]) => {
+    const total = numTotal(a[f]);
+    const watched = +a['v_' + f] || 0;
+    if (!total && !A_TEMPS.slice(0, 3).includes(f) && !A_EXTRA.some(([x]) => x === f)) return '';
+    return `<div class="anime-part-row ${total && watched >= total ? 'done' : ''}">
+      <span>${esc(label)}</span>
+      <input type="number" min="0" data-anime-field="v_${f}" data-anime-id="${a.id}" value="${total ? watched : ''}" placeholder="0" aria-label="${esc(label)} watched">
+      <i>/</i>
+      <input type="number" min="0" data-anime-field="${f}" data-anime-id="${a.id}" value="${total || ''}" placeholder="0" aria-label="${esc(label)} total">
+    </div>`;
+  }).join('');
+  back.innerHTML = `<div class="modal-card anime-detail-card">
+    <div class="anime-detail-hero">${animeCoverHtml(a, 'anime-detail-cover')}<div><span>ANIME FILE</span><div class="anime-title-line"><h3>${esc(a.name)}</h3><button type="button" class="anime-title-edit" data-anime-rename="${a.id}" aria-label="Edit anime title" title="Edit title">✎</button></div><small>${esc(animeStatusLabel(a.estado))}</small></div><button type="button" class="anime-detail-close" aria-label="Close">✕</button></div>
+    <div class="anime-detail-controls">
+      <label>Status<select data-anime-field="estado" data-anime-id="${a.id}">${ANIME_STATES.map(([v,t])=>`<option value="${v}" ${(a.estado||'')===v?'selected':''}>${t}</option>`).join('')}</select></label>
+      <label>Score<input type="number" min="0" max="100" step="0.1" data-anime-field="score" data-anime-id="${a.id}" value="${a.score ?? ''}" placeholder="0–100"></label>
+    </div>
+    <div class="anime-parts">${rows}</div>
+    <div class="anime-detail-actions">
+      <button type="button" class="btn-ghost" data-anime-cover-search="${a.id}">Change cover</button>
+      <button type="button" class="btn-ghost" data-anime-add-season="${a.id}">＋ Season</button>
+      <button type="button" class="del-x" data-type="anime" data-id="${a.id}">Delete</button>
+    </div>
+  </div>`;
+  const close = () => { back.classList.remove('show'); setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();},240); };
+  document.body.appendChild(back); document.body.classList.add('modal-open'); requestAnimationFrame(()=>back.classList.add('show'));
+  back.querySelector('.anime-detail-close').onclick = close;
+  back.onclick = e => { if (e.target === back) close(); };
+}
+async function searchAnimeCovers(query) {
+  try {
+    const response = await api('/api/anime/search?q=' + encodeURIComponent(query), { method:'GET', quiet:true, timeout:26000 });
+    return response.results || [];
+  } catch (err) {
+    err.coverProviderUnavailable = true;
+    throw err;
   }
-}, true);
-$('#animeTable').addEventListener('change', async (e) => {
-  const t = e.target;
-  if (t.classList.contains('v-in') || t.classList.contains('t-in') || t.classList.contains('a-edit')) {
-    // si subes "visto" y antes estaba Finalizado pero la temporada nueva lo deja incompleto,
-    // el render lo recalcula solo (auto-finaliza solo cuando TODO está completo)
-    await api('/api/anime', { body: { id: +t.dataset.id, field: t.dataset.f, value: t.value } });
-    load();
+}
+function pickAnimeCover(query, { allowNoCover = true } = {}) {
+  return new Promise(async resolve => {
+    const previous = document.activeElement;
+    const back = document.createElement('div'); back.className = 'modal-back anime-cover-back';
+    back.innerHTML = `<div class="modal-card anime-cover-card"><div class="anime-cover-head"><div><span>COVER SEARCH</span><h3>${esc(query)}</h3></div><button type="button" class="anime-detail-close">✕</button></div><div class="anime-cover-loading">Searching archive…</div></div>`;
+    const close = val => { back.classList.remove('show'); setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();},240); resolve(val); };
+    document.body.appendChild(back); document.body.classList.add('modal-open'); requestAnimationFrame(()=>back.classList.add('show'));
+    back.querySelector('.anime-detail-close').onclick=()=>close(null); back.onclick=e=>{if(e.target===back)close(null);};
+    try {
+      const results = await searchAnimeCovers(query);
+      const body = back.querySelector('.anime-cover-loading');
+      body.className = 'anime-cover-results';
+      body.innerHTML = results.length ? results.map((r,i)=>`<button type="button" class="anime-cover-option" data-cover-index="${i}"><img src="${esc(r.cover_url)}" alt="" referrerpolicy="no-referrer"><span><b>${esc(r.title)}</b><small>${esc([r.type,r.year,r.episodes?`${r.episodes} ep`:null].filter(Boolean).join(' · '))}</small></span></button>`).join('') : '<div class="anime-empty-state"><b>No cover found</b><small>Try another title or continue without a cover.</small></div>';
+      if (allowNoCover) body.insertAdjacentHTML('beforeend','<button type="button" class="btn-ghost anime-cover-upload-choice">Upload image from device</button><button type="button" class="btn-ghost anime-no-cover">Continue without cover</button>');
+      body.onclick=e=>{const opt=e.target.closest('[data-cover-index]');if(opt)close(results[+opt.dataset.coverIndex]);else if(e.target.closest('.anime-cover-upload-choice'))close({upload:true});else if(e.target.closest('.anime-no-cover'))close({cover_url:'',external_id:'',source:''});};
+    } catch (err) {
+      const body=back.querySelector('.anime-cover-loading');
+      body.innerHTML='<div class="anime-empty-state"><b>Cover providers unavailable</b><small>Jikan did not respond and AniList fallback was also unavailable. Your episodes and progress remain untouched.</small></div><div class="anime-cover-recovery"><button type="button" class="btn-gold anime-cover-retry">Retry</button><button type="button" class="btn-ghost anime-cover-upload">Upload image</button><button type="button" class="btn-ghost anime-cover-manual">Use direct image URL</button><button type="button" class="btn-ghost anime-cover-stop">Stop</button></div>';
+      back.querySelector('.anime-cover-retry').onclick=()=>{ close({retry:true}); };
+      back.querySelector('.anime-cover-upload').onclick=()=>close({upload:true});
+      back.querySelector('.anime-cover-manual').onclick=async()=>{
+        const r=await modal({icon:'🖼',title:'Manual cover',text:'Paste the direct HTTPS address of the image itself (it usually ends in .jpg, .png or .webp). A Google results-page link will not work.',fields:[{label:'Cover URL',placeholder:'https://...'}],okText:'Use cover'});
+        const url=String(r?.[0]||'').trim();
+        if(url && /^https:\/\//i.test(url)) close({cover_url:url,external_id:'',source:'Manual URL'});
+        else if(url) toast('Use a valid HTTPS image URL.','warn');
+      };
+      back.querySelector('.anime-cover-stop').onclick=()=>close({provider_unavailable:true});
+    }
+  });
+}
+async function uploadAnimeCover(a) {
+  if (!a) return false;
+  return new Promise(resolve => {
+    const input=document.createElement('input');
+    input.type='file'; input.accept='image/jpeg,image/png,image/webp,image/gif';
+    input.onchange=async()=>{
+      const file=input.files?.[0];
+      if(!file){resolve(false);return;}
+      if(file.size>5*1024*1024){toast('Image must be 5 MB or smaller.','warn');resolve(false);return;}
+      const fd=new FormData(); fd.append('cover',file);
+      try{
+        const response=await fetch(`/api/anime/${a.id}/cover-upload`,{method:'POST',body:fd});
+        const data=await response.json().catch(()=>({}));
+        if(!response.ok) throw new Error(data.error||'Upload failed');
+        a.cover_url=data.cover_url||''; a.cover_source=data.cover_source||'Local upload';
+        toast('🖼 Cover saved locally.'); resolve(true);
+      }catch(err){toast(err.message||'Could not upload image.','warn');resolve(false);}
+    };
+    input.click();
+  });
+}
+
+async function chooseAnimeCover(query, options={}) {
+  let choice = await pickAnimeCover(query, options);
+  if (choice?.retry) choice = await pickAnimeCover(query, options);
+  return choice;
+}
+function animeTitleKey(value){return String(value||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();}
+async function applyAnimeCoverChoice(a, selected) {
+  if(!a || !selected?.cover_url) return false;
+  for(const [field,value] of [['cover_url',selected.cover_url],['external_id',selected.external_id||''],['cover_source',selected.source||'']]){
+    await api('/api/anime',{body:{id:a.id,field,value}});
+    a[field]=value;
   }
+  const matched=String(selected.title||'').trim();
+  if(matched && animeTitleKey(matched)!==animeTitleKey(a.name)){
+    const rename=await modal({icon:'✎',title:'Matched title found',text:`Current: ${a.name}\nMatch: ${matched}\n\nUpdate only the stored title? Episodes and progress stay attached to the same anime.`,okText:'Update title',cancelText:'Keep current'});
+    if(rename){await api('/api/anime',{body:{id:a.id,field:'name',value:matched}});a.name=matched;}
+  }
+  return true;
+}
+async function addAnimeFlow(name) {
+  const selected = await chooseAnimeCover(name);
+  if (selected === null) return false;
+  const fields = [
+    { type: 'number', label: 'Season 1 episodes', min: 0, value: selected?.episodes || '', placeholder: '0' },
+    { type: 'number', label: 'Season 2 episodes · optional', min: 0, placeholder: '0' },
+    { type: 'number', label: 'Season 3 episodes · optional', min: 0, placeholder: '0' },
+    { type: 'number', label: 'Movies · optional', min: 0, placeholder: '0' },
+    { type: 'number', label: 'OVAs · optional', min: 0, placeholder: '0' }
+  ];
+  const r = await modal({ icon:'📺', title:'Add ' + (selected?.title || name), text:'Confirm only the progress fields you use. Everything can be edited later.', fields, okText:'Add to archive' });
+  if (!r) return false;
+  await api('/api/anime/new', { body: { name:selected?.title || name, t1:r[0], t2:r[1], t3:r[2], peliculas:r[3], ovas:r[4], cover_url:selected?.cover_url || '', external_id:selected?.external_id || '', cover_source:selected?.source || '' } });
+  return true;
+}
+async function findMissingAnimeCovers() {
+  const missing=(S.animes||[]).filter(a=>!animeCover(a));
+  if(!missing.length){toast('All anime already have a cover.');return;}
+  let applied=0;
+  for(const a of missing){
+    const choice=await chooseAnimeCover(a.name);
+    if(choice===null || choice?.provider_unavailable) { toast('Cover search stopped. Try again later.','warn'); break; }
+    if(choice?.upload){if(await uploadAnimeCover(a)) applied++;}
+    else if(choice?.cover_url){
+      if(await applyAnimeCoverChoice(a,choice)) applied++;
+    }
+  }
+  renderAnime(); toast(`🖼 ${applied} cover${applied===1?'':'s'} added.`);
+}
+document.addEventListener('click', async e => {
+  const filter=e.target.closest('#animeFilter button');
+  if(filter){ANIME_FILTRO=filter.dataset.f;document.querySelectorAll('#animeFilter button').forEach(x=>x.classList.remove('active'));filter.classList.add('active');renderAnime();return;}
+  const plus=e.target.closest('[data-anime-plus]'); if(plus){await animeIncrement(+plus.dataset.animePlus);return;}
+  const open=e.target.closest('[data-anime-open]'); if(open){openAnimeDetails(+open.dataset.animeOpen);return;}
+  const cover=e.target.closest('[data-anime-cover-search]'); if(cover){const a=(S.animes||[]).find(x=>+x.id===+cover.dataset.animeCoverSearch);if(!a)return;const selected=await chooseAnimeCover(a.name);if(selected?.provider_unavailable){toast('Cover providers are unavailable. Try again later.','warn');return;}let changed=false;if(selected?.upload) changed=await uploadAnimeCover(a);else changed=await applyAnimeCoverChoice(a,selected);if(changed){document.querySelector('.anime-detail-back')?.remove();document.body.classList.remove('modal-open');renderAnime();openAnimeDetails(a.id);}return;}
+  const rename=e.target.closest('[data-anime-rename]'); if(rename){const a=(S.animes||[]).find(x=>+x.id===+rename.dataset.animeRename);if(!a)return;const r=await modal({icon:'✎',title:'Edit anime title',text:'This changes only the name. Episodes, seasons and progress remain untouched.',fields:[{label:'Title',value:a.name,placeholder:'Anime title'}],okText:'Save title'});const name=String(r?.[0]||'').trim();if(name&&name!==a.name){await api('/api/anime',{body:{id:a.id,field:'name',value:name}});a.name=name;document.querySelector('.anime-detail-back')?.remove();document.body.classList.remove('modal-open');renderAnime();openAnimeDetails(a.id);}return;}
+  const addSeason=e.target.closest('[data-anime-add-season]'); if(addSeason){const a=(S.animes||[]).find(x=>+x.id===+addSeason.dataset.animeAddSeason);if(!a)return;const next=A_TEMPS.find(f=>numTotal(a[f])===0);if(!next){toast('Seven seasons are already available.','warn');return;}const r=await modal({icon:'✨',title:'Add '+`Season ${+next.slice(1)}`,fields:[{type:'number',label:'Episodes',min:1}],okText:'Add season'});if(r?.[0]){await api('/api/anime',{body:{id:a.id,field:next,value:r[0]}});a[next]=r[0];document.querySelector('.anime-detail-back')?.remove();document.body.classList.remove('modal-open');renderAnime();openAnimeDetails(a.id);}return;}
 });
+document.addEventListener('change', async e => {
+  const t=e.target.closest('[data-anime-field]'); if(!t)return;
+  const a=(S.animes||[]).find(x=>+x.id===+t.dataset.animeId); if(!a)return;
+  await api('/api/anime',{body:{id:a.id,field:t.dataset.animeField,value:t.value}});
+  a[t.dataset.animeField]=t.dataset.animeField.startsWith('v_')?+t.value:t.value;
+  await syncAnimeCompletion(a); renderAnime();
+});
+
 
 /* ---------- LIBROS ---------- */
 let BOOK_FILTRO = 'all';
@@ -6710,25 +6861,20 @@ $('#bookNew').addEventListener('submit', async (e) => {
 
 $('#animeNew').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const nombre = $('#anName').value.trim();
-  if (!nombre) return;
-  const campos = [
-    { type: 'number', placeholder: 'Episodes S1', min: 0 },
-    { type: 'number', placeholder: 'Episodes S2 (optional)', min: 0 },
-    { type: 'number', placeholder: 'Episodes S3 (optional)', min: 0 },
-    { type: 'number', placeholder: 'Movies (optional)', min: 0 },
-    { type: 'number', placeholder: 'OVAs (optional)', min: 0 }
-  ];
-  const r = await modal({ icon: '📺', title: 'Add ' + nombre,
-    text: 'Enter how many episodes each part has (you can edit and add S4–S7 later in the table).',
-    fields: campos, okText: 'Add anime' });
-  if (!r) return;
-  const [t1, t2, t3, peliculas, ovas] = r;
-  await api('/api/anime/new', { body: { name: nombre, t1, t2, t3, peliculas, ovas } });
-  e.target.reset();
-  toast('📺 <b>' + esc(nombre) + '</b> added to your list.');
-  load();
+  const form=e.currentTarget, submit=e.submitter||form.querySelector('[type="submit"]');
+  const name=$('#anName').value.trim();
+  if(!name)return;
+  await withBusy(submit, async()=>{
+    const added=await addAnimeFlow(name);
+    if(!added)return;
+    form.reset();
+    toast('📺 Anime added to your Hunter Archive.');
+    await load();
+  });
 });
+$('#animeMissingCovers')?.addEventListener('click', findMissingAnimeCovers);
+$('#animeHelpBtn')?.addEventListener('click', ()=>modal({icon:'◆',title:'Anime Hunter Archive',text:'Track only what matters: current progress, status, score, seasons, movies, OVAs and specials. Covers come from an external search, while every progress record stays inside Kevin LifeOS.',okText:'Close'}));
+
 
 /* ============================================================
    🤖 MASCOTA ROBOT — companion flotante que reacciona a tu vida
