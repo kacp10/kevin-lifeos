@@ -15,14 +15,14 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import date
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 from flask import Flask, jsonify, render_template, request, g, Response
 import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 136  # V136 redesigns Anime as a visual Hunter Archive with cover search and quick episode progress; must match FRONT_V in static/app.js
+VERSION = 138  # V138 stabilizes Hunter Library book modals and forces a fresh frontend cache; must match FRONT_V in static/app.js
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -504,7 +504,10 @@ def init_db():
     CREATE TABLE IF NOT EXISTS books (
         id INTEGER PRIMARY KEY, title TEXT, status TEXT DEFAULT 'Por comprar',
         pages INTEGER DEFAULT 0, current INTEGER DEFAULT 0,
-        read_year INTEGER DEFAULT 0);
+        read_year INTEGER DEFAULT 0,
+        author TEXT DEFAULT '', category TEXT DEFAULT 'General Knowledge',
+        subcategory TEXT DEFAULT '', cover_url TEXT DEFAULT '',
+        external_id TEXT DEFAULT '', cover_source TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS payment_checks (
         item TEXT, month TEXT, PRIMARY KEY (item, month));
     CREATE TABLE IF NOT EXISTS week_shifts (
@@ -998,8 +1001,18 @@ def init_db():
         except Exception:
             pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('books_read_year_v1','1')")
+    if not con.execute("SELECT 1 FROM config WHERE key='books_library_v137'").fetchone():
+        for column, definition in (
+            ('author', "TEXT DEFAULT ''"), ('category', "TEXT DEFAULT 'General Knowledge'"),
+            ('subcategory', "TEXT DEFAULT ''"), ('cover_url', "TEXT DEFAULT ''"),
+            ('external_id', "TEXT DEFAULT ''"), ('cover_source', "TEXT DEFAULT ''")):
+            try:
+                con.execute(f'ALTER TABLE books ADD COLUMN {column} {definition}')
+            except Exception:
+                pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('books_library_v137','1')")
         con.commit()
-        print('  + seguimiento anual de libros activado')
+        print('  + Hunter Library activada')
 
     # ── FIX abonos viejos "atrapados": cuando abonado_fijo cubre cuotas completas pero
     #    'pagadas' no avanzó (bug anterior). Convierte esos abonos en cuotas pagadas y crea
@@ -3108,15 +3121,91 @@ def dream_new():
 
 @app.post('/api/book/new')
 def book_new():
-    title = str((request.json or {}).get('title') or '').strip()
+    j = request.json or {}
+    title = str(j.get('title') or '').strip()
     if not title:
         return jsonify(error='Escribe el título del libro'), 400
     if len(title) > 180:
         return jsonify(error='El título es demasiado largo'), 400
-    db().execute('INSERT INTO books (title) VALUES (?)', (title,))
+    fields = ('author','category','subcategory','cover_url','external_id','cover_source')
+    vals = [str(j.get(f) or '').strip() for f in fields]
+    status = str(j.get('status') or 'Por leer')
+    if status not in ('Por comprar','Por leer','Leyendo','Terminado'):
+        status = 'Por leer'
+    try:
+        pages = max(0, int(j.get('pages') or 0))
+    except (TypeError, ValueError):
+        pages = 0
+    cur = db().execute('INSERT INTO books (title,status,pages,author,category,subcategory,cover_url,external_id,cover_source) VALUES (?,?,?,?,?,?,?,?,?)',
+                       (title,status,pages,*vals))
     db().commit()
-    return jsonify(ok=True)
+    book_id = int(cur.lastrowid)
+    created = db().execute('SELECT * FROM books WHERE id=?', (book_id,)).fetchone()
+    return jsonify(ok=True, id=book_id, book=dict(created) if created else {'id': book_id, 'title': title})
 
+
+_BOOK_SEARCH_CACHE = {}
+
+def _book_results_google(query):
+    url = 'https://www.googleapis.com/books/v1/volumes?' + urllib.parse.urlencode({'q': query, 'maxResults': 8, 'printType':'books'})
+    req = urllib.request.Request(url, headers={'User-Agent': f'KevinLifeOS/{VERSION} book-cover-search','Accept':'application/json'})
+    payload = _fetch_json(req, timeout=9)
+    out=[]
+    for item in (payload.get('items') or [])[:8]:
+        info=item.get('volumeInfo') or {}; imgs=info.get('imageLinks') or {}
+        cover=imgs.get('extraLarge') or imgs.get('large') or imgs.get('medium') or imgs.get('thumbnail') or imgs.get('smallThumbnail') or ''
+        cover=cover.replace('http://','https://')
+        if not cover: continue
+        out.append({'external_id':'google:'+str(item.get('id') or ''),'title':info.get('title') or query,'author':', '.join(info.get('authors') or []),'pages':info.get('pageCount') or 0,'cover_url':cover,'source':'Google Books'})
+    return out
+
+def _book_results_openlibrary(query):
+    url='https://openlibrary.org/search.json?'+urllib.parse.urlencode({'q':query,'limit':8,'fields':'key,title,author_name,cover_i,number_of_pages_median,isbn'})
+    req=urllib.request.Request(url,headers={'User-Agent':f'KevinLifeOS/{VERSION} book-cover-search','Accept':'application/json'})
+    payload=_fetch_json(req,timeout=9); out=[]
+    for item in (payload.get('docs') or [])[:8]:
+        cid=item.get('cover_i'); isbn=(item.get('isbn') or [''])[0]
+        cover=(f'https://covers.openlibrary.org/b/id/{cid}-L.jpg' if cid else (f'https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg' if isbn else ''))
+        if not cover: continue
+        out.append({'external_id':'openlibrary:'+str(item.get('key') or ''),'title':item.get('title') or query,'author':', '.join(item.get('author_name') or []),'pages':item.get('number_of_pages_median') or 0,'cover_url':cover,'source':'Open Library'})
+    return out
+
+@app.get('/api/book/search')
+def book_search():
+    query=str(request.args.get('q') or '').strip()
+    if len(query)<2: return jsonify(results=[])
+    if len(query)>160: return jsonify(error='La búsqueda es demasiado larga'),400
+    key=query.lower(); cached=_BOOK_SEARCH_CACHE.get(key)
+    if cached and datetime.now(timezone.utc).timestamp()-cached['at']<1800:
+        return jsonify(results=cached['results'])
+    results=[]; providers=[]
+    for name,fn in (('Google Books',_book_results_google),('Open Library',_book_results_openlibrary)):
+        try:
+            found=fn(query); providers.append({'name':name,'ok':True})
+            seen={x['cover_url'] for x in results}; results.extend(x for x in found if x['cover_url'] not in seen)
+            if len(results)>=6: break
+        except Exception as exc:
+            app.logger.warning('Book cover provider %s failed: %s',name,exc); providers.append({'name':name,'ok':False})
+    results=results[:8]; _BOOK_SEARCH_CACHE[key]={'at':datetime.now(timezone.utc).timestamp(),'results':results}
+    # External cover providers are optional. Their outage must never block the library UI.
+    return jsonify(results=results, providers=providers, available=any(p.get('ok') for p in providers))
+
+@app.post('/api/book/<int:i>/cover-upload')
+def book_cover_upload(i):
+    row=db().execute('SELECT id FROM books WHERE id=?',(i,)).fetchone()
+    if not row: return jsonify(error='Libro no encontrado'),404
+    f=request.files.get('cover')
+    if not f or not f.filename: return jsonify(error='Selecciona una imagen'),400
+    ext=os.path.splitext(f.filename)[1].lower()
+    if ext not in ('.jpg','.jpeg','.png','.webp','.gif'): return jsonify(error='Formato no permitido. Usa JPG, PNG, WEBP o GIF.'),400
+    data=f.read(5*1024*1024+1)
+    if len(data)>5*1024*1024: return jsonify(error='La imagen supera 5 MB'),400
+    folder=os.path.join(BASE,'static','uploads','books'); os.makedirs(folder,exist_ok=True)
+    filename=f'book_{i}_{secrets.token_hex(6)}{ext}'; path=os.path.join(folder,filename)
+    with open(path,'wb') as out: out.write(data)
+    url=f'/static/uploads/books/{filename}'
+    db().execute('UPDATE books SET cover_url=?,cover_source=? WHERE id=?',(url,'Local upload',i)); db().commit()
+    return jsonify(ok=True,cover_url=url,cover_source='Local upload')
 
 @app.get('/api/anime/search')
 def anime_search():
@@ -3244,7 +3333,7 @@ def book():
         return jsonify(error='Libro inválido'), 400
 
     field = j.get('field')
-    if field not in ('status', 'pages', 'current', 'read_year'):
+    if field not in ('status', 'pages', 'current', 'read_year', 'title', 'author', 'category', 'subcategory', 'cover_url', 'external_id', 'cover_source'):
         return jsonify(error='Campo no permitido'), 400
 
     row = db().execute('SELECT * FROM books WHERE id=?', (book_id,)).fetchone()
@@ -3266,6 +3355,12 @@ def book():
         current_year = date.today().year
         if value and not (1900 <= value <= current_year):
             return jsonify(error=f'El año debe estar entre 1900 y {current_year}'), 400
+    elif field in ('title','author','category','subcategory','cover_url','external_id','cover_source'):
+        value = str(value or '').strip()
+        if field == 'title' and not value:
+            return jsonify(error='El título no puede quedar vacío'), 400
+        if len(value) > 500:
+            return jsonify(error='Texto demasiado largo'), 400
     elif field == 'status':
         allowed = ('Por comprar', 'Por leer', 'Leyendo', 'Terminado')
         if value not in allowed:
