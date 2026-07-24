@@ -393,23 +393,38 @@
 </section>
 
 <!-- ============ ANIME ============ -->
-<section id="tab-anime" class="tab">
-  <h1>Anime Tracker</h1>
-  <div class="cards" id="animeStats"></div>
+<section id="tab-anime" class="tab anime-hunter-tab">
+  <div class="anime-hunter-head">
+    <div>
+      <span class="eyebrow">ANIME HUNTER ARCHIVE</span>
+      <h1>Current expeditions</h1>
+    </div>
+    <button type="button" class="btn-ghost anime-help-btn" id="animeHelpBtn" aria-label="Anime archive help">?</button>
+  </div>
+  <div class="cards anime-stats" id="animeStats"></div>
+
+  <form id="animeNew" class="anime-add-form">
+    <input id="anName" placeholder="Anime name" autocomplete="off" required>
+    <button class="btn-gold" type="submit">＋ Add anime</button>
+  </form>
+
+  <div id="animeCurrent" class="anime-current-grid"></div>
+
+  <div class="anime-archive-head">
+    <div>
+      <span class="eyebrow">ARCHIVE</span>
+      <h2>Your collection</h2>
+    </div>
+    <button type="button" class="btn-ghost" id="animeMissingCovers">Find missing covers</button>
+  </div>
   <div class="anime-filter" id="animeFilter">
     <button data-f="todos" class="active">All</button>
-    <button data-f="Viéndolo 👀">Watching 👀</button>
-    <button data-f="En emisión 📡">Airing 📡</button>
-    <button data-f="Pendiente">Pendiente</button>
-    <button data-f="Finalizado ✅">Finished ✅</button>
+    <button data-f="Viéndolo 👀">Watching</button>
+    <button data-f="En emisión 📡">Airing</button>
+    <button data-f="Pendiente">Pending</button>
+    <button data-f="Finalizado ✅">Finished</button>
   </div>
-  <form id="animeNew" class="abono-form" style="margin-bottom:14px">
-    <input id="anName" placeholder="Anime name" required>
-    <button class="btn-gold" type="submit">+ Add anime</button>
-  </form>
-  <div class="panel scroll-x">
-    <table class="table" id="animeTable"></table>
-  </div>
+  <div id="animeArchive" class="anime-archive-grid"></div>
 </section>
 
 <!-- ============ LIBROS ============ -->
