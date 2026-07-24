@@ -11,6 +11,9 @@ import os
 import re
 import secrets
 import sqlite3
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import date
 from datetime import datetime, timedelta
 from contextlib import contextmanager
@@ -19,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 135  # V135 adds the persistent Pirate Position route, robot rank greetings and legacy milestone celebrations; must match FRONT_V in static/app.js
+VERSION = 136  # V136 redesigns Anime as a visual Hunter Archive with cover search and quick episode progress; must match FRONT_V in static/app.js
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -30,6 +33,137 @@ logging.basicConfig(
     format='%(asctime)s %(levelname)s %(name)s: %(message)s',
 )
 logger = logging.getLogger('kevin-lifeos')
+
+
+# V136 cover-search resilience: short-lived cache and provider circuit breakers.
+# These values live only in process memory; anime progress remains in SQLite/PostgreSQL.
+_ANIME_SEARCH_CACHE = {}
+_ANIME_PROVIDER_DOWN_UNTIL = {}
+_ANIME_SEARCH_CACHE_SECONDS = 6 * 60 * 60
+_ANIME_PROVIDER_COOLDOWN_SECONDS = 90
+
+
+def _anime_title_hint(value):
+    raw = re.sub(r'\s+', ' ', str(value or '').replace('/', ' ')).strip()
+    key = re.sub(r'[^a-z0-9]+', ' ', raw.lower()).strip()
+    aliases = {
+        'naruto shippuden': 'Naruto: Shippuden',
+        'full metal alchemist brotherhood': 'Fullmetal Alchemist: Brotherhood',
+        'ano hanna': 'Anohana',
+        'boku no hero academy': 'My Hero Academia',
+        'hunter x hunter': 'Hunter x Hunter',
+        'classroom of the elite': 'Classroom of the Elite',
+        'one punch man': 'One-Punch Man',
+        'blood c': 'Blood-C',
+    }
+    return aliases.get(key, raw)
+
+
+def _provider_available(name):
+    return datetime.utcnow().timestamp() >= float(_ANIME_PROVIDER_DOWN_UNTIL.get(name, 0))
+
+
+def _mark_provider_down(name):
+    _ANIME_PROVIDER_DOWN_UNTIL[name] = datetime.utcnow().timestamp() + _ANIME_PROVIDER_COOLDOWN_SECONDS
+
+
+def _anime_cache_get(query):
+    entry = _ANIME_SEARCH_CACHE.get(query.lower())
+    if not entry:
+        return None
+    if datetime.utcnow().timestamp() - entry['at'] > _ANIME_SEARCH_CACHE_SECONDS:
+        _ANIME_SEARCH_CACHE.pop(query.lower(), None)
+        return None
+    return entry['results']
+
+
+def _anime_cache_set(query, results):
+    _ANIME_SEARCH_CACHE[query.lower()] = {
+        'at': datetime.utcnow().timestamp(),
+        'results': results,
+    }
+
+
+def _fetch_json(req, timeout=9):
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        return json.loads(response.read().decode('utf-8'))
+
+
+def _search_jikan(query):
+    url = 'https://api.jikan.moe/v4/anime?' + urllib.parse.urlencode({
+        'q': query,
+        'limit': 8,
+        'sfw': 'true',
+        'order_by': 'popularity',
+    })
+    req = urllib.request.Request(url, headers={
+        'User-Agent': f'KevinLifeOS/{VERSION} anime-cover-search',
+        'Accept': 'application/json',
+    })
+    payload = _fetch_json(req)
+    results = []
+    for item in (payload.get('data') or [])[:8]:
+        images = item.get('images') or {}
+        jpg = images.get('jpg') or {}
+        cover = jpg.get('large_image_url') or jpg.get('image_url') or ''
+        if not cover:
+            continue
+        results.append({
+            'external_id': str(item.get('mal_id') or ''),
+            'title': item.get('title_english') or item.get('title') or query,
+            'title_original': item.get('title') or '',
+            'year': item.get('year') or str(((item.get('aired') or {}).get('from') or ''))[:4],
+            'episodes': item.get('episodes') or 0,
+            'type': item.get('type') or '',
+            'cover_url': cover,
+            'source': 'Jikan / MyAnimeList',
+        })
+    return results
+
+
+def _search_anilist(query):
+    graphql = '''
+    query ($search: String) {
+      Page(page: 1, perPage: 8) {
+        media(search: $search, type: ANIME, sort: POPULARITY_DESC) {
+          id
+          idMal
+          title { romaji english native }
+          episodes
+          format
+          startDate { year }
+          coverImage { extraLarge large medium }
+        }
+      }
+    }
+    '''
+    body = json.dumps({'query': graphql, 'variables': {'search': query}}).encode('utf-8')
+    req = urllib.request.Request(
+        'https://graphql.anilist.co', data=body, method='POST', headers={
+            'User-Agent': f'KevinLifeOS/{VERSION} anime-cover-search',
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+        })
+    payload = _fetch_json(req, timeout=10)
+    results = []
+    media = (((payload.get('data') or {}).get('Page') or {}).get('media') or [])
+    for item in media[:8]:
+        titles = item.get('title') or {}
+        images = item.get('coverImage') or {}
+        cover = images.get('extraLarge') or images.get('large') or images.get('medium') or ''
+        if not cover:
+            continue
+        results.append({
+            'external_id': 'anilist:' + str(item.get('id') or ''),
+            'title': titles.get('english') or titles.get('romaji') or titles.get('native') or query,
+            'title_original': titles.get('romaji') or titles.get('native') or '',
+            'year': ((item.get('startDate') or {}).get('year') or ''),
+            'episodes': item.get('episodes') or 0,
+            'type': str(item.get('format') or '').replace('_', ' ').title(),
+            'cover_url': cover,
+            'source': 'AniList',
+        })
+    return results
 
 
 def _auth_enabled():
@@ -365,7 +499,8 @@ def init_db():
         v_t1 INTEGER DEFAULT 0, v_t2 INTEGER DEFAULT 0, v_t3 INTEGER DEFAULT 0,
         v_t4 INTEGER DEFAULT 0, v_t5 INTEGER DEFAULT 0, v_t6 INTEGER DEFAULT 0,
         v_t7 INTEGER DEFAULT 0, v_peliculas INTEGER DEFAULT 0,
-        v_ovas INTEGER DEFAULT 0, v_especiales INTEGER DEFAULT 0);
+        v_ovas INTEGER DEFAULT 0, v_especiales INTEGER DEFAULT 0,
+        cover_url TEXT DEFAULT '', external_id TEXT DEFAULT '', cover_source TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS books (
         id INTEGER PRIMARY KEY, title TEXT, status TEXT DEFAULT 'Por comprar',
         pages INTEGER DEFAULT 0, current INTEGER DEFAULT 0,
@@ -610,6 +745,19 @@ def init_db():
         con.execute("INSERT INTO config VALUES ('animes_v4','1')")
         con.commit()
         print('  + temporadas 6 y 7 disponibles')
+    if not con.execute("SELECT 1 FROM config WHERE key='animes_v5'").fetchone():
+        if db_layer.IS_PG:
+            rows = con.execute("SELECT column_name FROM information_schema.columns WHERE table_name='animes'").fetchall()
+            existing = {str((dict(r) if hasattr(r, 'keys') else {'column_name': r[0]})['column_name']) for r in rows}
+        else:
+            rows = con.execute("PRAGMA table_info(animes)").fetchall()
+            existing = {str((dict(r) if hasattr(r, 'keys') else {'name': r[1]})['name']) for r in rows}
+        for col in ('cover_url', 'external_id', 'cover_source'):
+            if col not in existing:
+                con.execute(f"ALTER TABLE animes ADD COLUMN {col} TEXT DEFAULT ''")
+        con.execute("INSERT INTO config VALUES ('animes_v5','1')")
+        con.commit()
+        print('  + anime cover metadata enabled')
     # Migración v8: skincare desglosado, laptop en piezas, marca de comprado
     if not con.execute("SELECT 1 FROM config WHERE key='dreams_v2'").fetchone():
         try:
@@ -2970,32 +3118,118 @@ def book_new():
     return jsonify(ok=True)
 
 
+@app.get('/api/anime/search')
+def anime_search():
+    query = str(request.args.get('q') or '').strip()
+    if len(query) < 2:
+        return jsonify(results=[])
+    if len(query) > 120:
+        return jsonify(error='La búsqueda es demasiado larga'), 400
+
+    cleaned = _anime_title_hint(query)
+    cached = _anime_cache_get(cleaned)
+    if cached is not None:
+        return jsonify(results=cached, provider='cache')
+
+    failures = []
+    providers = (
+        ('jikan', _search_jikan),
+        ('anilist', _search_anilist),
+    )
+    for provider, search_fn in providers:
+        if not _provider_available(provider):
+            failures.append(provider + ': cooldown')
+            continue
+        try:
+            results = search_fn(cleaned)
+            if results:
+                _anime_cache_set(cleaned, results)
+                return jsonify(results=results, provider=provider, normalized_query=cleaned)
+            failures.append(provider + ': no results')
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError, KeyError) as exc:
+            _mark_provider_down(provider)
+            failures.append(provider + ': ' + str(exc))
+            logger.warning('Anime cover provider %s failed for %r: %s', provider, cleaned, exc)
+
+    logger.warning('Anime cover search unavailable for %r (%s)', cleaned, '; '.join(failures))
+    return jsonify(
+        error='Cover providers are temporarily unavailable. Your anime progress is safe.',
+        results=[],
+        provider_unavailable=True,
+        retry_after=_ANIME_PROVIDER_COOLDOWN_SECONDS,
+    ), 503
+
+
 @app.post('/api/anime/new')
 def anime_new():
-    j = request.json
+    j = request.json or {}
+    name = str(j.get('name') or '').strip()
+    if not name:
+        return jsonify(error='Escribe el nombre del anime'), 400
+    if len(name) > 180:
+        return jsonify(error='El nombre es demasiado largo'), 400
     cols = ['name', 'score']
-    vals = [j['name'].strip(), None]
+    vals = [name, None]
     for b in ('t1', 't2', 't3', 't4', 't5', 't6', 't7', 'peliculas', 'ovas', 'especiales'):
         cols.append(b)
         vals.append(str(j.get(b, '') or ''))
+    for field in ('cover_url', 'external_id', 'cover_source'):
+        cols.append(field)
+        vals.append(str(j.get(field, '') or '').strip())
     ph = ','.join('?' * len(cols))
     db().execute(f'INSERT INTO animes ({",".join(cols)}) VALUES ({ph})', vals)
     db().commit()
     return jsonify(ok=True)
 
+
+@app.post('/api/anime/<int:i>/cover-upload')
+def anime_cover_upload(i):
+    row = db().execute('SELECT id FROM animes WHERE id=?', (i,)).fetchone()
+    if not row:
+        return jsonify(error='Anime no encontrado'), 404
+    f = request.files.get('cover')
+    if not f or not f.filename:
+        return jsonify(error='Selecciona una imagen'), 400
+    ext = os.path.splitext(f.filename)[1].lower()
+    if ext not in ('.jpg', '.jpeg', '.png', '.webp', '.gif'):
+        return jsonify(error='Formato no permitido. Usa JPG, PNG, WEBP o GIF.'), 400
+    data = f.read(5 * 1024 * 1024 + 1)
+    if len(data) > 5 * 1024 * 1024:
+        return jsonify(error='La imagen supera 5 MB'), 400
+    if not data:
+        return jsonify(error='La imagen está vacía'), 400
+    folder = os.path.join(BASE, 'static', 'uploads', 'anime')
+    os.makedirs(folder, exist_ok=True)
+    filename = f'anime_{i}_{secrets.token_hex(6)}{ext}'
+    path = os.path.join(folder, filename)
+    with open(path, 'wb') as out:
+        out.write(data)
+    url = f'/static/uploads/anime/{filename}'
+    db().execute('UPDATE animes SET cover_url=?, cover_source=? WHERE id=?', (url, 'Local upload', i))
+    db().commit()
+    return jsonify(ok=True, cover_url=url, cover_source='Local upload')
+
+
 @app.post('/api/anime')
 def anime():
-    j = request.json
+    j = request.json or {}
     field = j.get('field', 'score')
     bloques = ('t1','t2','t3','t4','t5','t6','t7','peliculas','ovas','especiales')
     vistos = tuple('v_' + b for b in bloques)
-    if field not in (('score', 'estado') + bloques + vistos):
+    text_fields = ('estado', 'cover_url', 'external_id', 'cover_source', 'name')
+    if field not in (('score',) + text_fields + bloques + vistos):
         return jsonify(error='Campo no permitido'), 400
     v = j.get('value')
     if field == 'score':
-        v = None if v in (None, '') else float(v)
+        v = None if v in (None, '') else max(0, min(100, float(v)))
     elif field in vistos:
-        v = int(v or 0)
+        v = max(0, int(v or 0))
+    elif field == 'name':
+        v = str(v or '').strip()[:180]
+        if not v:
+            return jsonify(error='Nombre inválido'), 400
+    else:
+        v = str(v or '').strip()
     db().execute(f'UPDATE animes SET {field}=? WHERE id=?', (v, int(j['id'])))
     db().commit()
     return jsonify(ok=True)
