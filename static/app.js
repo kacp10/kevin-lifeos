@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 142;
+const FRONT_V = 143;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -5207,7 +5207,7 @@ let recoverySyncBusy = false;
 let recoverySyncedFor = '';
 
 function recoveryRows() { return Array.isArray(S?.habit_recoveries) ? S.habit_recoveries : []; }
-function recoveryPending() { return recoveryRows().filter(x => x.status !== 'recovered'); }
+function recoveryPending() { return recoveryRows().filter(x => x.status === 'pending' || x.status === 'scheduled'); }
 function daysAgoISO(n) { const d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()-n); return localISO(d); }
 function weekdayFromISO(iso) { const d=new Date(iso+'T12:00:00'); return (d.getDay()+6)%7; }
 function recoveryDayLabel(iso) { const d=new Date(iso+'T12:00:00'); return `${DIAS[(d.getDay()+6)%7]} · ${fmtFecha(iso)}`; }
@@ -5251,6 +5251,7 @@ async function syncRecoveryMissions(force=false){
     const r=await api('/api/recovery/sync',{body:{expected,rest_days:restDays}});
     S.habit_recoveries=r.recoveries||[];
     recoverySyncedFor=today;
+    if(Number(r.repaired_ghost_marks||0)>0) toast(`Repaired ${r.repaired_ghost_marks} legacy recovery mark${Number(r.repaired_ghost_marks)===1?'':'s'}.`);
     renderRecoverySummary();
     renderRoutineDay();
   }catch(err){ console.warn('Recovery sync failed',err); }
@@ -5287,12 +5288,12 @@ function closePendingMissionModal(){
 
 async function openPendingMissions(){
   const rows=recoveryRows();
-  const pending=rows.filter(x=>x.status!=='recovered');
+  const pending=rows.filter(x=>x.status==='pending'||x.status==='scheduled');
   const recovered=rows.filter(x=>x.status==='recovered').slice(0,40);
   const today=hoyLocal();
   const pendingHtml=pending.length?pending.map(x=>{
     const h=(S.habits||[]).find(v=>Number(v.id)===Number(x.habit_id));
-    const scheduled=x.added_to_day===today;
+    const scheduled=x.status==='scheduled'&&x.added_to_day===today;
     return `<div class="recovery-list-card"><div><span>${esc(recoveryDayLabel(x.original_day))}</span><b>${esc(x.title||h?.name||'Habit mission')}</b><small>${esc(h?.name||'Habit')} · ${recoveryDelay(x.original_day)} day${recoveryDelay(x.original_day)===1?'':'s'} pending</small></div><div class="recovery-card-actions"><button class="btn-ghost" data-recovery-rest="${x.original_day}" title="Protect this original date as REST">🌿 REST</button><button class="${scheduled?'btn-ghost':'btn'}" data-recovery-schedule="${x.id}">${scheduled?'Added today':'Recover today'}</button></div></div>`;
   }).join(''):'<div class="recovery-empty">✓ No pending missions. REST days remain protected.</div>';
   const recoveredHtml=recovered.length?recovered.map(x=>`<div class="recovery-history-row"><span>✓</span><div><b>${esc(x.title)}</b><small>${esc(recoveryDayLabel(x.original_day))} → recovered ${esc(fmtFecha(x.recovered_day))} · ${recoveryDelay(x.original_day,x.recovered_day)} days later</small></div></div>`).join(''):'<div class="recovery-empty">No recovered missions yet.</div>';
@@ -5922,7 +5923,7 @@ function renderRoutineDay() {
     if(!await confirmModal('Protect as REST',`Mark ${recoveryDayLabel(day)} as sacred REST? Only pending missions that belong to that original date will be removed. Activities recovered from other dates can still be added on a REST day without affecting that rest day.`)) return;
     await saveLifeRestDate(day);
     await api('/api/recovery/rest-day',{body:{day}});
-    S.habit_recoveries = recoveryRows().filter(x => !(x.status!=='recovered' && x.original_day===day));
+    S.habit_recoveries = recoveryRows().map(x => ((x.status==='pending'||x.status==='scheduled') && x.original_day===day) ? {...x,status:'rest_exempt',added_to_day:''} : x);
     recoverySyncedFor='';
     renderRecoverySummary();
     closePendingMissionModal();
@@ -5949,7 +5950,7 @@ function renderRoutineDay() {
   const complete=e.target.closest('[data-recovery-complete]');
   if(complete){
     if(!await confirmModal('Recover mission','Complete this activity now? Kevin LifeOS will mark its original Habit date and preserve today as the recovery date.')) return;
-    await api(`/api/recovery/${complete.dataset.recoveryComplete}/complete`,{body:{day:complete.dataset.day||hoyLocal()}});
+    await api(`/api/recovery/${complete.dataset.recoveryComplete}/complete`,{body:{day:complete.dataset.day||hoyLocal(),confirm_complete:true}});
     toast('✓ Mission recovered. The original day was completed and the delay remains in history.'); await load(); return;
   }
 });

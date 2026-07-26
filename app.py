@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 142  # V141 Pending Missions, sacred REST and recovery history; must match FRONT_V in static/app.js
+VERSION = 143  # V143 explicit pending/scheduled/recovered states and ghost-mark repair
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -1968,16 +1968,44 @@ def debt_extra_del(i):
 
 @app.post('/api/recovery/sync')
 def recovery_sync():
-    """Create missing recovery missions idempotently and remove pending ones on REST days."""
+    """Create missing missions idempotently and repair only legacy ghost completions."""
     j = request.get_json(silent=True) or {}
     expected = j.get('expected') or []
     rest_days = {str(x) for x in (j.get('rest_days') or []) if x}
     d = db()
     now = datetime.now().isoformat(timespec='seconds')
+    repaired = 0
     try:
-        # REST dates are excluded while generating expected missions. Pending rows are
-        # removed only by the explicit REST endpoint, preventing a scheduled mission
-        # from disappearing because of a stale or incorrectly calculated client list.
+        # V141/V142 could leave an orphaned automatic mark after the recovery row
+        # disappeared. Remove it only when routine_done proves it came from the
+        # recovery engine; never delete a normal manual Habit mark.
+        ghosts = d.execute("""
+            SELECT rd.day, rd.activity
+            FROM routine_done rd
+            WHERE rd.note LIKE 'Recovered on %'
+              AND NOT EXISTS (
+                SELECT 1 FROM habit_recoveries hr
+                WHERE hr.original_day=rd.day
+                  AND hr.activity=rd.activity
+                  AND hr.status='recovered'
+              )
+        """).fetchall()
+        for ghost in ghosts:
+            gday, activity = ghost['day'], ghost['activity']
+            item = next((x for x in expected
+                         if str(x.get('original_day') or '')[:10] == gday
+                         and str(x.get('activity') or '').strip()[:120] == activity), None)
+            if item:
+                try:
+                    hid = int(item.get('habit_id'))
+                except (TypeError, ValueError):
+                    hid = 0
+                if hid:
+                    d.execute('DELETE FROM habit_marks WHERE habit_id=? AND day=?', (hid, gday))
+                    repaired += 1
+            d.execute('DELETE FROM routine_done WHERE day=? AND activity=? AND note LIKE ?',
+                      (gday, activity, 'Recovered on %'))
+
         for item in expected[:1000]:
             try:
                 habit_id = int(item.get('habit_id'))
@@ -1994,18 +2022,22 @@ def recovery_sync():
             done = d.execute('SELECT 1 FROM routine_done WHERE day=? AND activity=?', (day, activity)).fetchone()
             if done:
                 continue
-            d.execute('INSERT INTO habit_recoveries (habit_id,original_day,activity,title,status,added_to_day,recovered_day,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(habit_id,original_day,activity) DO NOTHING',
+            d.execute("""INSERT INTO habit_recoveries
+                (habit_id,original_day,activity,title,status,added_to_day,recovered_day,created_at,updated_at)
+                VALUES (?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(habit_id,original_day,activity) DO NOTHING""",
                 (habit_id, day, activity, title, 'pending', '', '', now, now))
         d.commit()
     except Exception:
         d.rollback()
         raise
     rows = [dict(r) for r in d.execute("SELECT * FROM habit_recoveries ORDER BY original_day DESC,id DESC")]
-    return jsonify(ok=True, recoveries=rows)
+    return jsonify(ok=True, recoveries=rows, repaired_ghost_marks=repaired)
 
 
 @app.post('/api/recovery/<int:i>/schedule')
 def recovery_schedule(i):
+    """Schedule a pending mission for a day without completing or marking Habits."""
     j = request.get_json(silent=True) or {}
     day = str(j.get('day') or date.today().isoformat())[:10]
     d = db()
@@ -2015,7 +2047,9 @@ def recovery_schedule(i):
     row = dict(row)
     if row.get('status') == 'recovered':
         return jsonify(error='Mission already recovered'), 409
-    d.execute("UPDATE habit_recoveries SET added_to_day=?,updated_at=? WHERE id=?",
+    if row.get('status') == 'rest_exempt':
+        return jsonify(error='Mission belongs to a protected REST day'), 409
+    d.execute("UPDATE habit_recoveries SET status='scheduled',added_to_day=?,updated_at=? WHERE id=?",
               (day, datetime.now().isoformat(timespec='seconds'), i))
     d.commit()
     updated = d.execute('SELECT * FROM habit_recoveries WHERE id=?', (i,)).fetchone()
@@ -2024,22 +2058,28 @@ def recovery_schedule(i):
 
 @app.post('/api/recovery/rest-day')
 def recovery_rest_day():
-    """Explicitly protect a date as REST and remove only its open recovery debt."""
+    """Protect an original date as REST while preserving an auditable record."""
     j = request.get_json(silent=True) or {}
     day = str(j.get('day') or '')[:10]
     if not day:
         return jsonify(error='REST date is required'), 400
     d = db()
-    d.execute("DELETE FROM habit_recoveries WHERE status='pending' AND original_day=?", (day,))
+    d.execute("""UPDATE habit_recoveries
+                 SET status='rest_exempt',added_to_day='',updated_at=?
+                 WHERE status IN ('pending','scheduled') AND original_day=?""",
+              (datetime.now().isoformat(timespec='seconds'), day))
     d.commit()
     return jsonify(ok=True)
 
 
 @app.post('/api/recovery/<int:i>/complete')
 def recovery_complete(i):
-    """Complete the original obligation, while preserving the real recovery date."""
+    """Complete only a mission explicitly scheduled for the supplied recovery day."""
     j = request.get_json(silent=True) or {}
     recovered_day = str(j.get('day') or date.today().isoformat())[:10]
+    confirmed = bool(j.get('confirm_complete'))
+    if not confirmed:
+        return jsonify(error='Explicit completion confirmation is required'), 400
     d = db()
     row = d.execute('SELECT * FROM habit_recoveries WHERE id=?', (i,)).fetchone()
     if not row:
@@ -2047,11 +2087,13 @@ def recovery_complete(i):
     row = dict(row)
     if row.get('status') == 'recovered':
         return jsonify(ok=True)
+    if row.get('status') != 'scheduled' or row.get('added_to_day') != recovered_day:
+        return jsonify(error='Mission must be scheduled for this day before completion'), 409
     now = datetime.now().isoformat(timespec='seconds')
     try:
         d.execute('INSERT INTO habit_marks (habit_id,day) VALUES (?,?) ON CONFLICT(habit_id,day) DO NOTHING',
                   (row['habit_id'], row['original_day']))
-        d.execute('INSERT INTO routine_done (day,activity,note) VALUES (?,?,?) ON CONFLICT(day,activity) DO NOTHING',
+        d.execute('INSERT INTO routine_done (day,activity,note) VALUES (?,?,?) ON CONFLICT(day,activity) DO UPDATE SET note=excluded.note',
                   (row['original_day'], row['activity'], f'Recovered on {recovered_day}'))
         d.execute("UPDATE habit_recoveries SET status='recovered',recovered_day=?,added_to_day='',updated_at=? WHERE id=?",
                   (recovered_day, now, i))
@@ -2065,10 +2107,13 @@ def recovery_complete(i):
 @app.post('/api/recovery/<int:i>/unschedule')
 def recovery_unschedule(i):
     d = db()
-    d.execute("UPDATE habit_recoveries SET added_to_day='',updated_at=? WHERE id=? AND status='pending'",
+    d.execute("""UPDATE habit_recoveries
+                 SET status='pending',added_to_day='',updated_at=?
+                 WHERE id=? AND status='scheduled'""",
               (datetime.now().isoformat(timespec='seconds'), i))
     d.commit()
-    return jsonify(ok=True)
+    updated = d.execute('SELECT * FROM habit_recoveries WHERE id=?', (i,)).fetchone()
+    return jsonify(ok=True, recovery=dict(updated) if updated else None)
 
 
 @app.post('/api/habit/new')
