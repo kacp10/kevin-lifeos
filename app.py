@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 141  # V141 Pending Missions, sacred REST and recovery history; must match FRONT_V in static/app.js
+VERSION = 142  # V141 Pending Missions, sacred REST and recovery history; must match FRONT_V in static/app.js
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -1975,9 +1975,9 @@ def recovery_sync():
     d = db()
     now = datetime.now().isoformat(timespec='seconds')
     try:
-        if rest_days:
-            marks = ','.join('?' for _ in rest_days)
-            d.execute(f"DELETE FROM habit_recoveries WHERE status='pending' AND original_day IN ({marks})", tuple(sorted(rest_days)))
+        # REST dates are excluded while generating expected missions. Pending rows are
+        # removed only by the explicit REST endpoint, preventing a scheduled mission
+        # from disappearing because of a stale or incorrectly calculated client list.
         for item in expected[:1000]:
             try:
                 habit_id = int(item.get('habit_id'))
@@ -2017,6 +2017,20 @@ def recovery_schedule(i):
         return jsonify(error='Mission already recovered'), 409
     d.execute("UPDATE habit_recoveries SET added_to_day=?,updated_at=? WHERE id=?",
               (day, datetime.now().isoformat(timespec='seconds'), i))
+    d.commit()
+    updated = d.execute('SELECT * FROM habit_recoveries WHERE id=?', (i,)).fetchone()
+    return jsonify(ok=True, recovery=dict(updated) if updated else None)
+
+
+@app.post('/api/recovery/rest-day')
+def recovery_rest_day():
+    """Explicitly protect a date as REST and remove only its open recovery debt."""
+    j = request.get_json(silent=True) or {}
+    day = str(j.get('day') or '')[:10]
+    if not day:
+        return jsonify(error='REST date is required'), 400
+    d = db()
+    d.execute("DELETE FROM habit_recoveries WHERE status='pending' AND original_day=?", (day,))
     d.commit()
     return jsonify(ok=True)
 

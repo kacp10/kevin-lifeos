@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 141;
+const FRONT_V = 142;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -5266,6 +5266,25 @@ function renderRecoverySummary(){
   btn.title=n?`${n} mission${n===1?'':'s'} waiting to be recovered`:'No pending missions';
 }
 
+function showRecoveryOnToday(recovery){
+  if(!recovery) return;
+  S.habit_recoveries = recoveryRows().map(x => Number(x.id)===Number(recovery.id) ? recovery : x);
+  const pick=document.getElementById('dayPick');
+  const today=hoyLocal();
+  if(pick){
+    const opt=[...pick.options].find(o=>String(o.value).startsWith(today+'|'));
+    if(opt) pick.value=opt.value;
+  }
+  renderRecoverySummary();
+  renderRoutineDay();
+}
+
+function closePendingMissionModal(){
+  const open=[...document.querySelectorAll('.modal-back.show')].pop();
+  const close=open?.querySelector('.m-ok');
+  if(close) close.click();
+}
+
 async function openPendingMissions(){
   const rows=recoveryRows();
   const pending=rows.filter(x=>x.status!=='recovered');
@@ -5900,14 +5919,30 @@ function renderRoutineDay() {
   const rest=e.target.closest('[data-recovery-rest]');
   if(rest){
     const day=rest.dataset.recoveryRest;
-    if(!await confirmModal('Protect as REST',`Mark ${recoveryDayLabel(day)} as sacred REST? All pending missions from that date will be removed and the day will stay neutral for streaks.`)) return;
-    await saveLifeRestDate(day); recoverySyncedFor=''; await syncRecoveryMissions(true); toast('🌿 REST protected. That date creates no pending missions.'); await load(); return;
+    if(!await confirmModal('Protect as REST',`Mark ${recoveryDayLabel(day)} as sacred REST? Only pending missions that belong to that original date will be removed. Activities recovered from other dates can still be added on a REST day without affecting that rest day.`)) return;
+    await saveLifeRestDate(day);
+    await api('/api/recovery/rest-day',{body:{day}});
+    S.habit_recoveries = recoveryRows().filter(x => !(x.status!=='recovered' && x.original_day===day));
+    recoverySyncedFor='';
+    renderRecoverySummary();
+    closePendingMissionModal();
+    toast('🌿 REST protected. That original date creates no debt.');
+    return;
   }
   const schedule=e.target.closest('[data-recovery-schedule]');
   if(schedule){
     if(schedule.textContent.includes('Added')) return;
-    await api(`/api/recovery/${schedule.dataset.recoverySchedule}/schedule`,{body:{day:hoyLocal()}});
-    toast('📜 Recovery mission added to today.'); await load(); return;
+    schedule.disabled=true;
+    try{
+      const r=await api(`/api/recovery/${schedule.dataset.recoverySchedule}/schedule`,{body:{day:hoyLocal()}});
+      showRecoveryOnToday(r.recovery);
+      closePendingMissionModal();
+      toast('📜 Recovery mission added to today. Open Life today and complete it there.');
+    }catch(err){
+      schedule.disabled=false;
+      toast('⚠ The pending mission could not be added to today. It remains pending.', 'err');
+    }
+    return;
   }
   const unschedule=e.target.closest('[data-recovery-unschedule]');
   if(unschedule){ await api(`/api/recovery/${unschedule.dataset.recoveryUnschedule}/unschedule`,{body:{}}); toast('Mission removed from today, but it remains pending.'); await load(); return; }
