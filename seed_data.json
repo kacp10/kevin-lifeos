@@ -1,0 +1,1751 @@
+{
+ "months": [
+  "Julio 2026",
+  "Agosto 2026",
+  "Septiembre 2026",
+  "Octubre 2026",
+  "Noviembre 2026",
+  "Diciembre 2026",
+  "Enero 2027",
+  "Febrero 2027",
+  "Marzo 2027",
+  "Abril 2027",
+  "Mayo 2027",
+  "Junio 2027"
+ ],
+ "salario": 2000000,
+ "extra": [
+  1000000,
+  850000,
+  600000,
+  500000,
+  500000,
+  500000,
+  300000,
+  300000,
+  300000,
+  300000,
+  300000,
+  300000
+ ],
+ "vida": 822000,
+ "ahorro": 180000,
+ "creditors": {
+  "Tarjeta DV": [
+   731989,
+   731989,
+   589019,
+   589019,
+   589019,
+   589019,
+   589019,
+   589019,
+   589019,
+   589019,
+   589019,
+   589019
+  ],
+  "ADDI": [
+   395221,
+   395221,
+   395221,
+   395221,
+   395221,
+   395221,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "Crédito Nicole": [
+   306000,
+   306000,
+   306000,
+   306000,
+   306000,
+   306000,
+   306000,
+   306000,
+   306000,
+   306000,
+   306000,
+   306000
+  ],
+  "Tarjeta Nicole": [
+   23999,
+   23999,
+   23999,
+   23999,
+   23999,
+   23999,
+   23999,
+   23999,
+   23999,
+   23999,
+   23999,
+   23999
+  ],
+  "Joseph (cuota)": [
+   69222,
+   69222,
+   69222,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  "Banco de Bogotá": [
+   101799,
+   78767,
+   78767,
+   50916,
+   50916,
+   50916,
+   50916,
+   50916,
+   50916,
+   50916,
+   50916,
+   50916
+  ],
+  "Codensa": [
+   349187,
+   202070,
+   125004,
+   105956,
+   87656,
+   87656,
+   56227,
+   56227,
+   56227,
+   56227,
+   56227,
+   42894
+  ]
+ },
+ "debts": [
+  [
+   "Tarjeta DV — Jefe Final",
+   16099980
+  ],
+  [
+   "ADDI",
+   2371326
+  ],
+  [
+   "Joseph",
+   2605000
+  ],
+  [
+   "Estiven",
+   570000
+  ],
+  [
+   "Nicole",
+   450000
+  ],
+  [
+   "Andrés",
+   400000
+  ],
+  [
+   "Abuela",
+   283000
+  ],
+  [
+   "Luz Eliyer",
+   650000
+  ],
+  [
+   "Luz Eliyer II",
+   1130000
+  ],
+  [
+   "Jean Karlo",
+   100000
+  ],
+  [
+   "Carlos Mario",
+   150000
+  ],
+  [
+   "Joseph (préstamo)",
+   50000
+  ],
+  [
+   "Angie",
+   360000
+  ],
+  [
+   "Crédito Nicole",
+   9486000
+  ],
+  [
+   "Codensa",
+   920910
+  ],
+  [
+   "Banco de Bogotá",
+   805735
+  ],
+  [
+   "Tarjeta Nicole",
+   430917
+  ]
+ ],
+ "habits": [
+  "Programming",
+  "English",
+  "Exercise",
+  "Read",
+  "Sleep well",
+  "Healthy eating",
+  "Mathematic / Data",
+  "Save money",
+  "Writing",
+  "Take care my face and body",
+  "Stretching and meditation",
+  "Study and hard work",
+  "Be organized",
+  "God and Spirituality",
+  "Improve my personality"
+ ],
+ "animes": [
+  {
+   "name": "Dragon Ball Z",
+   "score": 100,
+   "t1": "153",
+   "t2": "291",
+   "t3": "64",
+   "t4": "131",
+   "t5": "",
+   "peliculas": "25",
+   "ovas": "",
+   "especiales": "2",
+   "estado": ""
+  },
+  {
+   "name": "One Piece",
+   "score": 99,
+   "t1": "1090",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "15",
+   "ovas": "3",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Hunter X Hunter",
+   "score": 98,
+   "t1": "148",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "2",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Naruto/Shippuden",
+   "score": 97,
+   "t1": "220",
+   "t2": "500",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "11",
+   "ovas": "13",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Full metal alchemist/Brotherhood",
+   "score": 96,
+   "t1": "51",
+   "t2": "64",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "1",
+   "ovas": "6",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Death Note",
+   "score": 95,
+   "t1": "37",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Attack on Titan",
+   "score": 94,
+   "t1": "25",
+   "t2": "12",
+   "t3": "22",
+   "t4": "30",
+   "t5": "",
+   "peliculas": "2",
+   "ovas": "5",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "One punch man",
+   "score": 91,
+   "t1": "12",
+   "t2": "12",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Corpse party",
+   "score": 53,
+   "t1": "4",
+   "t2": "1",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Mahou tsukai tai",
+   "score": 51,
+   "t1": "13",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "6",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Soul Eater",
+   "score": null,
+   "t1": "51",
+   "t2": "12",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Swort art online",
+   "score": null,
+   "t1": "25",
+   "t2": "28",
+   "t3": "25",
+   "t4": "24",
+   "t5": "",
+   "peliculas": "2",
+   "ovas": "",
+   "especiales": "1",
+   "estado": ""
+  },
+  {
+   "name": "Higth school of the dead",
+   "score": null,
+   "t1": "12",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "1",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Blue Exorcist",
+   "score": null,
+   "t1": "25",
+   "t2": "12",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "1",
+   "ovas": "1",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Sacred seven",
+   "score": null,
+   "t1": "12",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "1",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Nanatsu no taizai",
+   "score": null,
+   "t1": "24",
+   "t2": "24",
+   "t3": "24",
+   "t4": "25",
+   "t5": "24",
+   "peliculas": "1",
+   "ovas": "7",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Guilty crown",
+   "score": null,
+   "t1": "22",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "1",
+   "especiales": "1",
+   "estado": ""
+  },
+  {
+   "name": "Akame ga kill",
+   "score": null,
+   "t1": "24",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Tokyo goult",
+   "score": null,
+   "t1": "12",
+   "t2": "12",
+   "t3": "24",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "2",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Blood c",
+   "score": null,
+   "t1": "12",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "1",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Sankarea",
+   "score": null,
+   "t1": "12",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "3",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "No game no life",
+   "score": null,
+   "t1": "12",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "1",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Hellsing",
+   "score": null,
+   "t1": "13",
+   "t2": "10",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Evangelio",
+   "score": null,
+   "t1": "26",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "2",
+   "ovas": "3",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Elfe lied",
+   "score": null,
+   "t1": "13",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "1",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Rosario + vampire",
+   "score": null,
+   "t1": "13",
+   "t2": "13",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Genocyber",
+   "score": null,
+   "t1": "5",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Full metal panic",
+   "score": null,
+   "t1": "24",
+   "t2": "13",
+   "t3": "12",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "1",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Mirai nikky",
+   "score": null,
+   "t1": "26",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "1",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Tenma no kuro usagi",
+   "score": null,
+   "t1": "12",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "1",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "School days",
+   "score": null,
+   "t1": "12",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "2",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Another",
+   "score": null,
+   "t1": "12",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "1",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Higth school DXD",
+   "score": null,
+   "t1": "12",
+   "t2": "12",
+   "t3": "13",
+   "t4": "12",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "3",
+   "especiales": "1",
+   "estado": ""
+  },
+  {
+   "name": "Devil my cry",
+   "score": null,
+   "t1": "12",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Zero no tsukaima",
+   "score": null,
+   "t1": "13",
+   "t2": "12",
+   "t3": "12",
+   "t4": "12",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "1",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Afro samurai",
+   "score": null,
+   "t1": "5",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "1",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "FLCL",
+   "score": null,
+   "t1": "6",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Noragami",
+   "score": null,
+   "t1": "12",
+   "t2": "13",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "4",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Get backers",
+   "score": null,
+   "t1": "49",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Ano hanna",
+   "score": null,
+   "t1": "11",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "1",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Asura crying",
+   "score": null,
+   "t1": "13",
+   "t2": "13",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Darker than black",
+   "score": null,
+   "t1": "25",
+   "t2": "12",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "1",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Ranma 1/2",
+   "score": null,
+   "t1": "161",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "3",
+   "ovas": "12",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Super campeones",
+   "score": null,
+   "t1": "128",
+   "t2": "47",
+   "t3": "52",
+   "t4": "",
+   "t5": "",
+   "peliculas": "4",
+   "ovas": "14",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Code geass",
+   "score": null,
+   "t1": "25",
+   "t2": "25",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "9",
+   "ovas": "2",
+   "especiales": "13",
+   "estado": ""
+  },
+  {
+   "name": "Assassination classroom",
+   "score": null,
+   "t1": "22",
+   "t2": "25",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "1",
+   "ovas": "8",
+   "especiales": "1",
+   "estado": ""
+  },
+  {
+   "name": "Kenichi",
+   "score": null,
+   "t1": "50",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "11",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Jujutsu Kaisen",
+   "score": null,
+   "t1": "24",
+   "t2": "23",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "1",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Demon Slayer",
+   "score": null,
+   "t1": "26",
+   "t2": "7",
+   "t3": "11",
+   "t4": "11",
+   "t5": "",
+   "peliculas": "2",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Black Clover",
+   "score": null,
+   "t1": "35/ 170",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "1",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Chainsaw Man",
+   "score": null,
+   "t1": "12",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Inuyasha",
+   "score": null,
+   "t1": "193",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "4",
+   "ovas": "2",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Boku No Hero Academy",
+   "score": null,
+   "t1": "119/138",
+   "t2": "",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "2",
+   "ovas": "3",
+   "especiales": "",
+   "estado": ""
+  },
+  {
+   "name": "Classroom  Of The Elite",
+   "score": null,
+   "t1": "12",
+   "t2": "13",
+   "t3": "",
+   "t4": "",
+   "t5": "",
+   "peliculas": "",
+   "ovas": "",
+   "especiales": "",
+   "estado": ""
+  }
+ ],
+ "books": [
+  "Relatos cortos para entender programación",
+  "El libro Práctico",
+  "El monje que vendió su Ferrari",
+  "Desarrolla una mente prodigiosa",
+  "Despertando al pequeño gigante",
+  "7 Hábitos de la gente rica",
+  "Hábitos Atómicos",
+  "Las 40 leyes del poder",
+  "Da Vinci",
+  "Valle de la calma",
+  "El libro de las revelaciones"
+ ],
+ "dreams": [
+  [
+   "Dreams",
+   "Visa",
+   740000
+  ],
+  [
+   "Dreams",
+   "Passport",
+   186000
+  ],
+  [
+   "Dreams",
+   "Moto MT-15",
+   15500000
+  ],
+  [
+   "Tecnology",
+   "PC Gamer",
+   8000000
+  ],
+  [
+   "Tecnology",
+   "TV Oled",
+   3000000
+  ],
+  [
+   "Tecnology",
+   "Xbox One X",
+   2500000
+  ],
+  [
+   "Tecnology",
+   "Arcade Console",
+   800000
+  ],
+  [
+   "Tecnology",
+   "Home Theater",
+   500000
+  ],
+  [
+   "Tecnology",
+   "Cafetera inteligente",
+   500000
+  ],
+  [
+   "Tecnology",
+   "Alexa",
+   250000
+  ],
+  [
+   "Tecnology",
+   "Filtro de agua",
+   200000
+  ],
+  [
+   "Tecnology",
+   "Headphones",
+   150000
+  ],
+  [
+   "Shopping",
+   "Monitor Gamer",
+   1000000
+  ],
+  [
+   "Shopping",
+   "Mouse",
+   250000
+  ],
+  [
+   "Shopping",
+   "Keyboard",
+   200000
+  ],
+  [
+   "Shopping",
+   "Bed Cover",
+   100000
+  ],
+  [
+   "Shopping",
+   "Pillow",
+   80000
+  ],
+  [
+   "Room",
+   "Mesa de noche",
+   490000
+  ],
+  [
+   "Room",
+   "Escritorio",
+   400000
+  ],
+  [
+   "Room",
+   "Espejo",
+   100000
+  ],
+  [
+   "Leisure",
+   "Figuras Anime (Pilares)",
+   324000
+  ],
+  [
+   "Leisure",
+   "Manga One Piece",
+   60000
+  ],
+  [
+   "Leisure",
+   "Reloj Full Metal",
+   50000
+  ],
+  [
+   "Leisure",
+   "Cartas YUGIOH Kaiba",
+   50000
+  ],
+  [
+   "Personal",
+   "Jean H&S",
+   120000
+  ],
+  [
+   "Personal",
+   "Camiseta Chelsea",
+   0
+  ],
+  [
+   "Personal",
+   "Atlético Nacional 2017",
+   0
+  ],
+  [
+   "Skincare 💆",
+   "Versace Lotion Red",
+   200000
+  ],
+  [
+   "Skincare 💆",
+   "Block cream",
+   116900
+  ],
+  [
+   "Skincare 💆",
+   "Facial Clean",
+   105640
+  ],
+  [
+   "Skincare 💆",
+   "Serum",
+   100000
+  ],
+  [
+   "Skincare 💆",
+   "Shampoo y acondicionador",
+   100000
+  ],
+  [
+   "Skincare 💆",
+   "Facial cream",
+   90000
+  ],
+  [
+   "Skincare 💆",
+   "Listerine luminous white",
+   50000
+  ],
+  [
+   "Skincare 💆",
+   "Eyelashes and eyebrows oil",
+   25000
+  ],
+  [
+   "Skincare 💆",
+   "Eyes",
+   25000
+  ],
+  [
+   "Skincare 💆",
+   "Vaseline",
+   5000
+  ],
+  [
+   "Shopping",
+   "Laptop: Batería",
+   162000
+  ],
+  [
+   "Shopping",
+   "Laptop: Cover / carcasa",
+   80000
+  ]
+ ],
+ "servicios": [
+  [
+   "Arriendo",
+   300000,
+   "—",
+   "5 de cada mes"
+  ],
+  [
+   "Gym",
+   100000,
+   "Nequi",
+   "1 de cada mes"
+  ],
+  [
+   "Brackets",
+   75000,
+   "Nequi",
+   "22 de cada mes"
+  ],
+  [
+   "Internet",
+   65000,
+   "Nequi",
+   "15 de cada mes"
+  ],
+  [
+   "Plan de datos",
+   52000,
+   "Nequi",
+   "11 de cada mes"
+  ],
+  [
+   "Netflix",
+   44900,
+   "Nequi",
+   "30 de cada mes"
+  ],
+  [
+   "Peluquería",
+   30000,
+   "Nequi",
+   "cada 15 días"
+  ],
+  [
+   "Amazon",
+   24900,
+   "Nequi",
+   "—"
+  ],
+  [
+   "Apple",
+   12900,
+   "Nequi",
+   "18 de cada mes"
+  ],
+  [
+   "Mercado Libre",
+   9900,
+   "Nequi",
+   "9 de cada mes"
+  ],
+  [
+   "YouTube",
+   8400,
+   "Nequi",
+   "29 de cada mes"
+  ],
+  [
+   "Ahorro fondo empresa",
+   180000,
+   "Fondo",
+   "con la nómina"
+  ]
+ ],
+ "detalle": {
+  "Tarjeta DV": [
+   [
+    "Avance",
+    268333,
+    0,
+    60,
+    0
+   ],
+   [
+    "Interés corriente (meses 1 y 2)",
+    431666,
+    null,
+    null,
+    215833
+   ],
+   [
+    "Cuota de manejo",
+    26000,
+    null,
+    null,
+    0
+   ],
+   [
+    "Cuota seguro",
+    5990,
+    null,
+    null,
+    0
+   ]
+  ],
+  "ADDI": [
+   [
+    "Refinanciado",
+    395221,
+    0,
+    6,
+    0
+   ]
+  ],
+  "Banco de Bogotá": [
+   [
+    "Fianza",
+    17850,
+    9,
+    12,
+    0
+   ],
+   [
+    "Mercado Pago",
+    24150,
+    6,
+    6,
+    0
+   ],
+   [
+    "Mercado Pago II",
+    7999,
+    5,
+    6,
+    0
+   ],
+   [
+    "Mercado Pago III",
+    15033,
+    5,
+    6,
+    0
+   ],
+   [
+    "Didi Food",
+    1237,
+    4,
+    36,
+    0
+   ],
+   [
+    "Dollar City",
+    487,
+    4,
+    36,
+    0
+   ],
+   [
+    "Deli Piza",
+    1295,
+    4,
+    36,
+    0
+   ],
+   [
+    "Mercado Libre",
+    10001,
+    3,
+    6,
+    0
+   ],
+   [
+    "Temu",
+    1661,
+    3,
+    36,
+    0
+   ],
+   [
+    "Deli Piza II",
+    1371,
+    3,
+    36,
+    0
+   ],
+   [
+    "PAYU",
+    278,
+    3,
+    36,
+    0
+   ],
+   [
+    "Dunki",
+    723,
+    3,
+    36,
+    0
+   ],
+   [
+    "BPAY",
+    1755,
+    3,
+    36,
+    0
+   ],
+   [
+    "Claro",
+    2523,
+    3,
+    36,
+    0
+   ],
+   [
+    "Oxxo",
+    362,
+    2,
+    36,
+    0
+   ],
+   [
+    "Claro II",
+    2778,
+    2,
+    36,
+    0
+   ],
+   [
+    "Claro III",
+    1669,
+    2,
+    36,
+    0
+   ],
+   [
+    "TC + Multiasistencia",
+    25300,
+    null,
+    null,
+    0
+   ],
+   [
+    "Seguro",
+    4900,
+    null,
+    null,
+    0
+   ],
+   [
+    "Oxxo II",
+    558,
+    1,
+    36,
+    0
+   ],
+   [
+    "Didi Food II",
+    1308,
+    1,
+    36,
+    0
+   ],
+   [
+    "Oxxo III",
+    189,
+    1,
+    36,
+    0
+   ],
+   [
+    "Claro IV",
+    2522,
+    1,
+    36,
+    0
+   ]
+  ],
+  "Codensa": [
+   [
+    "Mercado Pago",
+    19667,
+    5,
+    6,
+    0
+   ],
+   [
+    "Bold",
+    7704,
+    5,
+    25,
+    0
+   ],
+   [
+    "Temu DL",
+    19048,
+    2,
+    5,
+    0
+   ],
+   [
+    "Mercado Pago II",
+    18300,
+    2,
+    6,
+    0
+   ],
+   [
+    "Mercado Casa 2",
+    48875,
+    2,
+    4,
+    0
+   ],
+   [
+    "Panini",
+    27450,
+    1,
+    2,
+    0
+   ],
+   [
+    "Arena",
+    28191,
+    1,
+    3,
+    0
+   ],
+   [
+    "Mercado",
+    100000,
+    1,
+    2,
+    0
+   ],
+   [
+    "Bosa Porvenir",
+    11070,
+    1,
+    1,
+    0
+   ],
+   [
+    "Didi",
+    35981,
+    1,
+    1,
+    0
+   ],
+   [
+    "Frisby",
+    73900,
+    1,
+    1,
+    0
+   ],
+   [
+    "Metro",
+    31429,
+    1,
+    7,
+    0
+   ],
+   [
+    "Franky Pollo",
+    69000,
+    1,
+    1,
+    0
+   ],
+   [
+    "Comcel",
+    13333,
+    1,
+    12,
+    0
+   ],
+   [
+    "Cuota TC",
+    30800,
+    null,
+    null,
+    0
+   ],
+   [
+    "Seguro",
+    4390,
+    null,
+    null,
+    0
+   ]
+  ],
+  "Crédito Nicole": [
+   [
+    "Cuota mensual",
+    306000,
+    16,
+    48,
+    0
+   ]
+  ],
+  "Tarjeta Nicole": [
+   [
+    "Plan a 22 meses",
+    12750,
+    0,
+    22,
+    0
+   ],
+   [
+    "Plan a 14 meses",
+    4167,
+    0,
+    14,
+    0
+   ],
+   [
+    "Plan a 13 meses",
+    7083,
+    0,
+    13,
+    0
+   ]
+  ],
+  "Joseph": [
+   [
+    "Deuda libre 1",
+    0,
+    null,
+    null,
+    1615000
+   ],
+   [
+    "Deuda libre 2",
+    0,
+    null,
+    null,
+    500000
+   ],
+   [
+    "Deuda libre 3",
+    0,
+    null,
+    null,
+    250000
+   ],
+   [
+    "Deuda libre 4",
+    0,
+    null,
+    null,
+    240000
+   ],
+   [
+    "Cuota pactada",
+    69222,
+    6,
+    9,
+    0
+   ]
+  ],
+  "Préstamos personales": [
+   [
+    "Estiven 1 (con interés $70.000)",
+    0,
+    null,
+    null,
+    570000
+   ],
+   [
+    "Nicole",
+    0,
+    null,
+    null,
+    450000
+   ],
+   [
+    "Andrés",
+    0,
+    null,
+    null,
+    400000
+   ],
+   [
+    "Abuela",
+    0,
+    null,
+    null,
+    283000
+   ],
+   [
+    "Luz Eliyer (interés $130.000)",
+    0,
+    null,
+    null,
+    650000
+   ],
+   [
+    "Luz Eliyer II (interés $130.000)",
+    0,
+    null,
+    null,
+    1130000
+   ],
+   [
+    "Jean Karlo",
+    0,
+    null,
+    null,
+    100000
+   ],
+   [
+    "Carlos Mario",
+    0,
+    null,
+    null,
+    150000
+   ],
+   [
+    "Joseph (préstamo)",
+    0,
+    null,
+    null,
+    50000
+   ],
+   [
+    "Angie (interés $60.000)",
+    0,
+    null,
+    null,
+    360000
+   ]
+  ],
+  "Nómina (se descuentan solos)": [
+   [
+    "Crédito Rotativo",
+    381756,
+    5,
+    36,
+    0
+   ],
+   [
+    "Corpecol",
+    273728,
+    7,
+    36,
+    0
+   ]
+  ]
+ },
+ "dreams_quitar": [
+  "Arreglar Laptop",
+  "Arreglar Laptop (batería y cover)",
+  "Skincare completo",
+  "Versace Lotion Red"
+ ],
+ "dreams_nuevos": [
+  [
+   "Skincare 💆",
+   "Versace Lotion Red",
+   200000
+  ],
+  [
+   "Skincare 💆",
+   "Block cream",
+   116900
+  ],
+  [
+   "Skincare 💆",
+   "Facial Clean",
+   105640
+  ],
+  [
+   "Skincare 💆",
+   "Serum",
+   100000
+  ],
+  [
+   "Skincare 💆",
+   "Shampoo y acondicionador",
+   100000
+  ],
+  [
+   "Skincare 💆",
+   "Facial cream",
+   90000
+  ],
+  [
+   "Skincare 💆",
+   "Listerine luminous white",
+   50000
+  ],
+  [
+   "Skincare 💆",
+   "Eyelashes and eyebrows oil",
+   25000
+  ],
+  [
+   "Skincare 💆",
+   "Eyes",
+   25000
+  ],
+  [
+   "Skincare 💆",
+   "Vaseline",
+   5000
+  ],
+  [
+   "Shopping",
+   "Laptop: Batería",
+   162000
+  ],
+  [
+   "Shopping",
+   "Laptop: Cover / carcasa",
+   80000
+  ]
+ ]
+}
