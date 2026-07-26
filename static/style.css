@@ -4360,3 +4360,128 @@ body.hunter-profile-open {
 @media(max-width:620px){.life-mission-tools{justify-content:stretch}.pending-missions-btn{width:100%}.recovery-list-card{grid-template-columns:1fr}.recovery-list-card button{width:100%}}
 
 .recovery-card-actions{display:flex;gap:8px;align-items:center}.recovery-card-actions button{white-space:nowrap}@media(max-width:620px){.recovery-card-actions{display:grid;grid-template-columns:1fr 1fr}.recovery-card-actions button{width:100%}}
+
+/* V149 · Pending Missions visual polish (no logic/version change) */
+.recovery-modal-tools{
+  display:flex;
+  justify-content:flex-end;
+  align-items:center;
+  gap:8px;
+  margin:0 0 10px;
+}
+.recovery-help{position:relative}
+.recovery-help>summary{
+  list-style:none;
+  display:grid;
+  place-items:center;
+  width:34px;
+  height:34px;
+  padding:0;
+  border:1px solid rgba(119,180,145,.28);
+  border-radius:10px;
+  background:rgba(9,17,14,.68);
+  color:#dce9e1;
+  font-weight:900;
+  cursor:pointer;
+  user-select:none;
+  transition:.18s ease;
+}
+.recovery-help>summary::-webkit-details-marker{display:none}
+.recovery-help>summary:hover,
+.recovery-help[open]>summary{
+  transform:translateY(-1px);
+  border-color:rgba(119,180,145,.55);
+  background:rgba(16,30,24,.86);
+}
+.recovery-help>div{
+  position:absolute;
+  z-index:5;
+  top:42px;
+  right:0;
+  width:min(360px,calc(100vw - 56px));
+  padding:11px 12px;
+  border:1px solid rgba(119,180,145,.22);
+  border-radius:12px;
+  background:rgba(7,15,12,.98);
+  box-shadow:0 16px 40px rgba(0,0,0,.42);
+  color:#bdcbc3;
+  font-size:.85rem;
+  line-height:1.5;
+}
+.recovery-retry-btn,
+.recovery-redo-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  min-height:34px;
+  border:1px solid rgba(119,180,145,.24);
+  border-radius:10px;
+  background:rgba(10,20,16,.66);
+  color:#cbd9d1;
+  font:inherit;
+  font-size:.79rem;
+  font-weight:800;
+  letter-spacing:.01em;
+  cursor:pointer;
+  transition:transform .16s ease,border-color .16s ease,background .16s ease,color .16s ease;
+}
+.recovery-retry-btn{padding:7px 10px}
+.recovery-redo-btn{
+  align-self:center;
+  padding:7px 10px;
+  color:#bcd3c5;
+  background:linear-gradient(145deg,rgba(29,47,39,.66),rgba(8,17,13,.72));
+}
+.recovery-retry-btn:hover,
+.recovery-redo-btn:hover{
+  transform:translateY(-1px);
+  border-color:rgba(119,180,145,.52);
+  background:rgba(18,34,27,.86);
+  color:#f0f7f3;
+}
+.recovery-retry-btn:disabled{opacity:.55;cursor:wait;transform:none}
+.recovery-history-row{
+  grid-template-columns:22px minmax(0,1fr) auto;
+  align-items:center;
+  gap:10px;
+}
+.recovery-history-copy{min-width:0}
+.recovery-history-copy b,
+.recovery-history-copy small{
+  white-space:normal;
+  overflow-wrap:anywhere;
+  word-break:normal;
+}
+.recovery-status-icon{align-self:start;margin-top:2px}
+
+@media(max-width:620px){
+  .recovery-modal-tools{justify-content:flex-end}
+  .recovery-help>div{
+    position:fixed;
+    top:auto;
+    right:18px;
+    bottom:84px;
+    left:18px;
+    width:auto;
+    max-height:40vh;
+    overflow:auto;
+  }
+  .recovery-history-row{
+    grid-template-columns:22px minmax(0,1fr);
+    align-items:start;
+  }
+  .recovery-history-row .recovery-redo-btn{
+    grid-column:2;
+    justify-self:stretch;
+    width:100%;
+    margin-top:6px;
+  }
+  .recovery-section>summary{padding:11px 12px}
+  .recovery-history-row{padding:11px 12px}
+}
+
+@media(max-width:390px){
+  .recovery-retry-btn span{display:none}
+  .recovery-retry-btn{width:34px;padding:0}
+}
