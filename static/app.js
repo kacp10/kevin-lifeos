@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 146;
+const FRONT_V = 147;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -4115,7 +4115,7 @@ function renderHabitos() {
   S.habits.forEach(h => {
     const racha = displayedHabitRun(h, marks);
     const debt = recoveryDebtCount(h.id);
-    const title = debt ? `${racha} resolved days · ${debt} pending mission${debt===1?'':'s'}` : `${racha} resolved days`;
+    const title = debt ? `${racha} current streak · ${debt} pending mission${debt===1?'':'s'}` : `${racha} current streak`;
     const fuego = racha > 0 ? ` <span class="streak" title="${title}">🔥${racha}</span>` : '';
     html += `<tr><td class="hname">${h.name}${fuego} <button class="del-x" data-type="habit" data-id="${h.id}">✕</button></td>`;
     for (let d = 1; d <= daysInMonth; d++) {
@@ -5283,10 +5283,12 @@ function effectiveHistoricalHabitRun(habit, marks) {
 }
 
 function displayedHabitRun(habit, marks) {
-  const current = effectiveCurrentHabitRun(habit, marks);
-  const historical = effectiveHistoricalHabitRun(habit, marks);
-  const unresolved = recoveryDebtCount(habit.id);
-  return Math.max(0, Math.max(current, historical) - unresolved);
+  // The visible flame is the REAL current streak built only from Habit checks.
+  // A missed required day breaks it. REST/Sundays are neutral. When a pending
+  // mission is genuinely completed, the backend inserts the original check and
+  // this same calculation naturally restores the full chain.
+  const extraSkip = habit.name === 'Exercise' ? [6] : [];
+  return rachaHabito(habit.id, marks, extraSkip);
 }
 function daysAgoISO(n) { const d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()-n); return localISO(d); }
 function weekdayFromISO(iso) { const d=new Date(iso+'T12:00:00'); return (d.getDay()+6)%7; }
@@ -5389,7 +5391,7 @@ async function openPendingMissions(){
   const recoveredHtml=recovered.length?recovered.map(x=>`<div class="recovery-history-row"><span>✓</span><div><b>${esc(x.title)}</b><small>${esc(recoveryDayLabel(x.original_day))} → recovered ${esc(fmtFecha(x.recovered_day))} · ${recoveryDelay(x.original_day,x.recovered_day)} days later</small></div></div>`).join(''):'<div class="recovery-empty">No recovered missions yet.</div>';
   const rests=[...lifeRestDates()].sort().reverse();
   const restHtml=rests.length?rests.map(day=>`<div class="recovery-history-row"><span>🌿</span><div><b>${esc(recoveryDayLabel(day))}</b><small>Protected REST · skipped by streaks and Pending Missions</small></div><button class="btn-ghost" data-recovery-unrest="${day}">Remove REST</button></div>`).join(''):'<div class="recovery-empty">No exceptional REST dates saved.</div>';
-  await modal({icon:'📜',title:`Pending Missions · ${pending.length}`,text:`<div class="recovery-modal-copy">A missed activity subtracts from its Habit counter while it is Pending or Added today. Only the Life check marks the original date and restores that point. Protected REST dates create no debt.</div><button class="btn-ghost" data-recovery-retry>↻ Retry sync</button><details open class="recovery-section"><summary>⚠ Pending · ${pending.length}</summary>${pendingHtml}</details><details class="recovery-section"><summary>🌿 Protected REST · ${rests.length}</summary>${restHtml}</details><details class="recovery-section"><summary>✓ Recovered · ${recovered.length}</summary>${recoveredHtml}</details>`,okText:'Close'});
+  await modal({icon:'📜',title:`Pending Missions · ${pending.length}`,text:`<div class="recovery-modal-copy">A required day without a check breaks that Habit streak. Recover today only adds the original activity to Life. Complete its normal modal flow and check it there to restore the original date. REST creates no debt.</div><button class="btn-ghost" data-recovery-retry>↻ Retry sync</button><details open class="recovery-section"><summary>⚠ Pending · ${pending.length}</summary>${pendingHtml}</details><details class="recovery-section"><summary>🌿 Protected REST · ${rests.length}</summary>${restHtml}</details><details class="recovery-section"><summary>✓ Recovered · ${recovered.length}</summary>${recoveredHtml}</details>`,okText:'Close'});
 }
 
 function renderLife() {
@@ -5964,8 +5966,8 @@ function renderRoutineDay() {
   for (const x of recoveryToday) {
     const habit = (S.habits || []).find(h => Number(h.id) === Number(x.habit_id));
     lista.push({ t:'Recovery', title:`📜 ${x.title || habit?.name || 'Pending mission'}`,
-      d:`Pending since ${recoveryDayLabel(x.original_day)} · completing it repairs the original day and keeps the delay in history.`,
-      key:`recovery_${x.id}`, recoveryId:x.id, recoveryOriginal:x.original_day });
+      d:`Pending since ${recoveryDayLabel(x.original_day)} · complete the normal activity flow; only then will the original Habit day be checked.`,
+      key:`recovery_${x.id}`, sourceAct:x.activity, recoveryId:x.id, recoveryOriginal:x.original_day });
   }
   // aplicar overrides de hora (la lista se reordena sola con la nueva hora)
   lista.forEach(a => { a.t = a.recoveryId ? a.t : effTime(a.key, iso, a.t); });
@@ -5985,7 +5987,7 @@ function renderRoutineDay() {
     return `<div class="routine-block ${a.work ? 'work' : ''} ${a.recoveryId ? 'recovery-mission' : ''} ${isDone ? 'done' : ''}">
       <span class="rb-time">${a.t}</span>
       <div class="rb-body"><div class="rb-title">${a.title} <button class="edit-time" data-key="${a.key}" data-day="${iso}" data-cur="${a.t}" title="Edit time">⏰</button> ${delBtn}</div><div class="rb-desc">${a.d}</div></div>
-      <button class="rb-check ${isDone ? 'on' : ''}" data-day="${iso}" data-act="${a.key}" ${a.recoveryId ? `data-recovery-complete="${a.recoveryId}"` : ''}>${isDone ? '✓' : ''}</button>
+      <button class="rb-check ${isDone ? 'on' : ''}" data-day="${iso}" data-act="${a.recoveryId ? a.sourceAct : a.key}" ${a.recoveryId ? `data-recovery-complete="${a.recoveryId}" data-recovery-original="${a.recoveryOriginal}"` : ''}>${isDone ? '✓' : ''}</button>
     </div>`;
   }).join('');
   $('#routineDay').innerHTML = html;
@@ -6051,7 +6053,7 @@ function renderRoutineDay() {
       showRecoveryOnToday(r.recovery);
       renderHabitos();
       closePendingMissionModal();
-      toast('📜 Added to today. It is still pending and does not count until you check it in Life.');
+      toast('📜 Added to today. Complete its normal Life flow; it remains pending until the final check.');
     }catch(err){
       schedule.disabled=false;
       toast('⚠ The pending mission could not be added to today. It remains pending.', 'err');
@@ -6060,19 +6062,9 @@ function renderRoutineDay() {
   }
   const unschedule=e.target.closest('[data-recovery-unschedule]');
   if(unschedule){ await api(`/api/recovery/${unschedule.dataset.recoveryUnschedule}/unschedule`,{body:{}}); toast('Mission removed from today, but it remains pending.'); await load(); return; }
-  const complete=e.target.closest('[data-recovery-complete]');
-  if(complete){
-    if(!await confirmModal('Recover mission','Complete this activity now? Kevin LifeOS will mark its original Habit date and preserve today as the recovery date.')) return;
-    try{
-      await api(`/api/recovery/${complete.dataset.recoveryComplete}/complete`,{body:{day:complete.dataset.day||hoyLocal(),confirm_complete:true}});
-      toast('✓ Mission recovered. The original Habit date now has a real check and the counter was restored.');
-      recoverySyncedFor='';
-      await load();
-    }catch(err){
-      toast('⚠ It was not completed. The mission remains scheduled and Habits was not changed.', 'err');
-    }
-    return;
-  }
+  // Recovery checks are handled by the normal Life activity listener below so
+  // English, Study, Reading and every other activity keep their full modal flow.
+
 });
 
 // listeners de Life
@@ -6324,18 +6316,22 @@ document.addEventListener('click', async (e) => {
 
   const c = e.target.closest('.rb-check');
   if (!c) return;
-  if (c.dataset.recoveryComplete) return; // handled atomically by V141 recovery flow
   if (_routineBusy) return;                 // evita doble disparo del mismo toque (móvil)
   _routineBusy = true;
   try {
-  const day = c.dataset.day, act = c.dataset.act;
-  const marcando = !c.classList.contains('on');
+  const day = c.dataset.day;
+  const recoveryId = c.dataset.recoveryComplete ? Number(c.dataset.recoveryComplete) : 0;
+  const recovery = recoveryId ? recoveryRows().find(x => Number(x.id) === recoveryId) : null;
+  const act = recovery?.activity || c.dataset.act;
+  const missionDay = recovery?.original_day || day;
+  const missionWd = recovery ? weekdayFromISO(missionDay) : CUR_WD;
+  const marcando = recovery ? true : !c.classList.contains('on');
 
   if (marcando) {
     // V121 · English opens one persistent Language Hunter mission modal.
     // Partial steps never affect Habits/Goals. Only completing every step allows the official check below.
     if (act === 'ingles') {
-      const completed = await openLanguageMissionModal(day, CUR_WD);
+      const completed = await openLanguageMissionModal(missionDay, missionWd);
       if (!completed) { toast('English mission progress saved.'); return; }
     }
     // V120: choose exactly which active course advanced. Course progress does not alter
@@ -6381,6 +6377,16 @@ document.addEventListener('click', async (e) => {
         }
         toast('📖 Reading progress saved');
       }
+    }
+    if (recovery) {
+      // The activity-specific flow above has really been completed. Only now
+      // mark the ORIGINAL Habit date and preserve today as the recovery date.
+      await api(`/api/recovery/${recovery.id}/complete`, { body: { day, confirm_complete: true } });
+      if (act === 'ingles') await saveLanguageSessionReport(missionWd);
+      toast(`✓ Recovered ${recoveryDayLabel(missionDay)}. The original Habit check was restored.`);
+      recoverySyncedFor = '';
+      await load();
+      return;
     }
     await api('/api/routine', { body: { day, activity: act } });
     if (act !== 'estudio' && act !== 'leer') toast('✓ Done! One more step toward your goals.');
