@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 147  # V147 normal recovery flows and check-based Habit streaks
+VERSION = 148  # V148 reopen incorrect recoveries and hide REST from Pending Missions
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -2243,6 +2243,38 @@ def recovery_complete(i):
         d.rollback()
         raise
     return jsonify(ok=True)
+
+
+@app.post('/api/recovery/<int:i>/reopen')
+def recovery_reopen(i):
+    """Return an incorrectly recovered mission to Pending safely."""
+    d = db()
+    row = d.execute('SELECT * FROM habit_recoveries WHERE id=?', (i,)).fetchone()
+    if not row:
+        return jsonify(error='Recovery mission not found'), 404
+    row = dict(row)
+    if row.get('status') != 'recovered':
+        return jsonify(error='Only recovered missions can be reopened'), 409
+    note_row = d.execute('SELECT note FROM routine_done WHERE day=? AND activity=?',
+                         (row['original_day'], row['activity'])).fetchone()
+    note = str(note_row['note'] if note_row else '')
+    now = datetime.now().isoformat(timespec='seconds')
+    try:
+        if note.startswith('Recovered on '):
+            d.execute('DELETE FROM habit_marks WHERE habit_id=? AND day=?',
+                      (row['habit_id'], row['original_day']))
+            d.execute("DELETE FROM routine_done WHERE day=? AND activity=? AND note LIKE 'Recovered on %'",
+                      (row['original_day'], row['activity']))
+        d.execute("""UPDATE habit_recoveries
+                     SET status='pending',added_to_day='',recovered_day='',updated_at=?
+                     WHERE id=?""", (now, i))
+        d.commit()
+    except Exception:
+        d.rollback()
+        raise
+    updated = d.execute('SELECT * FROM habit_recoveries WHERE id=?', (i,)).fetchone()
+    return jsonify(ok=True, recovery=dict(updated) if updated else None,
+                   automatic_mark_removed=note.startswith('Recovered on '))
 
 
 @app.post('/api/recovery/<int:i>/unschedule')

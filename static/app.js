@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 147;
+const FRONT_V = 148;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -5386,12 +5386,10 @@ async function openPendingMissions(){
   const pendingHtml=pending.length?pending.map(x=>{
     const h=(S.habits||[]).find(v=>Number(v.id)===Number(x.habit_id));
     const scheduled=x.status==='scheduled'&&x.added_to_day===today;
-    return `<div class="recovery-list-card"><div><span>${esc(recoveryDayLabel(x.original_day))}</span><b>${esc(x.title||h?.name||'Habit mission')}</b><small>${esc(h?.name||'Habit')} · ${recoveryDelay(x.original_day)} day${recoveryDelay(x.original_day)===1?'':'s'} pending</small></div><div class="recovery-card-actions"><button class="btn-ghost" data-recovery-rest="${x.original_day}" title="Protect this original date as REST">🌿 REST</button><button class="${scheduled?'btn-ghost':'btn'}" data-recovery-schedule="${x.id}">${scheduled?'Added today':'Recover today'}</button></div></div>`;
+    return `<div class="recovery-list-card"><div><span>${esc(recoveryDayLabel(x.original_day))}</span><b>${esc(x.title||h?.name||'Habit mission')}</b><small>${esc(h?.name||'Habit')} · ${recoveryDelay(x.original_day)} day${recoveryDelay(x.original_day)===1?'':'s'} pending</small></div><div class="recovery-card-actions"><button class="${scheduled?'btn-ghost':'btn'}" data-recovery-schedule="${x.id}">${scheduled?'Added today':'Recover today'}</button></div></div>`;
   }).join(''):'<div class="recovery-empty">✓ No pending missions.</div>';
-  const recoveredHtml=recovered.length?recovered.map(x=>`<div class="recovery-history-row"><span>✓</span><div><b>${esc(x.title)}</b><small>${esc(recoveryDayLabel(x.original_day))} → recovered ${esc(fmtFecha(x.recovered_day))} · ${recoveryDelay(x.original_day,x.recovered_day)} days later</small></div></div>`).join(''):'<div class="recovery-empty">No recovered missions yet.</div>';
-  const rests=[...lifeRestDates()].sort().reverse();
-  const restHtml=rests.length?rests.map(day=>`<div class="recovery-history-row"><span>🌿</span><div><b>${esc(recoveryDayLabel(day))}</b><small>Protected REST · skipped by streaks and Pending Missions</small></div><button class="btn-ghost" data-recovery-unrest="${day}">Remove REST</button></div>`).join(''):'<div class="recovery-empty">No exceptional REST dates saved.</div>';
-  await modal({icon:'📜',title:`Pending Missions · ${pending.length}`,text:`<div class="recovery-modal-copy">A required day without a check breaks that Habit streak. Recover today only adds the original activity to Life. Complete its normal modal flow and check it there to restore the original date. REST creates no debt.</div><button class="btn-ghost" data-recovery-retry>↻ Retry sync</button><details open class="recovery-section"><summary>⚠ Pending · ${pending.length}</summary>${pendingHtml}</details><details class="recovery-section"><summary>🌿 Protected REST · ${rests.length}</summary>${restHtml}</details><details class="recovery-section"><summary>✓ Recovered · ${recovered.length}</summary>${recoveredHtml}</details>`,okText:'Close'});
+  const recoveredHtml=recovered.length?recovered.map(x=>`<div class="recovery-history-row"><span>✓</span><div><b>${esc(x.title)}</b><small>${esc(recoveryDayLabel(x.original_day))} → recovered ${esc(fmtFecha(x.recovered_day))} · ${recoveryDelay(x.original_day,x.recovered_day)} days later</small></div><button class="btn-ghost" data-recovery-reopen="${x.id}">Redo correctly</button></div>`).join(''):'<div class="recovery-empty">No recovered missions yet.</div>';
+  await modal({icon:'📜',title:`Pending Missions · ${pending.length}`,text:`<div class="recovery-modal-copy">A required day without a check breaks that Habit streak. Recover today only adds the original activity to Life. Complete its normal modal flow and check it there to restore the original date. REST days stay neutral and are not listed here.</div><button class="btn-ghost" data-recovery-retry>↻ Retry sync</button><details open class="recovery-section"><summary>⚠ Pending · ${pending.length}</summary>${pendingHtml}</details><details class="recovery-section"><summary>✓ Recovered · ${recovered.length}</summary>${recoveredHtml}</details>`,okText:'Close'});
 }
 
 function renderLife() {
@@ -6020,6 +6018,22 @@ function renderRoutineDay() {
     await openPendingMissions();
     return;
   }
+  const reopen=e.target.closest('[data-recovery-reopen]');
+  if(reopen){
+    if(!await confirmModal('Redo this recovery correctly','Return this mission to Pending so you can add it to Life and complete its full normal modal flow? The automatic check created by the old recovery will be removed safely.')) return;
+    try{
+      const r=await api(`/api/recovery/${reopen.dataset.recoveryReopen}/reopen`,{body:{}});
+      S.habit_recoveries = recoveryRows().map(x => Number(x.id)===Number(reopen.dataset.recoveryReopen) ? r.recovery : x);
+      recoverySyncedFor='';
+      toast('Mission returned to Pending. Use Recover today, then complete its full Life flow.');
+      closeModal();
+      renderLife();
+      renderHabits();
+      setTimeout(()=>openPendingMissions(),120);
+    }catch(err){ toast(err.message||'Could not reopen the recovery.','err'); }
+    return;
+  }
+
   const unrest=e.target.closest('[data-recovery-unrest]');
   if(unrest){
     const day=unrest.dataset.recoveryUnrest;
