@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 145  # V145 complete Pending Missions repair and debt-aware Habit counters
+VERSION = 146  # V146 accurate Habit counters, recovery-neutral streaks and future-mark guard
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -1800,15 +1800,22 @@ def card_pay():
 
 @app.post('/api/habit')
 def habit():
-    j = request.json
+    j = request.get_json(silent=True) or {}
+    day = str(j.get('day') or '')[:10]
+    try:
+        selected = date.fromisoformat(day)
+    except ValueError:
+        return jsonify(error='Invalid habit date'), 400
+    if selected > date.today():
+        return jsonify(error='Future habit days cannot be marked as completed'), 400
     cur = db().execute('SELECT 1 FROM habit_marks WHERE habit_id=? AND day=?',
-                       (j['habit_id'], j['day'])).fetchone()
+                       (j['habit_id'], day)).fetchone()
     if cur:
         db().execute('DELETE FROM habit_marks WHERE habit_id=? AND day=?',
-                     (j['habit_id'], j['day']))
+                     (j['habit_id'], day))
     else:
         db().execute('INSERT INTO habit_marks VALUES (?,?)',
-                     (j['habit_id'], j['day']))
+                     (j['habit_id'], day))
     db().commit()
     return jsonify(ok=True, marked=not cur)
 

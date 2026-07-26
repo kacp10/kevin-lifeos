@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 145;
+const FRONT_V = 146;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -4121,8 +4121,9 @@ function renderHabitos() {
     for (let d = 1; d <= daysInMonth; d++) {
       const day = `${ym}-${String(d).padStart(2, '0')}`;
       const on = marks.has(`${h.id}|${day}`);
-      html += `<td class="cell ${on ? 'on' : ''} ${d === elapsed ? 'today' : ''}"
-               data-h="${h.id}" data-day="${day}">${on ? 'x' : ''}</td>`;
+      const future = d > elapsed;
+      html += `<td class="cell ${on ? 'on' : ''} ${d === elapsed ? 'today' : ''} ${future ? 'future' : ''}"
+               data-h="${h.id}" data-day="${day}" ${future ? 'aria-disabled="true" title="Future days cannot be completed yet"' : ''}>${on ? 'x' : ''}</td>`;
     }
     html += '</tr>';
   });
@@ -4155,6 +4156,10 @@ function renderHabitos() {
 $('#habitGrid').addEventListener('click', async (e) => {
   const c = e.target.closest('.cell');
   if (!c) return;
+  if (c.dataset.day > hoyLocal()) {
+    toast('Future days cannot be marked as completed yet.', 'warn');
+    return;
+  }
   await api('/api/habit', { body: { habit_id: +c.dataset.h, day: c.dataset.day } });
   // parche local: togglear la marca sin re-pedir TODO el estado (acción muy frecuente)
   const key = `${c.dataset.h}|${c.dataset.day}`;
@@ -5226,9 +5231,60 @@ function recoveryDebtCount(habitId) {
   const rest = lifeRestDates();
   return recoveryOpenForHabit(habitId).filter(x => !rest.has(String(x.original_day || '').slice(0,10))).length;
 }
+function recoveredDaysForHabit(habitId) {
+  return new Set(recoveryRows()
+    .filter(x => Number(x.habit_id) === Number(habitId) && x.status === 'recovered')
+    .map(x => String(x.original_day || '').slice(0, 10))
+    .filter(Boolean));
+}
+
+// A recovered mission repairs the gap but does not award an extra streak point.
+// The next normal on-time completion can grow the counter again.
+function effectiveCurrentHabitRun(habit, marks) {
+  const recovered = recoveredDaysForHabit(habit.id);
+  const extraSkip = habit.name === 'Exercise' ? [6] : [];
+  let score = 0;
+  const d = new Date();
+  const todayKey = `${habit.id}|${localISO(d)}`;
+  if (!marks.has(todayKey)) d.setDate(d.getDate() - 1);
+  for (let k = 0; k < 400; k++) {
+    const iso = localISO(d), dow = d.getDay();
+    if (dow === 0 || extraSkip.includes(dow) || isLifeRestDate(iso)) { d.setDate(d.getDate() - 1); continue; }
+    if (!marks.has(`${habit.id}|${iso}`)) break;
+    if (!recovered.has(iso)) score += 1;
+    d.setDate(d.getDate() - 1);
+  }
+  return score;
+}
+
+function effectiveHistoricalHabitRun(habit, marks) {
+  const recovered = recoveredDaysForHabit(habit.id);
+  const dates = [...marks]
+    .filter(key => String(key).startsWith(`${habit.id}|`))
+    .map(key => String(key).split('|')[1])
+    .filter(Boolean)
+    .sort();
+  if (!dates.length) return 0;
+  const first = new Date(`${dates[0]}T12:00:00`);
+  const last = new Date(`${hoyLocal()}T12:00:00`);
+  const extraSkip = habit.name === 'Exercise' ? [6] : [];
+  let run = 0, best = 0;
+  for (const d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
+    const iso = localISO(d), dow = d.getDay();
+    if (dow === 0 || extraSkip.includes(dow) || isLifeRestDate(iso)) continue;
+    if (marks.has(`${habit.id}|${iso}`)) {
+      if (!recovered.has(iso)) run += 1;
+      best = Math.max(best, run);
+    } else {
+      run = 0;
+    }
+  }
+  return best;
+}
+
 function displayedHabitRun(habit, marks) {
-  const current = rachaHabito(habit.id, marks, habit.name === 'Exercise' ? [6] : []);
-  const historical = maxHistoricalHabitStreak(habit, marks);
+  const current = effectiveCurrentHabitRun(habit, marks);
+  const historical = effectiveHistoricalHabitRun(habit, marks);
   const unresolved = recoveryDebtCount(habit.id);
   return Math.max(0, Math.max(current, historical) - unresolved);
 }
