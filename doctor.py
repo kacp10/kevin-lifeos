@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Diagnóstico de Kevin Life OS v103.
+"""Diagnóstico de Kevin Life OS V141.
 
 Ejecutar desde la raíz del proyecto:
     python doctor.py
@@ -124,7 +124,7 @@ def revisar_sqlite() -> None:
             problemas.append("La base SQLite no pasó integrity_check")
 
         tablas = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        requeridas = {"config", "debts", "abonos", "books", "habits", "goals", "schema_migrations"}
+        requeridas = {"config", "debts", "abonos", "books", "habits", "habit_recoveries", "goals", "schema_migrations"}
         faltan = sorted(requeridas - tablas)
         if faltan:
             print(BAD + "Faltan tablas: " + ", ".join(faltan))
@@ -135,8 +135,8 @@ def revisar_sqlite() -> None:
         if "schema_migrations" in tablas:
             migraciones = con.execute("SELECT version, applied_at FROM schema_migrations ORDER BY applied_at").fetchall()
             versiones = {r[0] for r in migraciones}
-            if "v103_performance_indexes" in versiones:
-                print(OK + f"Migraciones registradas: {len(migraciones)}; v103 aplicada")
+            if versiones:
+                print(OK + f"Migraciones registradas: {len(migraciones)}")
             else:
                 print(WARN + "v103 todavía no aparece en schema_migrations; inicia app.py una vez.")
                 advertencias.append("Inicia la app para aplicar la migración v103")

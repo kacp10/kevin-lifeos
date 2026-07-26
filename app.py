@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 140  # V140 audits feedback flows, adds the 10am–7pm Life shift and fixes Saturday routine handling; must match FRONT_V in static/app.js
+VERSION = 141  # V141 Pending Missions, sacred REST and recovery history; must match FRONT_V in static/app.js
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -485,6 +485,14 @@ def init_db():
         weight REAL DEFAULT 0, reps INTEGER DEFAULT 0, created TEXT);
     CREATE TABLE IF NOT EXISTS habit_marks (
         habit_id INTEGER, day TEXT, PRIMARY KEY (habit_id, day));
+    CREATE TABLE IF NOT EXISTS habit_recoveries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        habit_id INTEGER NOT NULL, original_day TEXT NOT NULL,
+        activity TEXT NOT NULL DEFAULT '', title TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending',
+        added_to_day TEXT DEFAULT '', recovered_day TEXT DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '',
+        UNIQUE(habit_id, original_day, activity));
     CREATE TABLE IF NOT EXISTS months_history (
         label TEXT PRIMARY KEY, pct REAL);
     CREATE TABLE IF NOT EXISTS dreams (
@@ -660,6 +668,14 @@ def init_db():
             ('CREATE INDEX IF NOT EXISTS idx_expenses_month ON expenses(month)', ()),
             ('CREATE INDEX IF NOT EXISTS idx_compras_creditor ON compras(creditor)', ()),
             ('CREATE INDEX IF NOT EXISTS idx_extra_debts_start ON extra_debts(start)', ()),
+        ),
+    )
+    apply_migration(
+        con, 'v141_pending_missions',
+        'Pending Habit missions, sacred REST and recovery history',
+        (
+            ('CREATE INDEX IF NOT EXISTS idx_recovery_status_day ON habit_recoveries(status, original_day)', ()),
+            ('CREATE INDEX IF NOT EXISTS idx_recovery_added_day ON habit_recoveries(added_to_day, status)', ()),
         ),
     )
     if first_time:
@@ -1513,6 +1529,8 @@ def state():
     # streaks, Gym totals and achievements must continue across month boundaries.
     marks = [f"{r['habit_id']}|{r['day']}" for r in d.execute(
         "SELECT habit_id, day FROM habit_marks ORDER BY day, habit_id")]
+    habit_recoveries = [dict(r) for r in d.execute(
+        "SELECT * FROM habit_recoveries ORDER BY original_day DESC, id DESC")]
     history = [dict(r) for r in d.execute(
         'SELECT * FROM months_history ORDER BY label')]
     dreams = [dict(r) for r in d.execute(
@@ -1586,7 +1604,7 @@ def state():
     for ed in extra_debts:
         ed['abonado'] = (ed.get('abonado') or 0) + historicos_extra.get(ed['id'], 0)
     core = [x[0] for x in _SEED['debts']]
-    return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, goal_checkpoints=goal_checkpoints, goal_logs=goal_logs, goal_strategy=goal_strategy, achievement_unlocks=achievement_unlocks, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, career_courses=career_courses, courses_done=courses_done, skills=skills, course_skills=course_skills, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits,
+    return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, goal_checkpoints=goal_checkpoints, goal_logs=goal_logs, goal_strategy=goal_strategy, achievement_unlocks=achievement_unlocks, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, career_courses=career_courses, courses_done=courses_done, skills=skills, course_skills=course_skills, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits, habit_recoveries=habit_recoveries,
                         marks=marks, history=history, dreams=dreams,
                         animes=animes, books=books, gym_sets=gym_sets,
                         servicios=services, fund=fund, piggy=piggy, piggy_moves=piggy_moves, shopping=shopping, todos=todos, detalle=_detalle_actual(d),
@@ -1782,7 +1800,7 @@ def dream():
 
 BACKUP_TABLES = (
     'config', 'schema_migrations', 'debts', 'abonos', 'habits', 'gym_sets',
-    'habit_marks', 'months_history', 'dreams', 'animes', 'books',
+    'habit_marks', 'habit_recoveries', 'months_history', 'dreams', 'animes', 'books',
     'payment_checks', 'week_shifts', 'routine_done', 'study_profile',
     'careers', 'career_courses', 'courses_done', 'routine_extra', 'routine_hidden',
     'routine_hidden_day', 'journal', 'assets', 'expenses', 'month_income',
@@ -1945,6 +1963,97 @@ def debt_extra_edit():
 def debt_extra_del(i):
     db().execute('DELETE FROM extra_debts WHERE id=?', (i,))
     db().commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/recovery/sync')
+def recovery_sync():
+    """Create missing recovery missions idempotently and remove pending ones on REST days."""
+    j = request.get_json(silent=True) or {}
+    expected = j.get('expected') or []
+    rest_days = {str(x) for x in (j.get('rest_days') or []) if x}
+    d = db()
+    now = datetime.now().isoformat(timespec='seconds')
+    try:
+        if rest_days:
+            marks = ','.join('?' for _ in rest_days)
+            d.execute(f"DELETE FROM habit_recoveries WHERE status='pending' AND original_day IN ({marks})", tuple(sorted(rest_days)))
+        for item in expected[:1000]:
+            try:
+                habit_id = int(item.get('habit_id'))
+            except (TypeError, ValueError):
+                continue
+            day = str(item.get('original_day') or '')[:10]
+            activity = str(item.get('activity') or '').strip()[:120]
+            title = str(item.get('title') or '').strip()[:180]
+            if not day or not activity or day in rest_days:
+                continue
+            marked = d.execute('SELECT 1 FROM habit_marks WHERE habit_id=? AND day=?', (habit_id, day)).fetchone()
+            if marked:
+                continue
+            done = d.execute('SELECT 1 FROM routine_done WHERE day=? AND activity=?', (day, activity)).fetchone()
+            if done:
+                continue
+            d.execute('INSERT INTO habit_recoveries (habit_id,original_day,activity,title,status,added_to_day,recovered_day,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(habit_id,original_day,activity) DO NOTHING',
+                (habit_id, day, activity, title, 'pending', '', '', now, now))
+        d.commit()
+    except Exception:
+        d.rollback()
+        raise
+    rows = [dict(r) for r in d.execute("SELECT * FROM habit_recoveries ORDER BY original_day DESC,id DESC")]
+    return jsonify(ok=True, recoveries=rows)
+
+
+@app.post('/api/recovery/<int:i>/schedule')
+def recovery_schedule(i):
+    j = request.get_json(silent=True) or {}
+    day = str(j.get('day') or date.today().isoformat())[:10]
+    d = db()
+    row = d.execute('SELECT * FROM habit_recoveries WHERE id=?', (i,)).fetchone()
+    if not row:
+        return jsonify(error='Recovery mission not found'), 404
+    row = dict(row)
+    if row.get('status') == 'recovered':
+        return jsonify(error='Mission already recovered'), 409
+    d.execute("UPDATE habit_recoveries SET added_to_day=?,updated_at=? WHERE id=?",
+              (day, datetime.now().isoformat(timespec='seconds'), i))
+    d.commit()
+    return jsonify(ok=True)
+
+
+@app.post('/api/recovery/<int:i>/complete')
+def recovery_complete(i):
+    """Complete the original obligation, while preserving the real recovery date."""
+    j = request.get_json(silent=True) or {}
+    recovered_day = str(j.get('day') or date.today().isoformat())[:10]
+    d = db()
+    row = d.execute('SELECT * FROM habit_recoveries WHERE id=?', (i,)).fetchone()
+    if not row:
+        return jsonify(error='Recovery mission not found'), 404
+    row = dict(row)
+    if row.get('status') == 'recovered':
+        return jsonify(ok=True)
+    now = datetime.now().isoformat(timespec='seconds')
+    try:
+        d.execute('INSERT INTO habit_marks (habit_id,day) VALUES (?,?) ON CONFLICT(habit_id,day) DO NOTHING',
+                  (row['habit_id'], row['original_day']))
+        d.execute('INSERT INTO routine_done (day,activity,note) VALUES (?,?,?) ON CONFLICT(day,activity) DO NOTHING',
+                  (row['original_day'], row['activity'], f'Recovered on {recovered_day}'))
+        d.execute("UPDATE habit_recoveries SET status='recovered',recovered_day=?,added_to_day='',updated_at=? WHERE id=?",
+                  (recovered_day, now, i))
+        d.commit()
+    except Exception:
+        d.rollback()
+        raise
+    return jsonify(ok=True)
+
+
+@app.post('/api/recovery/<int:i>/unschedule')
+def recovery_unschedule(i):
+    d = db()
+    d.execute("UPDATE habit_recoveries SET added_to_day='',updated_at=? WHERE id=? AND status='pending'",
+              (datetime.now().isoformat(timespec='seconds'), i))
+    d.commit()
     return jsonify(ok=True)
 
 

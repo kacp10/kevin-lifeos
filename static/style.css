@@ -4338,3 +4338,25 @@ body.hunter-profile-open {
 }
 .hunter-book-actions .book-plus-btn:active,
 .book-detail-actions .book-plus-btn:active{transform:translateY(1px)}
+
+
+/* V141 · Hunter Pending Missions */
+.life-mission-tools{display:flex;justify-content:flex-end;margin:0 0 10px}
+.pending-missions-btn{border:1px solid rgba(119,180,145,.28);background:rgba(9,17,14,.68);color:#dce9e1;border-radius:12px;padding:9px 12px;font-weight:800;letter-spacing:.02em;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.025);transition:.18s ease}
+.pending-missions-btn:hover{transform:translateY(-1px);border-color:rgba(119,180,145,.55);background:rgba(16,30,24,.82)}
+.pending-missions-btn span{display:inline-grid;place-items:center;min-width:23px;height:23px;margin-left:6px;border-radius:999px;background:rgba(255,255,255,.08);font-size:.78rem}
+.pending-missions-btn.has-pending{border-color:rgba(198,151,75,.48);box-shadow:0 0 18px rgba(198,151,75,.07),inset 0 0 0 1px rgba(255,255,255,.025)}
+.pending-missions-btn.has-pending span{background:rgba(198,151,75,.17);color:#efd8a2}
+.routine-block.recovery-mission{border-color:rgba(198,151,75,.38);background:linear-gradient(100deg,rgba(198,151,75,.08),rgba(8,18,14,.72));box-shadow:inset 3px 0 0 rgba(198,151,75,.55)}
+.routine-block.recovery-mission .rb-time{color:#e5c98a;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em}
+.recovery-modal-copy{padding:10px 12px;margin-bottom:10px;border:1px solid rgba(119,180,145,.18);border-radius:12px;background:rgba(9,19,15,.55);color:#bdcbc3;line-height:1.5}
+.recovery-section{border:1px solid rgba(255,255,255,.08);border-radius:13px;background:rgba(5,12,9,.48);margin:10px 0;overflow:hidden}
+.recovery-section>summary{cursor:pointer;padding:12px 14px;font-weight:900;color:#e1ece5;background:rgba(255,255,255,.025)}
+.recovery-list-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 14px;border-top:1px solid rgba(255,255,255,.06)}
+.recovery-list-card div{display:flex;min-width:0;flex-direction:column;gap:3px}.recovery-list-card span,.recovery-list-card small{color:#91a299;font-size:.78rem}.recovery-list-card b{white-space:normal;overflow-wrap:anywhere;color:#eef6f0}
+.recovery-history-row{display:grid;grid-template-columns:22px minmax(0,1fr);gap:9px;padding:11px 14px;border-top:1px solid rgba(255,255,255,.055)}
+.recovery-history-row>span{color:#80c596}.recovery-history-row div{display:flex;flex-direction:column;gap:3px}.recovery-history-row small{color:#8fa198;line-height:1.35}
+.recovery-empty{padding:16px;color:#91a299;text-align:center}
+@media(max-width:620px){.life-mission-tools{justify-content:stretch}.pending-missions-btn{width:100%}.recovery-list-card{grid-template-columns:1fr}.recovery-list-card button{width:100%}}
+
+.recovery-card-actions{display:flex;gap:8px;align-items:center}.recovery-card-actions button{white-space:nowrap}@media(max-width:620px){.recovery-card-actions{display:grid;grid-template-columns:1fr 1fr}.recovery-card-actions button{width:100%}}
