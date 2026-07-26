@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 143  # V143 explicit pending/scheduled/recovered states and ghost-mark repair
+VERSION = 145  # V145 complete Pending Missions repair and debt-aware Habit counters
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -670,6 +670,38 @@ def init_db():
             ('CREATE INDEX IF NOT EXISTS idx_extra_debts_start ON extra_debts(start)', ()),
         ),
     )
+    # V145: old Render databases may already have habit_recoveries with an incomplete
+    # V141/V142 shape. CREATE TABLE IF NOT EXISTS does not add missing columns, so
+    # harden the schema one column at a time. Duplicate-column errors are harmless.
+    for column_sql in (
+        "ALTER TABLE habit_recoveries ADD COLUMN habit_id INTEGER DEFAULT 0",
+        "ALTER TABLE habit_recoveries ADD COLUMN original_day TEXT DEFAULT ''",
+        "ALTER TABLE habit_recoveries ADD COLUMN activity TEXT DEFAULT ''",
+        "ALTER TABLE habit_recoveries ADD COLUMN title TEXT DEFAULT ''",
+        "ALTER TABLE habit_recoveries ADD COLUMN status TEXT DEFAULT 'pending'",
+        "ALTER TABLE habit_recoveries ADD COLUMN added_to_day TEXT DEFAULT ''",
+        "ALTER TABLE habit_recoveries ADD COLUMN recovered_day TEXT DEFAULT ''",
+        "ALTER TABLE habit_recoveries ADD COLUMN created_at TEXT DEFAULT ''",
+        "ALTER TABLE habit_recoveries ADD COLUMN updated_at TEXT DEFAULT ''",
+    ):
+        try:
+            con.execute(column_sql)
+            con.commit()
+        except Exception:
+            try:
+                con.rollback()
+            except Exception:
+                pass
+
+    apply_migration(
+        con, 'v145_recovery_state_repair',
+        'Harden recovery schema, repair ghost marks and preserve pending/scheduled/recovered states',
+        (
+            ('CREATE INDEX IF NOT EXISTS idx_recovery_habit_original ON habit_recoveries(habit_id, original_day)', ()),
+            ('CREATE INDEX IF NOT EXISTS idx_recovery_status_added ON habit_recoveries(status, added_to_day)', ()),
+        ),
+    )
+
     apply_migration(
         con, 'v141_pending_missions',
         'Pending Habit missions, sacred REST and recovery history',
@@ -1968,71 +2000,135 @@ def debt_extra_del(i):
 
 @app.post('/api/recovery/sync')
 def recovery_sync():
-    """Create missing missions idempotently and repair only legacy ghost completions."""
+    """Rebuild pending missions safely and repair V141-V144 ghost completions.
+
+    The endpoint intentionally returns HTTP 200 even when one malformed legacy row
+    cannot be repaired. A single bad record must never hide every Pending Mission.
+    """
     j = request.get_json(silent=True) or {}
     expected = j.get('expected') or []
-    rest_days = {str(x) for x in (j.get('rest_days') or []) if x}
     d = db()
     now = datetime.now().isoformat(timespec='seconds')
+    warnings = []
     repaired = 0
-    try:
-        # V141/V142 could leave an orphaned automatic mark after the recovery row
-        # disappeared. Remove it only when routine_done proves it came from the
-        # recovery engine; never delete a normal manual Habit mark.
-        ghosts = d.execute("""
-            SELECT rd.day, rd.activity
-            FROM routine_done rd
-            WHERE rd.note LIKE 'Recovered on %'
-              AND NOT EXISTS (
-                SELECT 1 FROM habit_recoveries hr
-                WHERE hr.original_day=rd.day
-                  AND hr.activity=rd.activity
-                  AND hr.status='recovered'
-              )
-        """).fetchall()
-        for ghost in ghosts:
-            gday, activity = ghost['day'], ghost['activity']
-            item = next((x for x in expected
-                         if str(x.get('original_day') or '')[:10] == gday
-                         and str(x.get('activity') or '').strip()[:120] == activity), None)
-            if item:
-                try:
-                    hid = int(item.get('habit_id'))
-                except (TypeError, ValueError):
-                    hid = 0
-                if hid:
-                    d.execute('DELETE FROM habit_marks WHERE habit_id=? AND day=?', (hid, gday))
-                    repaired += 1
-            d.execute('DELETE FROM routine_done WHERE day=? AND activity=? AND note LIKE ?',
-                      (gday, activity, 'Recovered on %'))
+    inserted = 0
 
-        for item in expected[:1000]:
+    # REST is authoritative on the server. Merge the browser copy only as a
+    # compatibility fallback, never as the sole source of truth.
+    rest_days = {str(x)[:10] for x in (j.get('rest_days') or []) if x}
+    try:
+        rest_row = d.execute("SELECT value FROM study_profile WHERE key='life_rest_dates'").fetchone()
+        if rest_row:
             try:
-                habit_id = int(item.get('habit_id'))
-            except (TypeError, ValueError):
+                server_rest = json.loads(rest_row['value'] or '[]')
+                rest_days.update(str(x)[:10] for x in server_rest if x)
+            except Exception:
+                warnings.append('invalid_rest_profile')
+    except Exception as exc:
+        warnings.append('rest_profile_unavailable')
+        logger.warning('Recovery sync could not read REST profile: %s', exc)
+
+    expected_map = {}
+    for raw in expected[:1500]:
+        try:
+            habit_id = int(raw.get('habit_id'))
+        except (TypeError, ValueError):
+            continue
+        day = str(raw.get('original_day') or '')[:10]
+        activity = str(raw.get('activity') or '').strip()[:120]
+        title = str(raw.get('title') or '').strip()[:180]
+        if habit_id and day and activity:
+            expected_map[(habit_id, day, activity)] = {
+                'habit_id': habit_id, 'original_day': day,
+                'activity': activity, 'title': title,
+            }
+
+    # Repair only evidence created by the recovery system itself. Manual Habit
+    # checks have no matching "Recovered on ..." note and are never removed.
+    try:
+        legacy_rows = d.execute("""
+            SELECT hr.id, hr.habit_id, hr.original_day, hr.activity, hr.status,
+                   rd.note
+            FROM habit_recoveries hr
+            LEFT JOIN routine_done rd
+              ON rd.day=hr.original_day AND rd.activity=hr.activity
+            WHERE hr.status IN ('pending','scheduled')
+        """).fetchall()
+        for row in legacy_rows:
+            row = dict(row)
+            note = str(row.get('note') or '')
+            if not note.startswith('Recovered on '):
                 continue
-            day = str(item.get('original_day') or '')[:10]
-            activity = str(item.get('activity') or '').strip()[:120]
-            title = str(item.get('title') or '').strip()[:180]
-            if not day or not activity or day in rest_days:
+            d.execute('DELETE FROM habit_marks WHERE habit_id=? AND day=?',
+                      (row['habit_id'], row['original_day']))
+            d.execute("DELETE FROM routine_done WHERE day=? AND activity=? AND note LIKE 'Recovered on %'",
+                      (row['original_day'], row['activity']))
+            d.execute("""UPDATE habit_recoveries
+                         SET status='pending',added_to_day='',recovered_day='',updated_at=?
+                         WHERE id=?""", (now, row['id']))
+            repaired += 1
+        d.commit()
+    except Exception as exc:
+        try: d.rollback()
+        except Exception: pass
+        warnings.append('legacy_repair_skipped')
+        logger.warning('Recovery legacy repair skipped: %s', exc)
+
+    # Insert each missing mission independently. A malformed old PostgreSQL row or
+    # constraint is reported as a warning while the remaining missions still sync.
+    for item in expected_map.values():
+        habit_id = item['habit_id']; day = item['original_day']; activity = item['activity']
+        if day in rest_days:
+            continue
+        try:
+            if d.execute('SELECT 1 FROM habit_marks WHERE habit_id=? AND day=?',
+                         (habit_id, day)).fetchone():
                 continue
-            marked = d.execute('SELECT 1 FROM habit_marks WHERE habit_id=? AND day=?', (habit_id, day)).fetchone()
-            if marked:
+            if d.execute('SELECT 1 FROM routine_done WHERE day=? AND activity=?',
+                         (day, activity)).fetchone():
                 continue
-            done = d.execute('SELECT 1 FROM routine_done WHERE day=? AND activity=?', (day, activity)).fetchone()
-            if done:
+            existing = d.execute("""
+                SELECT id,status FROM habit_recoveries
+                WHERE habit_id=? AND original_day=? AND activity=?
+                ORDER BY id LIMIT 1
+            """, (habit_id, day, activity)).fetchone()
+            if existing:
+                # A formerly REST-exempt row becomes pending only after REST was
+                # explicitly removed from that date.
+                ex = dict(existing)
+                if ex.get('status') == 'rest_exempt' and day not in rest_days:
+                    d.execute("""UPDATE habit_recoveries
+                                 SET status='pending',added_to_day='',updated_at=? WHERE id=?""",
+                              (now, ex['id']))
+                    d.commit()
                 continue
             d.execute("""INSERT INTO habit_recoveries
                 (habit_id,original_day,activity,title,status,added_to_day,recovered_day,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?)
-                ON CONFLICT(habit_id,original_day,activity) DO NOTHING""",
-                (habit_id, day, activity, title, 'pending', '', '', now, now))
-        d.commit()
-    except Exception:
-        d.rollback()
-        raise
-    rows = [dict(r) for r in d.execute("SELECT * FROM habit_recoveries ORDER BY original_day DESC,id DESC")]
-    return jsonify(ok=True, recoveries=rows, repaired_ghost_marks=repaired)
+                VALUES (?,?,?,?,?,?,?,?,?)""",
+                (habit_id, day, activity, item['title'], 'pending', '', '', now, now))
+            d.commit()
+            inserted += 1
+        except Exception as exc:
+            try: d.rollback()
+            except Exception: pass
+            warnings.append(f"insert_skipped:{habit_id}:{day}")
+            logger.warning('Recovery item skipped habit=%s day=%s activity=%s: %s',
+                           habit_id, day, activity, exc)
+
+    try:
+        rows = [dict(r) for r in d.execute(
+            "SELECT * FROM habit_recoveries ORDER BY original_day DESC,id DESC")]
+    except Exception as exc:
+        logger.exception('Recovery history unavailable after sync')
+        # Keep the UI usable and explain the degraded state without an HTTP 500 loop.
+        return jsonify(ok=False, recoveries=[], inserted=inserted,
+                       repaired_ghost_marks=repaired,
+                       warnings=warnings + ['history_unavailable'],
+                       detail=str(exc)[:300])
+
+    return jsonify(ok=True, recoveries=rows, inserted=inserted,
+                   repaired_ghost_marks=repaired, warnings=warnings,
+                   rest_days=sorted(rest_days))
 
 
 @app.post('/api/recovery/<int:i>/schedule')
@@ -2072,6 +2168,36 @@ def recovery_rest_day():
     return jsonify(ok=True)
 
 
+@app.post('/api/recovery/unrest-day')
+def recovery_unrest_day():
+    """Remove an accidental REST protection and make its missed missions eligible again."""
+    j = request.get_json(silent=True) or {}
+    day = str(j.get('day') or '')[:10]
+    if not day:
+        return jsonify(error='REST date is required'), 400
+    d = db()
+    try:
+        row = d.execute("SELECT value FROM study_profile WHERE key='life_rest_dates'").fetchone()
+        raw = row['value'] if row else '[]'
+        try:
+            dates = json.loads(raw or '[]')
+        except Exception:
+            dates = []
+        dates = sorted({str(x)[:10] for x in dates if str(x)[:10] and str(x)[:10] != day})
+        d.execute("""INSERT INTO study_profile (key,value) VALUES (?,?)
+                     ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+                  ('life_rest_dates', json.dumps(dates, ensure_ascii=False)))
+        d.execute("""UPDATE habit_recoveries
+                     SET status='pending',added_to_day='',updated_at=?
+                     WHERE original_day=? AND status='rest_exempt'""",
+                  (datetime.now().isoformat(timespec='seconds'), day))
+        d.commit()
+    except Exception:
+        d.rollback()
+        raise
+    return jsonify(ok=True, rest_days=dates)
+
+
 @app.post('/api/recovery/<int:i>/complete')
 def recovery_complete(i):
     """Complete only a mission explicitly scheduled for the supplied recovery day."""
@@ -2091,10 +2217,18 @@ def recovery_complete(i):
         return jsonify(error='Mission must be scheduled for this day before completion'), 409
     now = datetime.now().isoformat(timespec='seconds')
     try:
-        d.execute('INSERT INTO habit_marks (habit_id,day) VALUES (?,?) ON CONFLICT(habit_id,day) DO NOTHING',
-                  (row['habit_id'], row['original_day']))
-        d.execute('INSERT INTO routine_done (day,activity,note) VALUES (?,?,?) ON CONFLICT(day,activity) DO UPDATE SET note=excluded.note',
-                  (row['original_day'], row['activity'], f'Recovered on {recovered_day}'))
+        if not d.execute('SELECT 1 FROM habit_marks WHERE habit_id=? AND day=?',
+                         (row['habit_id'], row['original_day'])).fetchone():
+            d.execute('INSERT INTO habit_marks (habit_id,day) VALUES (?,?)',
+                      (row['habit_id'], row['original_day']))
+        existing_done = d.execute('SELECT 1 FROM routine_done WHERE day=? AND activity=?',
+                                  (row['original_day'], row['activity'])).fetchone()
+        if existing_done:
+            d.execute('UPDATE routine_done SET note=? WHERE day=? AND activity=?',
+                      (f'Recovered on {recovered_day}', row['original_day'], row['activity']))
+        else:
+            d.execute('INSERT INTO routine_done (day,activity,note) VALUES (?,?,?)',
+                      (row['original_day'], row['activity'], f'Recovered on {recovered_day}'))
         d.execute("UPDATE habit_recoveries SET status='recovered',recovered_day=?,added_to_day='',updated_at=? WHERE id=?",
                   (recovered_day, now, i))
         d.commit()

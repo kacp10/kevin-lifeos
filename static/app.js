@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 143;
+const FRONT_V = 145;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -4037,6 +4037,14 @@ async function saveLifeRestDate(iso) {
   await api('/api/profile', { body: { key: 'life_rest_dates', value: JSON.stringify([...dates].sort()) } });
   if (S.profile) S.profile.life_rest_dates = JSON.stringify([...dates].sort());
 }
+async function removeLifeRestDate(iso) {
+  if (!iso) return;
+  const r=await api('/api/recovery/unrest-day',{body:{day:iso}});
+  const dates=Array.isArray(r.rest_days)?r.rest_days:[];
+  if(S.profile) S.profile.life_rest_dates=JSON.stringify(dates);
+  recoverySyncedFor='';
+  recoverySyncFailedFor='';
+}
 function nextVisibleDateForWeekday(wd) {
   const pick = document.getElementById('dayPick');
   if (pick) {
@@ -4105,8 +4113,10 @@ function renderHabitos() {
   for (let d = 1; d <= daysInMonth; d++) html += `<th>${d}</th>`;
   html += '</tr>';
   S.habits.forEach(h => {
-    const racha = rachaHabito(h.id, marks, h.name === 'Exercise' ? [6] : []);
-    const fuego = racha > 0 ? ` <span class="streak" title="${racha} days in a row">🔥${racha}</span>` : '';
+    const racha = displayedHabitRun(h, marks);
+    const debt = recoveryDebtCount(h.id);
+    const title = debt ? `${racha} resolved days · ${debt} pending mission${debt===1?'':'s'}` : `${racha} resolved days`;
+    const fuego = racha > 0 ? ` <span class="streak" title="${title}">🔥${racha}</span>` : '';
     html += `<tr><td class="hname">${h.name}${fuego} <button class="del-x" data-type="habit" data-id="${h.id}">✕</button></td>`;
     for (let d = 1; d <= daysInMonth; d++) {
       const day = `${ym}-${String(d).padStart(2, '0')}`;
@@ -5205,9 +5215,23 @@ const ENGLISH_TESTS = [
 
 let recoverySyncBusy = false;
 let recoverySyncedFor = '';
+let recoverySyncFailedFor = '';
 
 function recoveryRows() { return Array.isArray(S?.habit_recoveries) ? S.habit_recoveries : []; }
 function recoveryPending() { return recoveryRows().filter(x => x.status === 'pending' || x.status === 'scheduled'); }
+function recoveryOpenForHabit(habitId) {
+  return recoveryRows().filter(x => Number(x.habit_id) === Number(habitId) && (x.status === 'pending' || x.status === 'scheduled'));
+}
+function recoveryDebtCount(habitId) {
+  const rest = lifeRestDates();
+  return recoveryOpenForHabit(habitId).filter(x => !rest.has(String(x.original_day || '').slice(0,10))).length;
+}
+function displayedHabitRun(habit, marks) {
+  const current = rachaHabito(habit.id, marks, habit.name === 'Exercise' ? [6] : []);
+  const historical = maxHistoricalHabitStreak(habit, marks);
+  const unresolved = recoveryDebtCount(habit.id);
+  return Math.max(0, Math.max(current, historical) - unresolved);
+}
 function daysAgoISO(n) { const d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()-n); return localISO(d); }
 function weekdayFromISO(iso) { const d=new Date(iso+'T12:00:00'); return (d.getDay()+6)%7; }
 function recoveryDayLabel(iso) { const d=new Date(iso+'T12:00:00'); return `${DIAS[(d.getDay()+6)%7]} · ${fmtFecha(iso)}`; }
@@ -5249,12 +5273,22 @@ async function syncRecoveryMissions(force=false){
     const expected=expectedRecoveryMissions(30);
     const restDays=[...lifeRestDates()];
     const r=await api('/api/recovery/sync',{body:{expected,rest_days:restDays}});
-    S.habit_recoveries=r.recoveries||[];
+    if(Array.isArray(r.recoveries)) S.habit_recoveries=r.recoveries;
     recoverySyncedFor=today;
+    if(r.ok===false){
+      recoverySyncFailedFor=today;
+      toast('⚠ Pending Missions loaded in repair mode. Check the server log for the skipped legacy record.', 'warn');
+    }
     if(Number(r.repaired_ghost_marks||0)>0) toast(`Repaired ${r.repaired_ghost_marks} legacy recovery mark${Number(r.repaired_ghost_marks)===1?'':'s'}.`);
     renderRecoverySummary();
     renderRoutineDay();
-  }catch(err){ console.warn('Recovery sync failed',err); }
+  }catch(err){
+    console.warn('Recovery sync failed',err);
+    if(recoverySyncFailedFor!==today){
+      recoverySyncFailedFor=today;
+      toast('⚠ Pending Missions could not sync. Open the panel to retry or review REST dates.', 'err');
+    }
+  }
   finally{ recoverySyncBusy=false; }
 }
 
@@ -5295,9 +5329,11 @@ async function openPendingMissions(){
     const h=(S.habits||[]).find(v=>Number(v.id)===Number(x.habit_id));
     const scheduled=x.status==='scheduled'&&x.added_to_day===today;
     return `<div class="recovery-list-card"><div><span>${esc(recoveryDayLabel(x.original_day))}</span><b>${esc(x.title||h?.name||'Habit mission')}</b><small>${esc(h?.name||'Habit')} · ${recoveryDelay(x.original_day)} day${recoveryDelay(x.original_day)===1?'':'s'} pending</small></div><div class="recovery-card-actions"><button class="btn-ghost" data-recovery-rest="${x.original_day}" title="Protect this original date as REST">🌿 REST</button><button class="${scheduled?'btn-ghost':'btn'}" data-recovery-schedule="${x.id}">${scheduled?'Added today':'Recover today'}</button></div></div>`;
-  }).join(''):'<div class="recovery-empty">✓ No pending missions. REST days remain protected.</div>';
+  }).join(''):'<div class="recovery-empty">✓ No pending missions.</div>';
   const recoveredHtml=recovered.length?recovered.map(x=>`<div class="recovery-history-row"><span>✓</span><div><b>${esc(x.title)}</b><small>${esc(recoveryDayLabel(x.original_day))} → recovered ${esc(fmtFecha(x.recovered_day))} · ${recoveryDelay(x.original_day,x.recovered_day)} days later</small></div></div>`).join(''):'<div class="recovery-empty">No recovered missions yet.</div>';
-  await modal({icon:'📜',title:`Pending Missions · ${pending.length}`,text:`<div class="recovery-modal-copy">A missed activity stays attached to its original date. Recovering it later marks that original Habit day, while preserving the delay in history. REST never creates debt.</div><details open class="recovery-section"><summary>⚠ Pending · ${pending.length}</summary>${pendingHtml}</details><details class="recovery-section"><summary>✓ Recovered · ${recovered.length}</summary>${recoveredHtml}</details>`,okText:'Close'});
+  const rests=[...lifeRestDates()].sort().reverse();
+  const restHtml=rests.length?rests.map(day=>`<div class="recovery-history-row"><span>🌿</span><div><b>${esc(recoveryDayLabel(day))}</b><small>Protected REST · skipped by streaks and Pending Missions</small></div><button class="btn-ghost" data-recovery-unrest="${day}">Remove REST</button></div>`).join(''):'<div class="recovery-empty">No exceptional REST dates saved.</div>';
+  await modal({icon:'📜',title:`Pending Missions · ${pending.length}`,text:`<div class="recovery-modal-copy">A missed activity subtracts from its Habit counter while it is Pending or Added today. Only the Life check marks the original date and restores that point. Protected REST dates create no debt.</div><button class="btn-ghost" data-recovery-retry>↻ Retry sync</button><details open class="recovery-section"><summary>⚠ Pending · ${pending.length}</summary>${pendingHtml}</details><details class="recovery-section"><summary>🌿 Protected REST · ${rests.length}</summary>${restHtml}</details><details class="recovery-section"><summary>✓ Recovered · ${recovered.length}</summary>${recoveredHtml}</details>`,okText:'Close'});
 }
 
 function renderLife() {
@@ -5917,6 +5953,26 @@ function renderRoutineDay() {
 // Pending Missions · V141
  document.addEventListener('click', async (e) => {
   if (e.target.closest('#pendingMissionsBtn')) { await syncRecoveryMissions(true); await openPendingMissions(); return; }
+  const retry=e.target.closest('[data-recovery-retry]');
+  if(retry){
+    retry.disabled=true;
+    recoverySyncedFor=''; recoverySyncFailedFor='';
+    await syncRecoveryMissions(true);
+    closePendingMissionModal();
+    await openPendingMissions();
+    return;
+  }
+  const unrest=e.target.closest('[data-recovery-unrest]');
+  if(unrest){
+    const day=unrest.dataset.recoveryUnrest;
+    if(!await confirmModal('Remove REST protection',`Allow ${recoveryDayLabel(day)} to count again? Missing activities from that date can become pending and its streak may change.`)) return;
+    await removeLifeRestDate(day);
+    await syncRecoveryMissions(true);
+    renderHabitos();
+    closePendingMissionModal();
+    toast(`REST removed from ${day}. Missing activities can now appear as pending.`);
+    return;
+  }
   const rest=e.target.closest('[data-recovery-rest]');
   if(rest){
     const day=rest.dataset.recoveryRest;
@@ -5937,8 +5993,9 @@ function renderRoutineDay() {
     try{
       const r=await api(`/api/recovery/${schedule.dataset.recoverySchedule}/schedule`,{body:{day:hoyLocal()}});
       showRecoveryOnToday(r.recovery);
+      renderHabitos();
       closePendingMissionModal();
-      toast('📜 Recovery mission added to today. Open Life today and complete it there.');
+      toast('📜 Added to today. It is still pending and does not count until you check it in Life.');
     }catch(err){
       schedule.disabled=false;
       toast('⚠ The pending mission could not be added to today. It remains pending.', 'err');
@@ -5950,8 +6007,15 @@ function renderRoutineDay() {
   const complete=e.target.closest('[data-recovery-complete]');
   if(complete){
     if(!await confirmModal('Recover mission','Complete this activity now? Kevin LifeOS will mark its original Habit date and preserve today as the recovery date.')) return;
-    await api(`/api/recovery/${complete.dataset.recoveryComplete}/complete`,{body:{day:complete.dataset.day||hoyLocal(),confirm_complete:true}});
-    toast('✓ Mission recovered. The original day was completed and the delay remains in history.'); await load(); return;
+    try{
+      await api(`/api/recovery/${complete.dataset.recoveryComplete}/complete`,{body:{day:complete.dataset.day||hoyLocal(),confirm_complete:true}});
+      toast('✓ Mission recovered. The original Habit date now has a real check and the counter was restored.');
+      recoverySyncedFor='';
+      await load();
+    }catch(err){
+      toast('⚠ It was not completed. The mission remains scheduled and Habits was not changed.', 'err');
+    }
+    return;
   }
 });
 
