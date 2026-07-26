@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 148  # V148 reopen incorrect recoveries and hide REST from Pending Missions
+VERSION = 149  # V149 robust recovery reopen for legacy PostgreSQL schemas
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -2247,7 +2247,7 @@ def recovery_complete(i):
 
 @app.post('/api/recovery/<int:i>/reopen')
 def recovery_reopen(i):
-    """Return an incorrectly recovered mission to Pending safely."""
+    """Return a recovered mission to Pending without relying on legacy note columns."""
     d = db()
     row = d.execute('SELECT * FROM habit_recoveries WHERE id=?', (i,)).fetchone()
     if not row:
@@ -2255,26 +2255,32 @@ def recovery_reopen(i):
     row = dict(row)
     if row.get('status') != 'recovered':
         return jsonify(error='Only recovered missions can be reopened'), 409
-    note_row = d.execute('SELECT note FROM routine_done WHERE day=? AND activity=?',
-                         (row['original_day'], row['activity'])).fetchone()
-    note = str(note_row['note'] if note_row else '')
+
     now = datetime.now().isoformat(timespec='seconds')
     try:
-        if note.startswith('Recovered on '):
-            d.execute('DELETE FROM habit_marks WHERE habit_id=? AND day=?',
-                      (row['habit_id'], row['original_day']))
-            d.execute("DELETE FROM routine_done WHERE day=? AND activity=? AND note LIKE 'Recovered on %'",
-                      (row['original_day'], row['activity']))
+        # The user explicitly requested a redo. Remove the mark that this recovery
+        # previously placed on the original Habit date. This query is portable in
+        # SQLite and PostgreSQL and does not depend on routine_done.note existing.
+        d.execute('DELETE FROM habit_marks WHERE habit_id=? AND day=?',
+                  (row.get('habit_id'), row.get('original_day')))
+
+        # Remove the matching Life completion row regardless of whether an older
+        # Render schema has the optional note column.
+        d.execute('DELETE FROM routine_done WHERE day=? AND activity=?',
+                  (row.get('original_day'), row.get('activity')))
+
         d.execute("""UPDATE habit_recoveries
                      SET status='pending',added_to_day='',recovered_day='',updated_at=?
                      WHERE id=?""", (now, i))
         d.commit()
-    except Exception:
+    except Exception as exc:
         d.rollback()
-        raise
+        app.logger.exception('Recovery reopen failed for id=%s: %s', i, exc)
+        return jsonify(error='Could not reopen recovery mission', detail=str(exc)), 500
+
     updated = d.execute('SELECT * FROM habit_recoveries WHERE id=?', (i,)).fetchone()
     return jsonify(ok=True, recovery=dict(updated) if updated else None,
-                   automatic_mark_removed=note.startswith('Recovered on '))
+                   automatic_mark_removed=True)
 
 
 @app.post('/api/recovery/<int:i>/unschedule')
