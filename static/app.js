@@ -4545,27 +4545,6 @@ function memoryBridgePrompt() {
 GOAL
 Create extremely concise flashcards for AlgoApp. Preserve the learner's real errors and concepts. Never add long lessons.
 
-<<<<<<< HEAD
-CARD QUALITY RULES
-- Never invent facts not supported by the input.
-- Create exactly ONE testable idea per card.
-- Front must be understandable by itself: a direct question, a term, or a short correction task.
-- Back must answer only that front. Never repeat the question or add unrelated teaching notes.
-- Front: maximum 100 characters.
-- Back: maximum 180 characters and normally 1 sentence; use 2 short sentences only when essential.
-- No long paragraphs, introductions, conclusions, headings, filler, or more than 3 list items.
-- Split broad material into several small cards instead of one large card.
-- Reject vague fronts such as "Explain this", "What did I learn?", isolated headings, trivia, duplicates, and cards requiring missing context.
-- Do not create a card when the source note is too unclear to support a correct answer.
-- Technical cards: prefer one definition, one comparison, one step, one diagnostic clue, or one applied fact per card.
-- English vocabulary: front = one English word or short fixed expression; back = concise Spanish meaning only. Put one natural A2-B1 example and its Spanish translation in the separate fields.
-- English correction: front = the incorrect sentence or "Correct: ..."; back = corrected sentence plus one brief reason of no more than 12 words.
-- Never turn a full conversation or several mistakes into one card.
-- Never place a full sentence in Word Hunter vocabulary unless it is a short fixed expression.
-- Use only these decks: Kevin LifeOS::English, Kevin LifeOS::Data Analytics, Kevin LifeOS::Programming, Kevin LifeOS::Cybersecurity, Kevin LifeOS::Hunter Skill Academy.
-- Preserve every supplied source_id used to create a card in that card's source_ids array.
-- Return VALID JSON ONLY. No markdown and no commentary outside JSON.
-=======
 MANDATORY CARD TYPES
 
 1. ENGLISH ERROR
@@ -4620,34 +4599,11 @@ GLOBAL RULES
 - Use only these decks: Kevin LifeOS::English, Kevin LifeOS::Data Analytics, Kevin LifeOS::Programming, Kevin LifeOS::Cybersecurity, Kevin LifeOS::Hunter Skill Academy.
 - Preserve every source_id used in source_ids.
 - Return VALID JSON ONLY. No markdown or commentary.
->>>>>>> 6459557 (Refine Memory Forge card formats and AI prompt)
 
 OUTPUT SCHEMA
 {
   "type":"memory_forge_import",
   "cards":[{
-<<<<<<< HEAD
-    "deck":"Kevin LifeOS::Data Analytics",
-    "front":"What is a primary key?",
-    "back":"A column or group of columns that uniquely identifies each row in a table.",
-    "example":"customer_id can be the primary key of a customers table.",
-    "example_es":"customer_id puede ser la clave primaria de una tabla de clientes.",
-    "source":"SQL course",
-    "tags":["sql","database"],
-    "folder":"Data Analytics",
-    "source_ids":["concept-abc123"]
-  }]
-}
-
-FINAL CHECK BEFORE RETURNING JSON
-Delete any card that fails one of these checks:
-1. It tests more than one idea.
-2. The front is vague or longer than 100 characters.
-3. The back is longer than 180 characters or contains unnecessary context.
-4. The answer repeats the question.
-5. The learner would need the original notes to understand it.
-6. A shorter, clearer card can express the same fact.
-=======
     "card_type":"error|phrase|word|concept",
     "deck":"Kevin LifeOS::English",
     "folder":"English",
@@ -4668,7 +4624,6 @@ Delete any card when:
 4. An error card contains anything besides the wrong sentence and correction.
 5. A word card contains anything besides word, pronunciation and Spanish meaning.
 6. A technical card can be stated more simply.
->>>>>>> 6459557 (Refine Memory Forge card formats and AI prompt)
 
 INPUT
 ${JSON.stringify(payload,null,2)}`;
@@ -4684,25 +4639,6 @@ async function copyMemoryBridgePrompt(){
   try{await navigator.clipboard.writeText(txt);toast(`✨ AI Bridge copied with ${ids.length} new source${ids.length===1?'':'s'}.`);}
   catch(_){prompt('Copy this prompt:',txt);}
 }
-<<<<<<< HEAD
-function memoryCompactText(value='',limit=180){
-  let text=String(value||'').replace(/\s+/g,' ').trim();
-  if(text.length<=limit)return text;
-  const cut=text.slice(0,limit+1);
-  const sentence=Math.max(cut.lastIndexOf('. '),cut.lastIndexOf('? '),cut.lastIndexOf('! '));
-  if(sentence>=Math.floor(limit*.55))return cut.slice(0,sentence+1).trim();
-  const space=cut.lastIndexOf(' ');
-  return `${cut.slice(0,space>40?space:limit).trim()}…`;
-}
-function memoryCardQualityIssue(front='',back=''){
-  const f=String(front||'').trim(),b=String(back||'').trim();
-  if(!f||!b)return 'missing content';
-  if(f.length>100)return 'front too long';
-  if(b.length>180)return 'back too long';
-  if(/^(explain|describe|discuss|tell me about|what did i learn)\b/i.test(f))return 'vague front';
-  const questionMarks=(f.match(/\?/g)||[]).length;
-  if(questionMarks>1)return 'multiple questions';
-=======
 function memoryCompactText(value='',limit=140){
   let text=String(value||'').replace(/\s+/g,' ').trim();
   if(text.length<=limit)return text;
@@ -4719,7 +4655,6 @@ function memoryCardQualityIssue(front='',back='',type='concept'){
   if(/^(correction|meaning|explanation|answer|rule)\s*:/i.test(b))return 'unnecessary label';
   if(t==='word'&&/[.!?]\s+/.test(b))return 'word back too detailed';
   if(t==='error'&&(/\b(use|because|rule|grammar|means)\b/i.test(b)||b.split(/[.!?]+/).filter(Boolean).length>1))return 'error back must be correction only';
->>>>>>> 6459557 (Refine Memory Forge card formats and AI prompt)
   const norm=x=>x.toLowerCase().replace(/[^a-z0-9áéíóúüñ ]/gi,'').replace(/\s+/g,' ').trim();
   const nf=norm(f),nb=norm(b);
   if(nf&&nb&&(nf===nb||nb.startsWith(nf+' ')))return 'answer repeats front';
@@ -4727,19 +4662,6 @@ function memoryCardQualityIssue(front='',back='',type='concept'){
 }
 function normalizeMemoryCard(raw={}) {
   const folder=String(raw.folder||raw.category||'General').trim()||'General';
-<<<<<<< HEAD
-  const front=memoryCompactText(raw.front||raw.question||raw.term||'',100);
-  const back=memoryCompactText(raw.back||raw.answer||raw.definition||'',180);
-  const issue=memoryCardQualityIssue(front,back);
-  if(issue)return null;
-  return {
-    id:String(raw.id||`card-${Date.now()}-${Math.random().toString(36).slice(2,8)}`),
-    deck:String(raw.deck||memoryDeckFor(folder)).trim(), folder,
-    front, back,
-    example:memoryCompactText(raw.example||'',140), example_es:memoryCompactText(raw.example_es||raw.translation||'',160),
-    source:String(raw.source||'AI Bridge').trim().slice(0,100),
-    tags:Array.isArray(raw.tags)?raw.tags.map(x=>String(x).trim()).filter(Boolean).slice(0,12):String(raw.tags||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,12),
-=======
   const type=String(raw.card_type||raw.type||'concept').toLowerCase();
   let front=String(raw.front||raw.question||raw.term||'').trim();
   let back=String(raw.back||raw.answer||raw.definition||'').trim();
@@ -4763,7 +4685,6 @@ function normalizeMemoryCard(raw={}) {
     front, back, example:'', example_es:'',
     source:String(raw.source||'AI Bridge').trim().slice(0,100),
     tags:Array.isArray(raw.tags)?raw.tags.map(x=>String(x).trim()).filter(Boolean).slice(0,8):[],
->>>>>>> 6459557 (Refine Memory Forge card formats and AI prompt)
     source_ids:Array.isArray(raw.source_ids)?raw.source_ids.map(x=>String(x).trim()).filter(Boolean).slice(0,20):[],
     created_at:hoyLocal(), status:'ready', exported_at:''
   };
