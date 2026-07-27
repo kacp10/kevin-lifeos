@@ -8285,15 +8285,23 @@ Return ONLY valid JSON with this exact shape:
 CURRENT KEVIN LIFEOS CONTEXT
 ${JSON.stringify(payload,null,2)}`;
 }
+function cleanTutorUrl(value){
+  const raw=String(value||'').trim();
+  if(!raw)return '';
+  const markdown=raw.match(/^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/i);
+  if(markdown)return markdown[2];
+  const direct=raw.match(/https?:\/\/[^\s)\]]+/i);
+  return direct?direct[0]:'';
+}
 function normalizeRouteImport(raw,career){
   if(!raw||raw.type!=='career_route_import'||!Array.isArray(raw.recommendations))throw new Error('Invalid career route JSON');
-  const valid=[];
+  const valid=[];let rejected=0;
   raw.recommendations.slice(0,8).forEach((x,i)=>{
-    const title=String(x.title||'').trim(),url=String(x.url||'').trim();
-    if(!title||!/^https?:\/\//i.test(url))return;
+    const title=String(x.title||'').trim(),url=cleanTutorUrl(x.url);
+    if(!title||!url){rejected+=1;return;}
     valid.push({title:title.slice(0,180),provider:String(x.provider||'').trim().slice(0,100),platform:String(x.platform||x.provider||'Other').trim().slice(0,80),type:String(x.type||'course'),level:String(x.level||''),stage:Math.max(0,Math.min(3,Number(x.stage??career.step??0))),priority:Number(x.priority||i+1),url,verified_on:String(x.verified_on||''),credential_available:!!x.credential_available,credential_kind:String(x.credential_kind||'none'),free_learning_access:String(x.free_learning_access||'unknown'),certificate_or_exam_paid:String(x.certificate_or_exam_paid||'unknown'),skills:Array.isArray(x.skills)?x.skills.map(v=>String(v).slice(0,60)).slice(0,8):[],why:String(x.why||'').trim().slice(0,240)});
   });
-  return {decision:String(raw.decision||'stay'),reason:String(raw.reason||'').slice(0,500),stage_requirements:Array.isArray(raw.stage_requirements)?raw.stage_requirements.map(v=>String(v).slice(0,160)).slice(0,8):[],recommendations:valid};
+  return {decision:String(raw.decision||'stay'),reason:String(raw.reason||'').slice(0,500),stage_requirements:Array.isArray(raw.stage_requirements)?raw.stage_requirements.map(v=>String(v).slice(0,160)).slice(0,8):[],recommendations:valid,rejected};
 }
 async function routeImportPreview(career,pack){
   const existing=(S.career_courses||[]).filter(x=>String(x.career_id)===String(career.id));
@@ -8310,14 +8318,17 @@ async function routeImportPreview(career,pack){
 }
 async function applyRouteImport(career,pack,selected){
   const st=routeTutorState();
-  const added=[];
+  const added=[],failed=[];
   for(const item of selected){
-    const result=await api('/api/career/course/new',{body:{career_id:career.id,step:item.stage,title:item.title,platform:item.platform||item.provider||'Other',pct:0}});
-    if(result?.id){st.course_meta[String(result.id)]={...item,career_id:career.id,imported_at:hoyLocal()};added.push(item.title);}
+    try{
+      const result=await api('/api/career/course/new',{body:{career_id:career.id,step:item.stage,title:item.title,platform:item.platform||item.provider||'Other',pct:0}});
+      if(result?.id){st.course_meta[String(result.id)]={...item,career_id:career.id,imported_at:hoyLocal()};added.push(item.title);}
+      else failed.push(item.title);
+    }catch(err){failed.push(item.title);console.error('Route course import failed:',item.title,err);}
   }
   st.reviews[String(career.id)]={date:hoyLocal(),decision:pack.decision,reason:pack.reason,stage_requirements:pack.stage_requirements};
   await saveRouteTutorState(st);
-  return added;
+  return {added,failed};
 }
 async function openRouteTutor(career){
   const active=(S.career_courses||[]).filter(x=>String(x.career_id)===String(career.id));
@@ -8330,8 +8341,14 @@ async function openRouteTutor(career){
   const r=await modal({icon:'📥',title:'Import route JSON',text:'Paste the JSON returned by the Career Route Tutor.',fields:[{type:'textarea',rows:15,placeholder:'{"type":"career_route_import",...}'}],okText:'Validate'});if(!r)return;
   let raw;try{raw=JSON.parse(r[0])}catch(_){toast('Invalid JSON','err');return;}
   let pack;try{pack=normalizeRouteImport(raw,career)}catch(err){toast(err.message,'err');return;}
+  if(!pack.recommendations.length){toast(pack.rejected?`No valid courses found. ${pack.rejected} recommendation${pack.rejected===1?' was':'s were'} rejected because of missing title or URL.`:'No valid course recommendations found.','err');return;}
+  if(pack.rejected)toast(`${pack.rejected} invalid recommendation${pack.rejected===1?' was':'s were'} skipped.`,'warn');
   const selected=await routeImportPreview(career,pack);if(!selected)return;
-  const added=await applyRouteImport(career,pack,selected);toast(added.length?`🧭 ${added.length} route item${added.length===1?'':'s'} added`:'Route review saved');await load();
+  if(!selected.length){toast('No courses selected.','warn');return;}
+  const result=await applyRouteImport(career,pack,selected);
+  if(result.added.length)toast(`🧭 ${result.added.length} route item${result.added.length===1?'':'s'} added`);
+  if(result.failed.length)toast(`${result.failed.length} course${result.failed.length===1?' could':'s could'} not be added.`,'err');
+  await load();
 }
 function credentialModalList(){
   const st=credentialState();
