@@ -1295,7 +1295,10 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
         const z = Number.parseInt(getComputedStyle(el).zIndex, 10);
         return Number.isFinite(z) ? Math.max(highest, z) : highest;
       }, 1000);
-      back.style.zIndex = String(highestZ + 20);
+      // .modal-back-stacked has an !important z-index in the stylesheet, so a
+      // normal inline assignment can still remain below Memory Forge (z-index 12000).
+      // Set the dynamic value as !important so every child dialog is truly on top.
+      back.style.setProperty('z-index', String(highestZ + 20), 'important');
     } else if (document.querySelector('.language-mission-back')) {
       back.classList.add('modal-back-stacked');
     }
