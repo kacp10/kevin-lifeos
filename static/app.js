@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 152;
+const FRONT_V = 153;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -4429,15 +4429,19 @@ function memoryForgeRead() {
     return {
       concepts: Array.isArray(raw.concepts) ? raw.concepts : [],
       cards: Array.isArray(raw.cards) ? raw.cards : [],
-      imports: Array.isArray(raw.imports) ? raw.imports : []
+      imports: Array.isArray(raw.imports) ? raw.imports : [],
+      processed_sources: Array.isArray(raw.processed_sources) ? raw.processed_sources : [],
+      pending_prompt_sources: Array.isArray(raw.pending_prompt_sources) ? raw.pending_prompt_sources : []
     };
-  } catch (_) { return { concepts:[], cards:[], imports:[] }; }
+  } catch (_) { return { concepts:[], cards:[], imports:[], processed_sources:[], pending_prompt_sources:[] }; }
 }
 async function memoryForgeSave(state) {
   const clean = {
     concepts:(state.concepts || []).slice(-1200),
     cards:(state.cards || []).slice(-3000),
-    imports:(state.imports || []).slice(-120)
+    imports:(state.imports || []).slice(-120),
+    processed_sources:[...new Set(state.processed_sources || [])].slice(-5000),
+    pending_prompt_sources:[...new Set(state.pending_prompt_sources || [])].slice(-1000)
   };
   const value = JSON.stringify(clean);
   await api('/api/profile', {body:{key:'memory_forge_v1', value}});
@@ -4488,27 +4492,50 @@ async function memoryCaptureConcept(prefill={}) {
   toast('🧠 Concept saved to Memory Forge.');
   return true;
 }
+function memorySourceId(prefix='',...parts){
+  const raw=[prefix,...parts].map(x=>String(x??'').trim().toLowerCase()).join('|');
+  let hash=2166136261;
+  for(let i=0;i<raw.length;i++){hash^=raw.charCodeAt(i);hash=Math.imul(hash,16777619);}
+  return `${prefix}-${(hash>>>0).toString(36)}`;
+}
 function memoryEnglishSources() {
   const cards=[];
-  wordHunterRows().slice(-120).forEach(x=>cards.push({kind:'word',word:x.word||x.correct||'',wrong:x.wrong||'',meaning:x.meaning||'',example:x.example||'',source:x.source||'Word Hunter'}));
-  languageErrors().filter(x=>x.status!=='Mastered').slice(-80).forEach(x=>cards.push({kind:'error',wrong:x.wrong||'',correct:x.correct||'',rule:x.rule||'',source:'Language Hunter'}));
-  languagePhrases().filter(x=>x.confidence!=='Mastered').slice(-80).forEach(x=>cards.push({kind:'phrase',phrase:x.phrase||'',meaning:x.meaning||'',example:x.example||'',source:x.source||'Language Hunter'}));
+  wordHunterRows().filter(x=>x.status!=='Mastered').slice(-120).forEach(x=>cards.push({
+    source_id:memorySourceId('word',x.id||'',x.word||x.correct||'',x.wrong||''),
+    kind:'word',word:x.word||x.correct||'',wrong:x.wrong||'',meaning:x.meaning||'',example:x.example||'',source:x.source||'Word Hunter'
+  }));
+  languageErrors().filter(x=>x.status!=='Mastered').slice(-80).forEach(x=>cards.push({
+    source_id:memorySourceId('error',x.id||'',x.wrong||'',x.correct||''),
+    kind:'error',wrong:x.wrong||'',correct:x.correct||'',rule:x.rule||'',source:'Language Hunter'
+  }));
+  languagePhrases().filter(x=>x.confidence!=='Mastered').slice(-80).forEach(x=>cards.push({
+    source_id:memorySourceId('phrase',x.id||'',x.phrase||'',x.meaning||''),
+    kind:'phrase',phrase:x.phrase||'',meaning:x.meaning||'',example:x.example||'',source:x.source||'Language Hunter'
+  }));
   return cards;
 }
 function memoryAcademySources() {
   try {
     const st=academyReadState();
-    return (st.history||[]).slice(-80).map(x=>({topic:x.name||'',subcategory:x.subcategory||'',note:x.note||'',date:x.date||'',source:'Hunter Skill Academy'}));
+    return (st.history||[]).slice(-80).map(x=>({
+      source_id:memorySourceId('academy',x.topicId||'',x.date||'',x.name||''),
+      topic:x.name||'',subcategory:x.subcategory||'',note:x.note||'',date:x.date||'',source:'Hunter Skill Academy'
+    }));
   } catch(_){ return []; }
 }
 function memoryBridgePayload() {
   const state=memoryForgeRead();
+  const processed=new Set(state.processed_sources||[]);
+  const concepts=(state.concepts||[]).filter(x=>x.status!=='archived'&&x.status!=='processed').map(x=>({
+    ...x,
+    source_id:x.source_id||memorySourceId('concept',x.id||'',x.concept||'',x.created_at||'')
+  })).filter(x=>!processed.has(x.source_id)).slice(-180);
   return {
     generated_at:hoyLocal(),
     folders:['English','Data Analytics','Programming','Cybersecurity','Hunter Skill Academy'],
-    english:memoryEnglishSources(),
-    concepts:(state.concepts||[]).filter(x=>x.status!=='archived').slice(-180),
-    academy:memoryAcademySources()
+    english:memoryEnglishSources().filter(x=>!processed.has(x.source_id)),
+    concepts,
+    academy:memoryAcademySources().filter(x=>!processed.has(x.source_id))
   };
 }
 function memoryBridgePrompt() {
@@ -4535,6 +4562,7 @@ CARD QUALITY RULES
 - Never turn a full conversation or several mistakes into one card.
 - Never place a full sentence in Word Hunter vocabulary unless it is a short fixed expression.
 - Use only these decks: Kevin LifeOS::English, Kevin LifeOS::Data Analytics, Kevin LifeOS::Programming, Kevin LifeOS::Cybersecurity, Kevin LifeOS::Hunter Skill Academy.
+- Preserve every supplied source_id used to create a card in that card's source_ids array.
 - Return VALID JSON ONLY. No markdown and no commentary outside JSON.
 
 OUTPUT SCHEMA
@@ -4549,7 +4577,8 @@ OUTPUT SCHEMA
     "example_es":"customer_id puede ser la clave primaria de una tabla de clientes.",
     "source":"SQL course",
     "tags":["sql","database"],
-    "folder":"Data Analytics"
+    "folder":"Data Analytics",
+    "source_ids":["concept-abc123"]
   }]
 }
 
@@ -4566,8 +4595,14 @@ INPUT
 ${JSON.stringify(payload,null,2)}`;
 }
 async function copyMemoryBridgePrompt(){
+  const payload=memoryBridgePayload();
+  const ids=[...payload.english,...payload.concepts,...payload.academy].map(x=>x.source_id).filter(Boolean);
+  if(!ids.length){toast('No new learning material is waiting for cards.');return;}
   const txt=memoryBridgePrompt();
-  try{await navigator.clipboard.writeText(txt);toast('✨ Memory Forge prompt copied.');}
+  const state=memoryForgeRead();
+  state.pending_prompt_sources=ids;
+  await memoryForgeSave(state);
+  try{await navigator.clipboard.writeText(txt);toast(`✨ AI Bridge copied with ${ids.length} new source${ids.length===1?'':'s'}.`);}
   catch(_){prompt('Copy this prompt:',txt);}
 }
 function memoryCompactText(value='',limit=180){
@@ -4605,7 +4640,8 @@ function normalizeMemoryCard(raw={}) {
     example:memoryCompactText(raw.example||'',140), example_es:memoryCompactText(raw.example_es||raw.translation||'',160),
     source:String(raw.source||'AI Bridge').trim().slice(0,100),
     tags:Array.isArray(raw.tags)?raw.tags.map(x=>String(x).trim()).filter(Boolean).slice(0,12):String(raw.tags||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,12),
-    created_at:hoyLocal(), status:'ready'
+    source_ids:Array.isArray(raw.source_ids)?raw.source_ids.map(x=>String(x).trim()).filter(Boolean).slice(0,20):[],
+    created_at:hoyLocal(), status:'ready', exported_at:''
   };
 }
 async function importMemoryForgeJSON() {
@@ -4625,6 +4661,15 @@ async function importMemoryForgeJSON() {
   const seen=new Set((state.cards||[]).map(x=>`${String(x.deck).toLowerCase()}|${String(x.front).toLowerCase()}`));
   const added=[];
   for(const card of cards){const key=`${card.deck.toLowerCase()}|${card.front.toLowerCase()}`;if(seen.has(key))continue;seen.add(key);state.cards.push(card);added.push(card);}
+  const cardSourceIds=added.flatMap(x=>x.source_ids||[]).filter(Boolean);
+  const completedSourceIds=cardSourceIds.length?cardSourceIds:(state.pending_prompt_sources||[]);
+  state.processed_sources=[...new Set([...(state.processed_sources||[]),...completedSourceIds])];
+  state.pending_prompt_sources=[];
+  const processedSet=new Set(completedSourceIds);
+  state.concepts=(state.concepts||[]).map(x=>{
+    const sid=x.source_id||memorySourceId('concept',x.id||'',x.concept||'',x.created_at||'');
+    return processedSet.has(sid)?{...x,source_id:sid,status:'processed',processed_at:hoyLocal()}:x;
+  });
   state.imports.push({date:hoyLocal(),count:added.length,summary:String(data.summary||'AI card import').slice(0,180)});
   await memoryForgeSave(state);
   toast(`📥 ${added.length} new cards imported${added.length<cards.length?' · duplicates skipped':''}.`);
@@ -4647,35 +4692,47 @@ function downloadTextFile(filename,text,type='text/plain;charset=utf-8'){
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},700);
 }
 async function exportMemoryForgeCards(){
-  const cards=(memoryForgeRead().cards||[]).filter(c=>String(c.front||'').trim()&&String(c.back||'').trim());
-  if(!cards.length){toast('Import or create cards before exporting.');return;}
-  const deckNames=[...new Set(cards.map(memoryAlgoDeckName))].sort((a,b)=>a.localeCompare(b));
-  const options=deckNames.map(x=>({v:x,t:`${x} · ${cards.filter(c=>memoryAlgoDeckName(c)===x).length} cards`}));
-  options.unshift({v:'__all__',t:`All cards in one deck · ${cards.length} cards`});
-  const r=await modal({icon:'📤',title:'Export cards',text:'AlgoApp works best with one deck per CSV. The file contains only Front and Back, so technical metadata will not appear on the cards.',fields:[{type:'select',label:'Deck to export',value:deckNames[0]||'__all__',options},{type:'select',label:'Format',value:'algo',options:[{v:'algo',t:'AlgoApp CSV · Front / Back'},{v:'universal',t:'Universal CSV · Deck / Front / Back'},{v:'json',t:'JSON backup'}]}],okText:'Export',cancelText:'Cancel'});
+  const state=memoryForgeRead();
+  const allCards=(state.cards||[]).filter(c=>String(c.front||'').trim()&&String(c.back||'').trim());
+  if(!allCards.length){toast('Import or create cards before exporting.');return;}
+  const ready=allCards.filter(c=>c.status!=='exported');
+  const deckNames=[...new Set(allCards.map(memoryAlgoDeckName))].sort((a,b)=>a.localeCompare(b));
+  const options=deckNames.map(x=>({v:x,t:`${x} · ${ready.filter(c=>memoryAlgoDeckName(c)===x).length} new / ${allCards.filter(c=>memoryAlgoDeckName(c)===x).length} total`}));
+  options.unshift({v:'__all__',t:`All decks · ${ready.length} new / ${allCards.length} total`});
+  const r=await modal({icon:'📤',title:'Export cards',text:'New cards exports only cards that have never been downloaded. Re-export all is available only when you intentionally need a full replacement file.',fields:[
+    {type:'select',label:'Deck to export',value:deckNames[0]||'__all__',options},
+    {type:'select',label:'Cards',value:'new',options:[{v:'new',t:'New cards only · recommended'},{v:'all',t:'Re-export all cards'}]},
+    {type:'select',label:'Format',value:'algo',options:[{v:'algo',t:'AlgoApp CSV · Front / Back'},{v:'universal',t:'Universal CSV · Deck / Front / Back'},{v:'json',t:'JSON backup'}]}
+  ],okText:'Export',cancelText:'Cancel'});
   if(!r)return;
-  const selected=String(r[0]||'__all__'),format=String(r[1]||'algo');
-  const rows=selected==='__all__'?cards:cards.filter(c=>memoryAlgoDeckName(c)===selected);
-  if(!rows.length){toast('No cards found in that deck.');return;}
+  const selected=String(r[0]||'__all__'),scope=String(r[1]||'new'),format=String(r[2]||'algo');
+  let rows=selected==='__all__'?allCards:allCards.filter(c=>memoryAlgoDeckName(c)===selected);
+  if(scope==='new')rows=rows.filter(c=>c.status!=='exported');
+  if(!rows.length){toast(scope==='new'?'This deck has no new cards to export.':'No cards found in that deck.');return;}
   const safeName=(selected==='__all__'?'Kevin LifeOS Memory Forge':selected).replace(/[\\/:*?"<>|]+/g,' - ').replace(/\s+/g,' ').trim();
   if(format==='json'){
-    downloadTextFile(`${safeName}_${hoyLocal()}.json`,JSON.stringify({type:'kevin_lifeos_cards_backup',exported_at:hoyLocal(),cards:rows},null,2),'application/json;charset=utf-8');
-    toast(`📤 ${rows.length} cards exported as JSON.`);return;
+    downloadTextFile(`${safeName}_${scope}_${hoyLocal()}.json`,JSON.stringify({type:'kevin_lifeos_cards_backup',exported_at:hoyLocal(),scope,cards:rows},null,2),'application/json;charset=utf-8');
+  }else{
+    const header=format==='algo'?['Front','Back']:['Deck','Front','Back'];
+    const lines=[header.map(csvCell).join(',')];
+    rows.forEach(c=>{
+      const line=format==='algo'?[c.front,memoryAlgoBack(c)]:[memoryAlgoDeckName(c),c.front,memoryAlgoBack(c)];
+      lines.push(line.map(csvCell).join(','));
+    });
+    downloadTextFile(`${safeName}_${scope}_${hoyLocal()}.csv`,lines.join('\r\n'),'text/csv;charset=utf-8');
   }
-  const header=format==='algo'?['Front','Back']:['Deck','Front','Back'];
-  const lines=[header.map(csvCell).join(',')];
-  rows.forEach(c=>{
-    const line=format==='algo'?[c.front,memoryAlgoBack(c)]:[memoryAlgoDeckName(c),c.front,memoryAlgoBack(c)];
-    lines.push(line.map(csvCell).join(','));
-  });
-  downloadTextFile(`${safeName}_${hoyLocal()}.csv`,lines.join('\r\n'),'text/csv;charset=utf-8');
-  toast(`📤 ${rows.length} clean cards exported for ${format==='algo'?'AlgoApp':'CSV'}.`);
+  if(scope==='new'){
+    const exportedIds=new Set(rows.map(c=>String(c.id)));
+    state.cards=(state.cards||[]).map(c=>exportedIds.has(String(c.id))?{...c,status:'exported',exported_at:hoyLocal()}:c);
+    await memoryForgeSave(state);
+  }
+  toast(`📤 ${rows.length} ${scope==='new'?'new ':''}cards exported${scope==='new'?' and marked as exported':''}.`);
 }
 function openMemoryForge() {
   const previous=document.activeElement,back=document.createElement('div');back.className='modal-back memory-forge-back';
   const close=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();},240)};
-  const draw=()=>{const st=memoryForgeRead(),payload=memoryBridgePayload();back.innerHTML=`<div class="modal-card memory-forge-card"><div class="memory-forge-head"><div><span>MEMORY FORGE</span><h3>Knowledge bridge</h3><p>Kevin LifeOS organizes. ChatGPT improves. AlgoApp helps you review.</p></div><button type="button" data-memory-close>✕</button></div><div class="memory-forge-stats"><div><b>${payload.english.length}</b><span>English signals</span></div><div><b>${payload.concepts.length}</b><span>saved concepts</span></div><div><b>${payload.academy.length}</b><span>Academy practices</span></div><div><b>${st.cards.length}</b><span>ready cards</span></div></div><div class="memory-forge-actions"><button data-memory-capture>＋ Capture</button><button data-memory-copy>✨ Copy AI Bridge</button><button data-memory-import>📥 Import JSON</button><button data-memory-export>📤 Export cards</button></div><div class="memory-forge-foot"><button data-memory-help>?</button><span>English is collected automatically. Technical concepts are optional and stay editable before AI processing.</span></div></div>`;bind();};
-  const bind=()=>{back.querySelector('[data-memory-close]').onclick=close;back.querySelector('[data-memory-capture]').onclick=async()=>{await memoryCaptureConcept();draw();};back.querySelector('[data-memory-copy]').onclick=copyMemoryBridgePrompt;back.querySelector('[data-memory-import]').onclick=async()=>{await importMemoryForgeJSON();draw();};back.querySelector('[data-memory-export]').onclick=exportMemoryForgeCards;back.querySelector('[data-memory-help]').onclick=()=>modal({icon:'?',title:'Memory Forge',text:'English comes automatically from Language Hunter and Word Hunter. Data, Programming, Cybersecurity and Academy concepts are captured only when you choose. Copy one bridge prompt to ChatGPT, import its JSON after review, then export one clean deck at a time to AlgoApp or create a universal backup.',okText:'Understood'});};
+  const draw=()=>{const st=memoryForgeRead(),payload=memoryBridgePayload();back.innerHTML=`<div class="modal-card memory-forge-card"><div class="memory-forge-head"><div><span>MEMORY FORGE</span><h3>Knowledge bridge</h3><p>Kevin LifeOS organizes. ChatGPT improves. AlgoApp helps you review.</p></div><button type="button" data-memory-close>✕</button></div><div class="memory-forge-stats"><div><b>${payload.english.length}</b><span>English signals</span></div><div><b>${payload.concepts.length}</b><span>saved concepts</span></div><div><b>${payload.academy.length}</b><span>Academy practices</span></div><div><b>${st.cards.filter(x=>x.status!=='exported').length}</b><span>new cards</span><small>${st.cards.filter(x=>x.status==='exported').length} exported</small></div></div><div class="memory-forge-actions"><button data-memory-capture>＋ Capture</button><button data-memory-copy>✨ Copy AI Bridge</button><button data-memory-import>📥 Import JSON</button><button data-memory-export>📤 Export cards</button></div><div class="memory-forge-foot"><button data-memory-help>?</button><span>English is collected automatically. Technical concepts are optional and stay editable before AI processing.</span></div></div>`;bind();};
+  const bind=()=>{back.querySelector('[data-memory-close]').onclick=close;back.querySelector('[data-memory-capture]').onclick=async()=>{await memoryCaptureConcept();draw();};back.querySelector('[data-memory-copy]').onclick=copyMemoryBridgePrompt;back.querySelector('[data-memory-import]').onclick=async()=>{await importMemoryForgeJSON();draw();};back.querySelector('[data-memory-export]').onclick=exportMemoryForgeCards;back.querySelector('[data-memory-help]').onclick=()=>modal({icon:'?',title:'Memory Forge',text:'Only active, unprocessed English signals and study concepts enter the next AI prompt. Imported sources are remembered, and exported cards are excluded from the next normal download. Use Re-export all only when you intentionally need every card again.',okText:'Understood'});};
   document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));
 }
 function expeditionBridgePrompt(goal){
@@ -6618,23 +6675,25 @@ function renderRoutineDay() {
 // listeners de Life
 document.addEventListener('change', async (e) => {
   if (e.target.matches('#shiftGrid select')) {
-    const wd = +e.target.dataset.wd;
-    await api('/api/shift', { body: { weekday: wd, shift: e.target.value } });
-    const visibleIso = nextVisibleDateForWeekday(wd);
-    if (e.target.value === 'descanso') {
-      await saveLifeRestDate(visibleIso);
-      toast(`🌿 Rest saved for ${DIAS[wd]}. It will not break Habit streaks.`);
-    } else {
-      // A previous one-off REST date must not keep overriding Day off or a work shift.
-      // Only remove the exact visible date being edited; other protected REST dates stay intact.
-      if (visibleIso && isLifeRestDate(visibleIso)) {
-        await removeLifeRestDate(visibleIso);
+    const select=e.target,wd=+select.dataset.wd,nextValue=select.value,previousValue=(S.shifts||{})[wd]||'libre';
+    const visibleIso=nextVisibleDateForWeekday(wd);
+    select.disabled=true;
+    try{
+      // Remove an old one-off REST before saving Day off/work, so REST cannot keep overriding it.
+      if(nextValue!=='descanso'&&visibleIso&&isLifeRestDate(visibleIso))await removeLifeRestDate(visibleIso);
+      await api('/api/shift',{body:{weekday:wd,shift:nextValue}});
+      if(nextValue==='descanso'){
+        await saveLifeRestDate(visibleIso);
+        toast(`🌿 Rest saved for ${DIAS[wd]}. It will not break Habit streaks.`);
+      }else{
+        toast(nextValue==='libre'?`📅 Day off saved for ${DIAS[wd]}. Your normal routine remains active.`:'📅 Shift updated.');
       }
-      toast(e.target.value === 'libre'
-        ? `📅 Day off saved for ${DIAS[wd]}. Your normal routine remains active.`
-        : '📅 Shift updated.');
+      await load();
+    }catch(err){
+      select.value=previousValue;
+      select.disabled=false;
+      toast(err.message||'Could not update this Life day. No routine change was applied.','err');
     }
-    load();
   } else if (e.target.matches('[data-career]')) {
     await api('/api/career', { body: { id: +e.target.dataset.career, field: e.target.dataset.f, value: e.target.value } });
     load();
