@@ -4564,3 +4564,22 @@ body.hunter-profile-open {
 .career-route-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.route-tutor-btn{border:1px solid rgba(113,214,155,.28);background:rgba(8,24,20,.72);color:#dff7e8;border-radius:10px;padding:9px 12px;font-weight:800;cursor:pointer}.route-tutor-btn:hover{border-color:rgba(113,214,155,.55);transform:translateY(-1px)}.add-active-course:disabled{opacity:.45;cursor:not-allowed}.route-import-modal,.credentials-modal{width:min(760px,94vw);max-height:88vh;overflow:auto}.route-decision{padding:12px 14px;border:1px solid rgba(113,214,155,.22);background:rgba(15,31,26,.72);border-radius:12px;margin:12px 0}.route-decision span{text-transform:uppercase;letter-spacing:.12em;font-size:11px;color:#91d9ac;font-weight:900}.route-decision p{margin:6px 0 0}.route-slot-note{font-size:12px;color:var(--muted);margin-bottom:10px}.route-import-list,.credentials-list{display:grid;gap:10px}.route-import-item{display:grid;grid-template-columns:auto 1fr;gap:12px;padding:12px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:rgba(255,255,255,.025);align-items:start}.route-import-item input{margin-top:4px}.route-import-item b,.route-import-item span,.route-import-item small{display:block}.route-import-item span{color:#cbd8cf;font-size:12px;margin-top:3px}.route-import-item small{color:var(--muted);line-height:1.45;margin-top:5px}.route-import-item a{display:inline-block;margin-top:7px;color:#89d6a8;font-size:12px}.credential-card{display:flex;justify-content:space-between;gap:18px;padding:14px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:linear-gradient(135deg,rgba(25,55,43,.42),rgba(9,17,16,.75))}.credential-card span{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:#8ed7aa;font-weight:900}.credential-card h4{margin:5px 0 3px;font-size:16px}.credential-card p,.credential-card small{margin:0;color:var(--muted)}.credential-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:flex-end}.credential-actions a,.credential-actions button{border:1px solid rgba(255,255,255,.12);background:rgba(0,0,0,.22);color:#e7efe9;border-radius:9px;padding:7px 9px;font-size:12px}.credentials-summary p{margin-bottom:0}
 @media(max-width:640px){.career-section-title{align-items:flex-start}.career-route-actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.route-tutor-btn,.career-route-actions .add-active-course{width:100%}.route-import-modal,.credentials-modal{width:96vw;padding:18px 14px}.credential-card{display:block}.credential-actions{justify-content:flex-start;margin-top:12px}.credential-actions a,.credential-actions button{flex:1;text-align:center}.route-import-item{grid-template-columns:24px 1fr;padding:11px}.hunter-profile-section .row-between{gap:12px;align-items:flex-start}.credentials-summary .btn-ghost{white-space:nowrap}}
 .route-import-back,.credentials-back{z-index:14050!important}
+
+/* V154 · Planned course queue */
+.planned-courses-btn{white-space:nowrap}
+.planned-courses-modal{width:min(720px,94vw)}
+.planned-course-list{display:grid;gap:10px;max-height:min(58vh,560px);overflow:auto;margin:14px 0;padding-right:3px}
+.planned-course-item{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:14px;border:1px solid rgba(255,255,255,.1);border-radius:14px;background:rgba(255,255,255,.035)}
+.planned-course-item>div:first-child{min-width:0;display:grid;gap:5px}
+.planned-course-item span{font-size:.68rem;letter-spacing:.12em;opacity:.62}
+.planned-course-item b{overflow-wrap:anywhere}
+.planned-course-item small,.planned-course-item p{opacity:.72;margin:0;line-height:1.4}
+.planned-course-item a{font-size:.78rem}
+.planned-course-item>div:last-child{display:flex;gap:6px;flex:0 0 auto}
+.planned-course-item button{min-height:34px}
+@media(max-width:680px){
+  .career-route-actions{flex-wrap:wrap}
+  .planned-courses-btn,.route-tutor-btn,.add-active-course{flex:1 1 calc(50% - 6px)}
+  .planned-course-item{display:grid}
+  .planned-course-item>div:last-child{justify-content:flex-end}
+}

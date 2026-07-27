@@ -6460,7 +6460,7 @@ function renderCareer() {
       <header class="career-head"><div><span class="career-kicker">HUNTER TRAINING ROUTE</span><b>${c.icon || '🎯'} ${esc(c.name)}</b></div><span class="career-prog">${prog}% to goal</span></header>
       <div class="peldano-row">${dots}</div>
       <div class="mini-bar green career-overall-bar"><i style="width:${prog}%"></i></div>
-      ${esIngles ? `<section class="career-stage-head english-career-stage"><div><span>IMMERSION PATH</span><h3>${PELDANOS[step] || 'Professional'}</h3><p>Progress comes from completed English training days; CEFR level is verified through assessments.</p></div><a class="btn-ghost english-panel-link" href="#englishPanel">Open English mastery</a></section><div class="eng-auto">🔥 <b>${diasIng} days</b> of English practice logged · <b>${prog}%</b> training progress.</div>` : `<section class="career-stage-head"><div><span>STEP ${step + 1}</span><h3>${PELDANOS[step]}</h3><p>${STEP_DESC[step] || ''}</p></div><button class="advance-career-stage ${completedPath ? 'done' : ''}" data-advance-stage="${c.id}" ${completedPath ? 'disabled' : ''}>${completedPath ? '✓ Path conquered' : nextLabel}</button></section><section class="career-active-courses"><div class="career-section-title"><div><span>ACTIVE COURSES</span><b>${PELDANOS[step]} training · ${careerActiveCourses.length}/5</b></div><div class="career-route-actions"><button class="route-tutor-btn" data-route-tutor="${c.id}" title="Career Route Tutor">🧭 Tutor</button><button class="add-active-course" data-add-active-course="${c.id}" ${careerActiveCourses.length>=5?'disabled title="Maximum 5 active courses"':''}>＋ Add course</button></div></div>${activeHtml}</section>`}
+      ${esIngles ? `<section class="career-stage-head english-career-stage"><div><span>IMMERSION PATH</span><h3>${PELDANOS[step] || 'Professional'}</h3><p>Progress comes from completed English training days; CEFR level is verified through assessments.</p></div><a class="btn-ghost english-panel-link" href="#englishPanel">Open English mastery</a></section><div class="eng-auto">🔥 <b>${diasIng} days</b> of English practice logged · <b>${prog}%</b> training progress.</div>` : `<section class="career-stage-head"><div><span>STEP ${step + 1}</span><h3>${PELDANOS[step]}</h3><p>${STEP_DESC[step] || ''}</p></div><button class="advance-career-stage ${completedPath ? 'done' : ''}" data-advance-stage="${c.id}" ${completedPath ? 'disabled' : ''}>${completedPath ? '✓ Path conquered' : nextLabel}</button></section><section class="career-active-courses"><div class="career-section-title"><div><span>ACTIVE COURSES</span><b>${PELDANOS[step]} training · ${careerActiveCourses.length}/5</b></div><div class="career-route-actions"><button class="planned-courses-btn" data-planned-courses="${c.id}" title="Courses waiting in the route">📚 Planned${plannedForCareer(c.id).length?` · ${plannedForCareer(c.id).length}`:''}</button><button class="route-tutor-btn" data-route-tutor="${c.id}" title="Career Route Tutor">🧭 Tutor</button><button class="add-active-course" data-add-active-course="${c.id}" ${careerActiveCourses.length>=5?'disabled title="Maximum 5 active courses"':''}>＋ Add course</button></div></div>${activeHtml}</section>`}
       <footer class="career-foot">${c.active ? '<span class="active-badge">★ Active focus</span>' : `<button class="set-active" data-career="${c.id}">Set as focus</button>`}<button class="del-x" data-type="career" data-id="${c.id}" title="Delete career">✕</button></footer>
       ${esIngles ? '' : `<section class="career-courses"><b class="mini-title">Finished courses</b>${finishedHtml}</section>`}
     </article>`;
@@ -6838,7 +6838,7 @@ document.addEventListener('click', async (e) => {
     const course=(S.career_courses||[]).find(x=>String(x.id)===String(finishActive.dataset.courseComplete)); if(!course)return;
     const career=(S.careers||[]).find(x=>String(x.id)===String(course.career_id));
     const skills=await courseSkillsModal({title:course.title,career:career?.name||'',step:course.step||0}); if(skills===null)return;
-    await api('/api/career/course/complete',{body:{course_id:course.id,skills}}); toast('✓ Course finished and skills recorded'); load(); return;
+    await api('/api/career/course/complete',{body:{course_id:course.id,skills}}); toast('✓ Course finished and skills recorded'); await load(); if(career)await offerNextPlannedCourse(career); return;
   }
 
   const deleteActive=e.target.closest('[data-active-course-delete]');
@@ -8175,8 +8175,8 @@ async function saveCredentialState(st){
   S.profile=S.profile||{};S.profile.credentials_v1=value;
 }
 function routeTutorState(){
-  try{const raw=JSON.parse((S.profile||{}).career_route_tutor_v1||'{}');return {reviews:raw.reviews||{},course_meta:raw.course_meta||{}};}
-  catch(_){return {reviews:{},course_meta:{}};}
+  try{const raw=JSON.parse((S.profile||{}).career_route_tutor_v1||'{}');return {reviews:raw.reviews||{},course_meta:raw.course_meta||{},planned:raw.planned||{}};}
+  catch(_){return {reviews:{},course_meta:{},planned:{}};}
 }
 async function saveRouteTutorState(st){
   const value=JSON.stringify(st);
@@ -8210,11 +8210,12 @@ MANDATORY RESEARCH RULES
 
 ROUTE RULES
 - Maximum 5 active items for this route, including existing active courses.
+- You may recommend additional useful items beyond the available active slots. Kevin LifeOS will store the overflow in a Planned queue ordered by priority.
 - Do not replace an active course unless there is a clear reason.
 - A good stage usually mixes learning, practice, a portfolio project, and—only when appropriate—certification preparation.
 - Decide whether the learner should stay in the current stage, advance, replace an item, prepare a certification, or build a project first.
 - Course completion alone is not enough to advance when practical evidence is missing.
-- Recommend fewer than 5 items when fewer are sufficient.
+- Recommend fewer items when fewer are sufficient, but do not omit a genuinely useful next step merely because the active list is full; place later steps after the immediate priorities.
 
 OPTIONAL OPPORTUNITY RULES
 - Complete the core route first. Discounts, subscriptions, bundles and paid offers must never influence the main recommendation order.
@@ -8296,39 +8297,92 @@ function cleanTutorUrl(value){
 function normalizeRouteImport(raw,career){
   if(!raw||raw.type!=='career_route_import'||!Array.isArray(raw.recommendations))throw new Error('Invalid career route JSON');
   const valid=[];let rejected=0;
-  raw.recommendations.slice(0,8).forEach((x,i)=>{
+  raw.recommendations.slice(0,20).forEach((x,i)=>{
     const title=String(x.title||'').trim(),url=cleanTutorUrl(x.url);
     if(!title||!url){rejected+=1;return;}
     valid.push({title:title.slice(0,180),provider:String(x.provider||'').trim().slice(0,100),platform:String(x.platform||x.provider||'Other').trim().slice(0,80),type:String(x.type||'course'),level:String(x.level||''),stage:Math.max(0,Math.min(3,Number(x.stage??career.step??0))),priority:Number(x.priority||i+1),url,verified_on:String(x.verified_on||''),credential_available:!!x.credential_available,credential_kind:String(x.credential_kind||'none'),free_learning_access:String(x.free_learning_access||'unknown'),certificate_or_exam_paid:String(x.certificate_or_exam_paid||'unknown'),skills:Array.isArray(x.skills)?x.skills.map(v=>String(v).slice(0,60)).slice(0,8):[],why:String(x.why||'').trim().slice(0,240)});
   });
   return {decision:String(raw.decision||'stay'),reason:String(raw.reason||'').slice(0,500),stage_requirements:Array.isArray(raw.stage_requirements)?raw.stage_requirements.map(v=>String(v).slice(0,160)).slice(0,8):[],recommendations:valid,rejected};
 }
+function plannedForCareer(careerId){
+  const st=routeTutorState();
+  return Array.isArray(st.planned?.[String(careerId)])?st.planned[String(careerId)]:[];
+}
 async function routeImportPreview(career,pack){
   const existing=(S.career_courses||[]).filter(x=>String(x.career_id)===String(career.id));
+  const planned=plannedForCareer(career.id);
   const slots=Math.max(0,5-existing.length);
-  const duplicateTitles=new Set(existing.map(x=>String(x.title||'').trim().toLowerCase()));
+  const duplicateTitles=new Set([...existing,...planned].map(x=>String(x.title||'').trim().toLowerCase()));
   const candidates=pack.recommendations.filter(x=>!duplicateTitles.has(x.title.toLowerCase())).sort((a,b)=>a.priority-b.priority);
   return new Promise(resolve=>{
     const back=document.createElement('div');back.className='modal-back route-import-back';
-    back.innerHTML=`<div class="modal-card route-import-modal"><button class="modal-x" aria-label="Close">✕</button><div class="modal-icon">🧭</div><h3>Route import preview</h3><p><b>${esc(career.name)}</b> · ${esc(PELDANOS[Number(career.step||0)])}</p><div class="route-decision"><span>${esc(pack.decision.replace(/_/g,' '))}</span><p>${esc(pack.reason||'No reason supplied.')}</p></div><div class="route-slot-note">${existing.length}/5 active · ${slots} slot${slots===1?'':'s'} available</div><div class="route-import-list">${candidates.length?candidates.map((x,i)=>`<label class="route-import-item"><input type="checkbox" data-route-choice="${i}" ${i<slots?'checked':''} ${i>=slots?'disabled':''}><div><b>${esc(x.title)}</b><span>${esc(x.provider||x.platform)} · ${esc(x.type.replace(/_/g,' '))}</span><small>${esc(x.why||'')}<br>${esc(x.free_learning_access)} free access · credential ${x.credential_available?'available':'not confirmed'}</small><a href="${esc(x.url)}" target="_blank" rel="noopener">Verify source ↗</a></div></label>`).join(''):'<div class="profile-empty">No new valid recommendations detected.</div>'}</div><div class="modal-btns"><button class="m-cancel">Cancel</button><button class="m-ok" ${!candidates.length||!slots?'disabled':''}>Add selected</button></div></div>`;
+    back.innerHTML=`<div class="modal-card route-import-modal"><button class="modal-x" aria-label="Close">✕</button><div class="modal-icon">🧭</div><h3>Route import preview</h3><p><b>${esc(career.name)}</b> · ${esc(PELDANOS[Number(career.step||0)])}</p><div class="route-decision"><span>${esc(pack.decision.replace(/_/g,' '))}</span><p>${esc(pack.reason||'No reason supplied.')}</p></div><div class="route-slot-note">${existing.length}/5 active · ${slots} active slot${slots===1?'':'s'} available · overflow goes to Planned</div><div class="route-import-list">${candidates.length?candidates.map((x,i)=>`<label class="route-import-item"><input type="checkbox" data-route-choice="${i}" checked><div><b>${esc(x.title)}</b><span>${i<slots?'ACTIVE':'PLANNED'} · ${esc(x.provider||x.platform)} · ${esc(x.type.replace(/_/g,' '))}</span><small>${esc(x.why||'')}<br>${esc(x.free_learning_access)} free access · credential ${x.credential_available?'available':'not confirmed'}</small><a href="${esc(x.url)}" target="_blank" rel="noopener">Verify source ↗</a></div></label>`).join(''):'<div class="profile-empty">No new valid recommendations detected.</div>'}</div><div class="modal-btns"><button class="m-cancel">Cancel</button><button class="m-ok" ${!candidates.length?'disabled':''}>Import selected</button></div></div>`;
     const close=v=>{back.classList.remove('show');setTimeout(()=>back.remove(),180);resolve(v)};
-    back.querySelector('.modal-x').onclick=()=>close(null);back.querySelector('.m-cancel').onclick=()=>close(null);back.querySelector('.m-ok').onclick=()=>{const idx=[...back.querySelectorAll('[data-route-choice]:checked')].map(x=>Number(x.dataset.routeChoice));close(idx.map(i=>candidates[i]).filter(Boolean).slice(0,slots));};
+    back.querySelector('.modal-x').onclick=()=>close(null);back.querySelector('.m-cancel').onclick=()=>close(null);back.querySelector('.m-ok').onclick=()=>{const idx=[...back.querySelectorAll('[data-route-choice]:checked')].map(x=>Number(x.dataset.routeChoice));close(idx.map(i=>candidates[i]).filter(Boolean));};
     document.body.appendChild(back);document.body.classList.add('modal-open');requestAnimationFrame(()=>back.classList.add('show'));
   });
 }
+async function activatePlannedCourse(career,item){
+  const active=(S.career_courses||[]).filter(x=>String(x.career_id)===String(career.id));
+  if(active.length>=5)return {ok:false,reason:'full'};
+  const st=routeTutorState();
+  try{
+    const result=await api('/api/career/course/new',{body:{career_id:career.id,step:item.stage,title:item.title,platform:item.platform||item.provider||'Other',pct:0}});
+    if(!result?.id)return {ok:false,reason:'save'};
+    st.course_meta[String(result.id)]={...item,career_id:career.id,imported_at:item.imported_at||hoyLocal(),activated_at:hoyLocal()};
+    st.planned=st.planned||{};
+    st.planned[String(career.id)]=(st.planned[String(career.id)]||[]).filter(x=>String(x.queue_id)!==String(item.queue_id));
+    await saveRouteTutorState(st);
+    return {ok:true};
+  }catch(err){console.error('Planned course activation failed:',err);return {ok:false,reason:'save'};}
+}
 async function applyRouteImport(career,pack,selected){
   const st=routeTutorState();
-  const added=[],failed=[];
+  st.planned=st.planned||{};
+  const key=String(career.id);
+  st.planned[key]=Array.isArray(st.planned[key])?st.planned[key]:[];
+  const active=(S.career_courses||[]).filter(x=>String(x.career_id)===key);
+  let slots=Math.max(0,5-active.length);
+  const added=[],planned=[],failed=[];
   for(const item of selected){
-    try{
-      const result=await api('/api/career/course/new',{body:{career_id:career.id,step:item.stage,title:item.title,platform:item.platform||item.provider||'Other',pct:0}});
-      if(result?.id){st.course_meta[String(result.id)]={...item,career_id:career.id,imported_at:hoyLocal()};added.push(item.title);}
-      else failed.push(item.title);
-    }catch(err){failed.push(item.title);console.error('Route course import failed:',item.title,err);}
+    if(slots>0){
+      try{
+        const result=await api('/api/career/course/new',{body:{career_id:career.id,step:item.stage,title:item.title,platform:item.platform||item.provider||'Other',pct:0}});
+        if(result?.id){st.course_meta[String(result.id)]={...item,career_id:career.id,imported_at:hoyLocal()};added.push(item.title);slots-=1;continue;}
+      }catch(err){console.error('Route course import failed:',item.title,err);}
+      failed.push(item.title);
+    }else{
+      const queued={...item,queue_id:`planned_${Date.now()}_${Math.random().toString(36).slice(2,8)}`,career_id:career.id,planned_at:hoyLocal()};
+      st.planned[key].push(queued);planned.push(item.title);
+    }
   }
-  st.reviews[String(career.id)]={date:hoyLocal(),decision:pack.decision,reason:pack.reason,stage_requirements:pack.stage_requirements};
+  st.reviews[key]={date:hoyLocal(),decision:pack.decision,reason:pack.reason,stage_requirements:pack.stage_requirements};
   await saveRouteTutorState(st);
-  return {added,failed};
+  return {added,planned,failed};
+}
+async function openPlannedCourses(career){
+  const st=routeTutorState(),key=String(career.id);
+  st.planned=st.planned||{};st.planned[key]=Array.isArray(st.planned[key])?st.planned[key]:[];
+  return new Promise(resolve=>{
+    const back=document.createElement('div');back.className='modal-back planned-courses-back';
+    const close=()=>{back.classList.remove('show');setTimeout(()=>back.remove(),180);resolve();};
+    const draw=()=>{
+      const items=st.planned[key];
+      const activeCount=(S.career_courses||[]).filter(x=>String(x.career_id)===key).length;
+      back.innerHTML=`<div class="modal-card planned-courses-modal"><button class="modal-x" aria-label="Close">✕</button><div class="modal-icon">📚</div><h3>Planned courses</h3><p><b>${esc(career.name)}</b> · ${items.length} waiting · ${activeCount}/5 active</p><div class="planned-course-list">${items.length?items.map((x,i)=>`<article class="planned-course-item"><div><span>NEXT ${i+1}</span><b>${esc(x.title)}</b><small>${esc(x.provider||x.platform||'Provider')} · ${esc(x.type||'course')}</small>${x.why?`<p>${esc(x.why)}</p>`:''}${x.url?`<a href="${esc(x.url)}" target="_blank" rel="noopener">Verify source ↗</a>`:''}</div><div><button data-activate-planned="${esc(x.queue_id)}" ${activeCount>=5?'disabled title="Finish an active course first"':''}>Activate</button><button data-remove-planned="${esc(x.queue_id)}">✕</button></div></article>`).join(''):'<div class="profile-empty">No planned courses. Future Route Tutor overflow will wait here.</div>'}</div><div class="modal-btns"><button class="m-cancel">Close</button></div></div>`;
+      back.querySelector('.modal-x').onclick=close;back.querySelector('.m-cancel').onclick=close;
+      back.querySelectorAll('[data-remove-planned]').forEach(btn=>btn.onclick=async()=>{st.planned[key]=st.planned[key].filter(x=>String(x.queue_id)!==String(btn.dataset.removePlanned));await saveRouteTutorState(st);draw();renderCareer();});
+      back.querySelectorAll('[data-activate-planned]').forEach(btn=>btn.onclick=async()=>{const item=st.planned[key].find(x=>String(x.queue_id)===String(btn.dataset.activatePlanned));if(!item)return;const result=await activatePlannedCourse(career,item);if(!result.ok){toast(result.reason==='full'?'Active course limit reached':'Course could not be activated','err');return;}toast('📚 Planned course activated');await load();close();});
+    };
+    document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));
+  });
+}
+async function offerNextPlannedCourse(career){
+  const next=plannedForCareer(career.id)[0];if(!next)return;
+  const active=(S.career_courses||[]).filter(x=>String(x.career_id)===String(career.id));if(active.length>=5)return;
+  const ok=await confirmAction({icon:'📚',title:'Next course is ready',text:`A slot is now available in <b>${esc(career.name)}</b>.<br><br><b>${esc(next.title)}</b><br><small>${esc(next.provider||next.platform||'')}</small>`,okText:'Activate course',cancelText:'Keep planned'});
+  if(!ok)return;
+  const result=await activatePlannedCourse(career,next);if(result.ok){toast('📚 Next planned course activated');await load();}else toast('Course could not be activated','err');
 }
 async function openRouteTutor(career){
   const active=(S.career_courses||[]).filter(x=>String(x.career_id)===String(career.id));
@@ -8346,7 +8400,8 @@ async function openRouteTutor(career){
   const selected=await routeImportPreview(career,pack);if(!selected)return;
   if(!selected.length){toast('No courses selected.','warn');return;}
   const result=await applyRouteImport(career,pack,selected);
-  if(result.added.length)toast(`🧭 ${result.added.length} route item${result.added.length===1?'':'s'} added`);
+  if(result.added.length)toast(`🧭 ${result.added.length} active route item${result.added.length===1?'':'s'} added`);
+  if(result.planned.length)toast(`📚 ${result.planned.length} item${result.planned.length===1?' is':'s are'} waiting in Planned`);
   if(result.failed.length)toast(`${result.failed.length} course${result.failed.length===1?' could':'s could'} not be added.`,'err');
   await load();
 }
@@ -8372,6 +8427,7 @@ function credentialModalList(){
   });
 }
 document.addEventListener('click',async e=>{
+  const planned=e.target.closest('[data-planned-courses]');if(planned){const career=(S.careers||[]).find(x=>String(x.id)===String(planned.dataset.plannedCourses));if(career)await openPlannedCourses(career);return;}
   const tutor=e.target.closest('[data-route-tutor]');if(tutor){const career=(S.careers||[]).find(x=>String(x.id)===String(tutor.dataset.routeTutor));if(career)await openRouteTutor(career);return;}
   if(e.target.closest('[data-open-credentials]')){await credentialModalList();renderHunterProfile();return;}
 });
