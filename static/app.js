@@ -1284,7 +1284,21 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
     const previousFocus = document.activeElement;
     const back = document.createElement('div');
     back.className = 'modal-back';
-    if (document.querySelector('.language-mission-back')) back.classList.add('modal-back-stacked');
+
+    // Nested dialogs must always render above the modal that opened them.
+    // This covers Memory Forge import/export previews, Expedition previews,
+    // Language Hunter dialogs and any future modal opened from another modal.
+    const openModalBacks = [...document.querySelectorAll('.modal-back.show')];
+    if (openModalBacks.length) {
+      back.classList.add('modal-back-stacked');
+      const highestZ = openModalBacks.reduce((highest, el) => {
+        const z = Number.parseInt(getComputedStyle(el).zIndex, 10);
+        return Number.isFinite(z) ? Math.max(highest, z) : highest;
+      }, 1000);
+      back.style.zIndex = String(highestZ + 20);
+    } else if (document.querySelector('.language-mission-back')) {
+      back.classList.add('modal-back-stacked');
+    }
     const fieldsHtml = fields.map((f, i) => {
       const lab = f.label ? `<label class="mfield-lab">${f.label}</label>` : '';
       if (f.type === 'select')
