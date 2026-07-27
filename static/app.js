@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 149;
+const FRONT_V = 150;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1877,6 +1877,126 @@ function effectiveGoal(g) {
   return rec ? { kg: rec.kg, auto: true, why: rec.why } : null;
 }
 
+
+function gymTrainerDaysSince(date) {
+  if (!date) return 0;
+  const d = new Date(date + 'T12:00:00');
+  return Number.isNaN(d.getTime()) ? 0 : Math.max(0, Math.floor((new Date(hoyLocal() + 'T12:00:00') - d) / 86400000));
+}
+function gymTrainerSnapshot() {
+  const g = getGym();
+  const entries = (g.entries || []).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const baseline = g.baseline || entries[0] || null;
+  const latest = entries[entries.length-1] || baseline || null;
+  const trainingDates = [...new Set((S.gym_sets || []).map(x=>x.date).filter(Boolean))].sort();
+  const today = new Date(hoyLocal() + 'T12:00:00');
+  const cutoff28 = new Date(today); cutoff28.setDate(cutoff28.getDate()-27);
+  const recent28 = trainingDates.filter(d=>new Date(d+'T12:00:00')>=cutoff28).length;
+  const weeks = Math.max(1, Math.ceil((gymTrainerDaysSince(g.start || baseline?.date || hoyLocal())+1)/7));
+  const perWeek = +(recent28/4).toFixed(1);
+  const deltas = {};
+  MEASURES.forEach(m=>{
+    const a=baseline?.[m.key], b=latest?.[m.key];
+    if(a!=null && b!=null) deltas[m.key]=+(b-a).toFixed(1);
+  });
+  const byExercise = {};
+  (S.gym_sets || []).forEach(s=>{ (byExercise[s.exercise] ||= {})[s.date] ||= []; byExercise[s.exercise][s.date].push(s); });
+  const exerciseTrends=[];
+  Object.entries(byExercise).forEach(([id,days])=>{
+    const dates=Object.keys(days).sort(); if(dates.length<2) return;
+    const first=days[dates[0]], last=days[dates[dates.length-1]];
+    const best=a=>Math.max(...a.map(s=>gymScore(id,s)));
+    const f=best(first), l=best(last);
+    const dir=l>f?'improved':l<f?'declined':'stable';
+    exerciseTrends.push({id,name:EXERCISE_DB[id]?.n||id,group:EXERCISE_DB[id]?.grp||'other',sessions:dates.length,dir,firstDate:dates[0],lastDate:dates.at(-1)});
+  });
+  exerciseTrends.sort((a,b)=>b.sessions-a.sessions);
+  return {g,entries,baseline,latest,trainingDates,totalDays:trainingDates.length,recent28,weeks,perWeek,deltas,exerciseTrends};
+}
+function gymTrainerAssessment(snap=gymTrainerSnapshot()) {
+  const notes=[];
+  const goal=String(snap.g.goal||'').toLowerCase();
+  if(!snap.latest) notes.push({tone:'mut',icon:'📏',title:'More data needed',text:'Log at least one weekly measurement so the trainer can evaluate body changes.'});
+  else {
+    const w=snap.deltas.weight, waist=snap.deltas.waist;
+    if(waist!=null){
+      if(waist<0) notes.push({tone:'ok',icon:'📉',title:'Waist is moving down',text:`${Math.abs(waist)} cm below your starting point. This usually supports a fat-loss or recomposition goal.`});
+      else if(waist>0) notes.push({tone:'warn',icon:'📐',title:'Waist increased',text:`${waist} cm above your starting point. Review the multi-week trend, food consistency and measurement conditions before reacting.`});
+      else notes.push({tone:'mut',icon:'➡',title:'Waist is stable',text:'Your latest waist equals the starting measurement. Strength and photos can clarify whether recomposition is happening.'});
+    }
+    if(w!=null){
+      const fatGoal=/(fat|grasa|abs|defin|cut|lose|perder)/.test(goal);
+      const massGoal=/(muscle|masa|mass|bulk|ganar|strength|fuerza)/.test(goal);
+      let text=`Weight changed ${w>0?'+':''}${w} kg from start.`;
+      if(fatGoal && w<0) text+=' This is directionally aligned with your stated goal.';
+      if(massGoal && w>0) text+=' This may be aligned with gaining mass, especially if waist remains controlled.';
+      notes.push({tone:w===0?'mut':'info',icon:'⚖️',title:'Weight trend',text});
+    }
+  }
+  if(snap.recent28>=12) notes.push({tone:'ok',icon:'🔥',title:'Strong consistency',text:`${snap.recent28} training days in the last 28 days (${snap.perWeek}/week). Protect sleep and recovery so volume remains productive.`});
+  else if(snap.recent28>=8) notes.push({tone:'info',icon:'🧭',title:'Useful consistency',text:`${snap.recent28} training days in the last 28 days (${snap.perWeek}/week). You have enough frequency to progress if effort and nutrition are consistent.`});
+  else notes.push({tone:'warn',icon:'📅',title:'Consistency can improve',text:`${snap.recent28} training days in the last 28 days (${snap.perWeek}/week). A simpler repeatable schedule may help more than adding exercises.`});
+  const improved=snap.exerciseTrends.filter(x=>x.dir==='improved').length, declined=snap.exerciseTrends.filter(x=>x.dir==='declined').length, stable=snap.exerciseTrends.filter(x=>x.dir==='stable').length;
+  if(snap.exerciseTrends.length) notes.push({tone:improved>=declined?'ok':'warn',icon:'🏋️',title:'Strength signal',text:`Across tracked exercises: ${improved} improving, ${stable} stable and ${declined} below the first recorded performance. Use this as a signal, not a diagnosis—exercise swaps and technique changes affect comparisons.`});
+  else notes.push({tone:'mut',icon:'🏋️',title:'Strength history is still forming',text:'Log the same core exercises for several sessions to separate real progress from normal day-to-day variation.'});
+  return notes.slice(0,5);
+}
+function gymTrainerDataText(snap=gymTrainerSnapshot()) {
+  const fmt=(v,u='')=>v==null?'not recorded':`${v}${u}`;
+  const lines=[];
+  lines.push(`Report date: ${hoyLocal()}`);
+  lines.push(`Goal: ${snap.g.goal || 'not specified'}`);
+  lines.push(`Start date: ${snap.g.start || snap.baseline?.date || 'not recorded'}`);
+  lines.push(`Height: ${fmt(snap.g.height,' cm')}`);
+  lines.push(`Training days: ${snap.totalDays} lifetime; ${snap.recent28} in the last 28 days; average ${snap.perWeek}/week`);
+  lines.push(`Weeks since start: ${snap.weeks}`);
+  lines.push('Body measurements (start → latest | change):');
+  MEASURES.forEach(m=>{
+    const a=snap.baseline?.[m.key], b=snap.latest?.[m.key], d=snap.deltas[m.key];
+    lines.push(`- ${m.label}: ${fmt(a,' '+m.unit)} → ${fmt(b,' '+m.unit)}${d!=null?` | ${d>0?'+':''}${d} ${m.unit}`:''}`);
+  });
+  const top=snap.exerciseTrends.slice(0,12);
+  lines.push('Exercise history signals:');
+  if(!top.length) lines.push('- Not enough repeated exercise sessions yet.');
+  else top.forEach(x=>lines.push(`- ${x.name}: ${x.dir}; ${x.sessions} sessions; ${x.firstDate} to ${x.lastDate}`));
+  return lines.join('\n');
+}
+function gymTrainerActivationPrompt() {
+  return `You are my persistent evidence-aware personal trainer inside the Kevin LifeOS workflow. Your role is to evaluate my training, body measurements, consistency, recovery and nutrition habits over time.\n\nRules:\n1. Treat each report I paste as the source of truth for that check-in. Do not invent body-fat percentage, calories, diagnoses, injuries, sleep, food intake or exercise technique.\n2. Compare the newest report with prior reports in this conversation and clearly separate: improved, stable, declined, insufficient data.\n3. Evaluate trends over multiple weeks, not one isolated measurement. Mention normal measurement noise when relevant.\n4. Give specific, realistic next actions for training, recovery and general nutrition. Do not prescribe extreme diets or medical treatment.\n5. Ask concise follow-up questions when information is missing, especially pain/injury, sleep, protein/food consistency, training effort and goal priority.\n6. For every check-in, answer in this order: Overall assessment; Body changes; Strength/performance; Consistency/recovery; Nutrition guidance; What to improve next; 3 priorities for the next 7 days.\n7. Be honest and direct like a supportive coach. Never claim certainty from incomplete data.\n8. Preserve my history across future reports in this chat. If the conversation is lost, this prompt reactivates your role.`;
+}
+function gymTrainerReportPrompt() {
+  const snap=gymTrainerSnapshot();
+  return `${gymTrainerActivationPrompt()}\n\nCURRENT KEVIN LIFEOS GYM REPORT\n${gymTrainerDataText(snap)}\n\nEvaluate this report. Tell me where I improved, where I stayed stable, what may have declined, what data is missing, and what I should prioritize in training, recovery and general nutrition for the next 7 days. Do not diagnose medical conditions.`;
+}
+async function gymCopyPrompt(text,label) {
+  try { await navigator.clipboard.writeText(text); toast(`${label} copied`); }
+  catch (_) { prompt('Copy this prompt:',text); }
+}
+function openGymTrainer() {
+  const snap=gymTrainerSnapshot(), notes=gymTrainerAssessment(snap);
+  const back=document.createElement('div'); back.className='modal-back doc-back gym-trainer-back';
+  const latestDate=snap.latest?.date||'No measurements';
+  back.innerHTML=`<div class="modal-card doc-card gym-trainer-card">
+    <div class="doc-head"><div><span class="trainer-kicker">HUNTER BODY ANALYSIS</span><h3>🧑‍🏫 Personal Trainer</h3></div><button class="doc-x" title="Close">✕</button></div>
+    <div class="doc-body gym-trainer-body">
+      <section class="trainer-hero"><div><b>${snap.totalDays}</b><span>training days</span></div><div><b>${snap.recent28}</b><span>last 28 days</span></div><div><b>${latestDate}</b><span>latest measure</span></div></section>
+      <section class="trainer-section"><div class="trainer-section-head"><h4>Current reading</h4><span>Based only on logged data</span></div><div class="trainer-findings">${notes.map(n=>`<article class="trainer-finding ${n.tone}"><span>${n.icon}</span><div><b>${esc(n.title)}</b><p>${esc(n.text)}</p></div></article>`).join('')}</div></section>
+      <section class="trainer-section trainer-prompts"><div class="trainer-section-head"><h4>AI coach handoff</h4><button class="help-dot trainer-help" type="button" aria-label="How trainer prompts work">?</button></div>
+        <p class="trainer-help-text" hidden>The permanent prompt restores the trainer role in a new conversation. The current report includes your latest measurements, training frequency and exercise trends. The AI can evaluate the report, but it cannot see information you did not log.</p>
+        <div class="trainer-prompt-grid">
+          <button type="button" class="trainer-prompt-btn" data-trainer-copy="activation"><span>🧠</span><b>Permanent trainer prompt</b><small>Use once when starting or restoring the trainer chat.</small></button>
+          <button type="button" class="trainer-prompt-btn primary" data-trainer-copy="report"><span>📋</span><b>Current progress report</b><small>Use for a complete evaluation of your current body and training data.</small></button>
+        </div>
+      </section>
+      <p class="trainer-disclaimer">This is progress guidance, not medical diagnosis. Pain, injury or concerning symptoms require a qualified professional.</p>
+    </div></div>`;
+  document.body.appendChild(back); requestAnimationFrame(()=>back.classList.add('show'));
+  const close=()=>{back.classList.remove('show');setTimeout(()=>back.remove(),240)};
+  back.querySelector('.doc-x').onclick=close; back.addEventListener('click',e=>{if(e.target===back)close()});
+  back.querySelector('.trainer-help').onclick=()=>{const p=back.querySelector('.trainer-help-text');p.hidden=!p.hidden};
+  back.addEventListener('click',e=>{const b=e.target.closest('[data-trainer-copy]');if(!b)return;gymCopyPrompt(b.dataset.trainerCopy==='activation'?gymTrainerActivationPrompt():gymTrainerReportPrompt(),b.dataset.trainerCopy==='activation'?'Trainer prompt':'Progress report')});
+}
+
 function renderGym() {
   const panel = document.getElementById('gymStats');
   if (!panel) return;
@@ -2133,6 +2253,7 @@ const GYM_MANUAL_HTML = `
   </div>`;
 function openGymManual() { docModal('📖 Gym Guide', GYM_MANUAL_HTML); }
 
+document.getElementById('gymTrainerBtn')?.addEventListener('click', openGymTrainer);
 document.getElementById('gymGuideBtn')?.addEventListener('click', openGymManual);
 document.getElementById('gymGoal')?.addEventListener('click', async (e) => {
   if (e.target.id === 'gymWhyLink') { openGymManual(); return; }
