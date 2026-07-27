@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 151;
+const FRONT_V = 152;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -4394,6 +4394,189 @@ $('#closeMonth').addEventListener('click', async (e) => {
 });
 
 
+
+/* ====== V152 · MEMORY FORGE & AI BRIDGE ====== */
+function memoryForgeRead() {
+  try {
+    const raw = JSON.parse((S.profile || {}).memory_forge_v1 || '{}');
+    return {
+      concepts: Array.isArray(raw.concepts) ? raw.concepts : [],
+      cards: Array.isArray(raw.cards) ? raw.cards : [],
+      imports: Array.isArray(raw.imports) ? raw.imports : []
+    };
+  } catch (_) { return { concepts:[], cards:[], imports:[] }; }
+}
+async function memoryForgeSave(state) {
+  const clean = {
+    concepts:(state.concepts || []).slice(-1200),
+    cards:(state.cards || []).slice(-3000),
+    imports:(state.imports || []).slice(-120)
+  };
+  const value = JSON.stringify(clean);
+  await api('/api/profile', {body:{key:'memory_forge_v1', value}});
+  S.profile = S.profile || {};
+  S.profile.memory_forge_v1 = value;
+}
+function memoryDeckFor(folder='General') {
+  const key=String(folder||'').toLowerCase();
+  if(key.includes('english')) return 'Kevin LifeOS::English';
+  if(key.includes('data')) return 'Kevin LifeOS::Data Analytics';
+  if(key.includes('program')) return 'Kevin LifeOS::Programming';
+  if(key.includes('cyber')||key.includes('ciber')) return 'Kevin LifeOS::Cybersecurity';
+  if(key.includes('academy')||key.includes('hunter')) return 'Kevin LifeOS::Hunter Skill Academy';
+  if(key.includes('expedition')) return 'Kevin LifeOS::Expeditions';
+  return `Kevin LifeOS::${String(folder||'General').trim()||'General'}`;
+}
+function memoryFolderFromCareer(name='') {
+  const v=String(name||'').toLowerCase();
+  if(v.includes('data')||v.includes('anal')) return 'Data Analytics';
+  if(v.includes('program')||v.includes('software')||v.includes('developer')) return 'Programming';
+  if(v.includes('cyber')||v.includes('ciber')||v.includes('security')) return 'Cybersecurity';
+  return String(name||'Study').trim() || 'Study';
+}
+async function memoryCaptureConcept(prefill={}) {
+  const folders=['Data Analytics','Programming','Cybersecurity','Hunter Skill Academy','English','Other'];
+  const selected=folders.includes(prefill.folder)?prefill.folder:'Other';
+  const r=await modal({icon:'🧠',title:'Save concept',text:'Capture only what is worth remembering. You can refine it later with the AI Bridge.',fields:[
+    {type:'text',label:'Concept',value:prefill.concept||'',placeholder:'Example: Primary key'},
+    {type:'textarea',rows:3,label:'What I understand',value:prefill.explanation||'',placeholder:'Short explanation in your own words'},
+    {type:'select',label:'Folder',value:selected,options:folders.map(v=>({v,t:v}))},
+    {type:'text',label:'Source · optional',value:prefill.source||'',placeholder:'Course, lesson or topic'},
+    {type:'text',label:'Tags · optional',value:(prefill.tags||[]).join(', '),placeholder:'sql, fundamentals'}
+  ],okText:'Save concept',cancelText:'Not now'});
+  if(!r) return false;
+  const concept=String(r[0]||'').trim();
+  if(!concept){toast('Concept name required.');return false;}
+  const state=memoryForgeRead();
+  state.concepts.push({
+    id:`concept-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+    concept,
+    explanation:String(r[1]||'').trim(),
+    folder:r[2]==='Other'?(prefill.folder||'General'):r[2],
+    source:String(r[3]||'').trim(),
+    tags:String(r[4]||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,12),
+    created_at:hoyLocal(), status:'raw'
+  });
+  await memoryForgeSave(state);
+  toast('🧠 Concept saved to Memory Forge.');
+  return true;
+}
+function memoryEnglishSources() {
+  const cards=[];
+  wordHunterRows().slice(-120).forEach(x=>cards.push({kind:'word',word:x.word||x.correct||'',wrong:x.wrong||'',meaning:x.meaning||'',example:x.example||'',source:x.source||'Word Hunter'}));
+  languageErrors().filter(x=>x.status!=='Mastered').slice(-80).forEach(x=>cards.push({kind:'error',wrong:x.wrong||'',correct:x.correct||'',rule:x.rule||'',source:'Language Hunter'}));
+  languagePhrases().filter(x=>x.confidence!=='Mastered').slice(-80).forEach(x=>cards.push({kind:'phrase',phrase:x.phrase||'',meaning:x.meaning||'',example:x.example||'',source:x.source||'Language Hunter'}));
+  return cards;
+}
+function memoryAcademySources() {
+  try {
+    const st=academyReadState();
+    return (st.history||[]).slice(-80).map(x=>({topic:x.name||'',subcategory:x.subcategory||'',note:x.note||'',date:x.date||'',source:'Hunter Skill Academy'}));
+  } catch(_){ return []; }
+}
+function memoryBridgePayload() {
+  const state=memoryForgeRead();
+  return {
+    generated_at:hoyLocal(),
+    folders:['English','Data Analytics','Programming','Cybersecurity','Hunter Skill Academy'],
+    english:memoryEnglishSources(),
+    concepts:(state.concepts||[]).filter(x=>x.status!=='archived').slice(-180),
+    academy:memoryAcademySources()
+  };
+}
+function memoryBridgePrompt() {
+  const payload=memoryBridgePayload();
+  return `You are the Kevin LifeOS Memory Forge Bridge.\n\nGOAL\nTransform the supplied learning material into high-quality, atomic study cards for Anki and a clean Kevin LifeOS import.\n\nRULES\n- Never invent facts not supported by the input.\n- Preserve the original meaning, but rewrite unclear notes accurately and simply.\n- English cards must include Spanish meaning, one natural A2-B1 example, Spanish translation, and correction details when relevant.\n- Technical cards must test one idea at a time. Prefer question/answer, definition, comparison, procedure, error diagnosis or applied example cards.\n- Avoid duplicates and trivia.\n- Use these decks only: Kevin LifeOS::English, Kevin LifeOS::Data Analytics, Kevin LifeOS::Programming, Kevin LifeOS::Cybersecurity, Kevin LifeOS::Hunter Skill Academy.\n- Add useful tags such as source, course, topic and difficulty.\n- Return VALID JSON ONLY. No markdown.\n\nOUTPUT SCHEMA\n{\n  "type":"memory_forge_import",\n  "summary":"",\n  "cards":[{\n    "deck":"Kevin LifeOS::Data Analytics",\n    "front":"",\n    "back":"",\n    "example":"",\n    "example_es":"",\n    "source":"",\n    "tags":[""],\n    "folder":"Data Analytics"\n  }]\n}\n\nINPUT\n${JSON.stringify(payload,null,2)}`;
+}
+async function copyMemoryBridgePrompt(){
+  const txt=memoryBridgePrompt();
+  try{await navigator.clipboard.writeText(txt);toast('✨ Memory Forge prompt copied.');}
+  catch(_){prompt('Copy this prompt:',txt);}
+}
+function normalizeMemoryCard(raw={}) {
+  const folder=String(raw.folder||raw.category||'General').trim()||'General';
+  const front=String(raw.front||raw.question||raw.term||'').trim();
+  const back=String(raw.back||raw.answer||raw.definition||'').trim();
+  if(!front||!back)return null;
+  return {
+    id:String(raw.id||`card-${Date.now()}-${Math.random().toString(36).slice(2,8)}`),
+    deck:String(raw.deck||memoryDeckFor(folder)).trim(), folder,
+    front, back,
+    example:String(raw.example||'').trim(), example_es:String(raw.example_es||raw.translation||'').trim(),
+    source:String(raw.source||'AI Bridge').trim(),
+    tags:Array.isArray(raw.tags)?raw.tags.map(x=>String(x).trim()).filter(Boolean).slice(0,20):String(raw.tags||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,20),
+    created_at:hoyLocal(), status:'ready'
+  };
+}
+async function importMemoryForgeJSON() {
+  const r=await modal({icon:'📥',title:'Import AI cards',text:'Paste the JSON returned by ChatGPT. A preview appears before anything is saved.',fields:[{type:'textarea',rows:14,placeholder:'Paste valid JSON'}],okText:'Preview',cancelText:'Cancel'});
+  if(!r)return;
+  let data;try{data=JSON.parse(r[0]);}catch(_){toast('Invalid JSON.');return;}
+  const rows=Array.isArray(data)?data:(Array.isArray(data.cards)?data.cards:[]);
+  const cards=rows.map(normalizeMemoryCard).filter(Boolean).slice(0,500);
+  if(!cards.length){toast('No valid cards detected.');return;}
+  const decks=[...new Set(cards.map(x=>x.deck))];
+  const preview=`<div class="memory-import-preview"><b>${cards.length} cards detected</b><span>${decks.map(esc).join(' · ')}</span><ul>${cards.slice(0,8).map(x=>`<li><strong>${esc(x.front)}</strong><small>${esc(x.deck)}</small></li>`).join('')}</ul>${cards.length>8?`<p>+ ${cards.length-8} more</p>`:''}</div>`;
+  const ok=await modal({icon:'✓',title:'Import preview',text:preview,okText:`Import ${cards.length}`,cancelText:'Cancel'});
+  if(!ok)return;
+  const state=memoryForgeRead();
+  const seen=new Set((state.cards||[]).map(x=>`${String(x.deck).toLowerCase()}|${String(x.front).toLowerCase()}`));
+  const added=[];
+  for(const card of cards){const key=`${card.deck.toLowerCase()}|${card.front.toLowerCase()}`;if(seen.has(key))continue;seen.add(key);state.cards.push(card);added.push(card);}
+  state.imports.push({date:hoyLocal(),count:added.length,summary:String(data.summary||'AI card import').slice(0,180)});
+  await memoryForgeSave(state);
+  toast(`📥 ${added.length} new cards imported${added.length<cards.length?' · duplicates skipped':''}.`);
+}
+function csvCell(v){return `"${String(v??'').replace(/"/g,'""')}"`;}
+function exportMemoryForgeCSV(){
+  const cards=memoryForgeRead().cards||[];
+  if(!cards.length){toast('Import or create cards before exporting.');return;}
+  const header=['Deck','Front','Back','Example','Example_ES','Source','Tags','KevinLifeOS_ID'];
+  const lines=[header.map(csvCell).join(',')];
+  cards.forEach(c=>lines.push([c.deck,c.front,c.back,c.example,c.example_es,c.source,(c.tags||[]).join(' '),c.id].map(csvCell).join(',')));
+  const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Kevin_LifeOS_Anki_${hoyLocal()}.csv`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);
+  toast(`📤 ${cards.length} cards exported for Anki.`);
+}
+function openMemoryForge() {
+  const previous=document.activeElement,back=document.createElement('div');back.className='modal-back memory-forge-back';
+  const close=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();},240)};
+  const draw=()=>{const st=memoryForgeRead(),payload=memoryBridgePayload();back.innerHTML=`<div class="modal-card memory-forge-card"><div class="memory-forge-head"><div><span>MEMORY FORGE</span><h3>Knowledge bridge</h3><p>Kevin LifeOS organizes. ChatGPT improves. Anki helps you remember.</p></div><button type="button" data-memory-close>✕</button></div><div class="memory-forge-stats"><div><b>${payload.english.length}</b><span>English signals</span></div><div><b>${payload.concepts.length}</b><span>saved concepts</span></div><div><b>${payload.academy.length}</b><span>Academy practices</span></div><div><b>${st.cards.length}</b><span>ready cards</span></div></div><div class="memory-forge-actions"><button data-memory-capture>＋ Capture</button><button data-memory-copy>✨ Copy AI Bridge</button><button data-memory-import>📥 Import JSON</button><button data-memory-export>📤 Anki CSV</button></div><div class="memory-forge-foot"><button data-memory-help>?</button><span>English is collected automatically. Technical concepts are optional and stay editable before AI processing.</span></div></div>`;bind();};
+  const bind=()=>{back.querySelector('[data-memory-close]').onclick=close;back.querySelector('[data-memory-capture]').onclick=async()=>{await memoryCaptureConcept();draw();};back.querySelector('[data-memory-copy]').onclick=copyMemoryBridgePrompt;back.querySelector('[data-memory-import]').onclick=async()=>{await importMemoryForgeJSON();draw();};back.querySelector('[data-memory-export]').onclick=exportMemoryForgeCSV;back.querySelector('[data-memory-help]').onclick=()=>modal({icon:'?',title:'Memory Forge',text:'English comes automatically from Language Hunter and Word Hunter. Data, Programming, Cybersecurity and Academy concepts are captured only when you choose. Copy one bridge prompt to ChatGPT, import its JSON after review, then export all approved cards to Anki.',okText:'Understood'});};
+  document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));
+}
+function expeditionBridgePrompt(goal){
+  const checkpoints=(S.goal_checkpoints||[]).filter(x=>String(x.goal_id)===String(goal.id));
+  const logs=(S.goal_logs||[]).filter(x=>String(x.goal_id)===String(goal.id)).slice(0,12);
+  const strategy=(S.goal_strategy||[]).find(x=>String(x.goal_id)===String(goal.id))||{};
+  const payload={id:goal.id,name:goal.name,progress:+goal.pct||0,status:goal.status||'',next_step:goal.next_step||'',target:goal.target||'',checkpoints,threat_analysis:strategy,field_logs:logs,connected_signals:goalLifeSignals(goal)};
+  return `You are the Kevin LifeOS Expedition AI Bridge.\n\nHelp me convert this expedition into clear field execution and useful memory cards. Do not invent completed work. Keep objectives concrete, measurable and realistic.\n\nRETURN VALID JSON ONLY:\n{\n "type":"expedition_update",\n "expedition_id":${goal.id},\n "checkpoints":[{"title":""}],\n "threat_analysis":{"primary_obstacle":"","threat_level":"Stable|Under watch|High risk|Critical","countermeasure":"","next_field_action":""},\n "field_note":{"note":""},\n "memory_cards":[{"folder":"Expeditions","deck":"Kevin LifeOS::Expeditions","front":"","back":"","example":"","source":"${String(goal.name||'Expedition').replace(/"/g,'')} ","tags":["expedition"]}]\n}\n\nRULES\n- Add at most 6 checkpoints.\n- Do not duplicate existing checkpoints.\n- A checkpoint must describe visible proof of completion.\n- The field note must summarize what is known, not pretend progress happened.\n- Cards should preserve concepts learned through this expedition.\n\nEXPEDITION DATA\n${JSON.stringify(payload,null,2)}`;
+}
+async function importExpeditionJSON(goal){
+  const r=await modal({icon:'✨',title:`AI Bridge · ${goal.name}`,text:'Paste the JSON returned by ChatGPT. You will review the detected changes before applying them.',fields:[{type:'textarea',rows:14,placeholder:'Paste expedition_update JSON'}],okText:'Preview',cancelText:'Cancel'});if(!r)return;
+  let data;try{data=JSON.parse(r[0]);}catch(_){toast('Invalid JSON.');return;}
+  const cps=Array.isArray(data.checkpoints)?data.checkpoints.map(x=>String(x.title||x).trim()).filter(Boolean).slice(0,6):[];
+  const th=data.threat_analysis||{};const note=String(data.field_note?.note||data.field_note||'').trim();const cards=(Array.isArray(data.memory_cards)?data.memory_cards:[]).map(normalizeMemoryCard).filter(Boolean).slice(0,80);
+  if(!cps.length&&!Object.keys(th).length&&!note&&!cards.length){toast('No expedition changes detected.');return;}
+  const preview=`<div class="expedition-ai-preview"><b>${cps.length} checkpoints · ${cards.length} cards</b><span>${note?'1 field note · ':''}${Object.keys(th).length?'strategy included':'no strategy'}</span><ul>${cps.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
+  const ok=await modal({icon:'✓',title:'Expedition import preview',text:preview,okText:'Apply selected package',cancelText:'Cancel'});if(!ok)return;
+  for(const title of cps)await api('/api/goal/checkpoint',{body:{goal_id:+goal.id,title}});
+  if(Object.keys(th).length)await api('/api/goal/strategy',{body:{goal_id:+goal.id,obstacle:th.primary_obstacle||'',threat:th.threat_level||'Stable',strategy:th.countermeasure||'',next_action:th.next_field_action||''}});
+  if(note)await api('/api/goal/log',{body:{goal_id:+goal.id,note}});
+  if(cards.length){const st=memoryForgeRead(),seen=new Set(st.cards.map(x=>`${x.deck.toLowerCase()}|${x.front.toLowerCase()}`));cards.forEach(c=>{const k=`${c.deck.toLowerCase()}|${c.front.toLowerCase()}`;if(!seen.has(k)){seen.add(k);st.cards.push(c);}});await memoryForgeSave(st);}
+  await load();toast('✨ Expedition AI package applied.');
+}
+async function openExpeditionBridge(goal){
+  const choice=await modal({icon:'✨',title:`AI Bridge · ${goal.name}`,text:'Use ChatGPT to propose checkpoints, threat strategy, a field note and optional memory cards. Nothing is applied without an import preview.',okText:'Import JSON',extraBtn:'Copy AI prompt',cancelText:'Close'});
+  if(choice==='EXTRA'){const txt=expeditionBridgePrompt(goal);try{await navigator.clipboard.writeText(txt);toast('✨ Expedition prompt copied.');}catch(_){prompt('Copy this prompt:',txt)}return;}
+  if(choice)await importExpeditionJSON(goal);
+}
+
+document.addEventListener('click',async(e)=>{
+  if(e.target.closest('#memoryForgeBtn')){openMemoryForge();return;}
+  const exp=e.target.closest('[data-expedition-ai]');if(exp){const goal=(S.goals||[]).find(x=>String(x.id)===String(exp.dataset.expeditionAi));if(goal)await openExpeditionBridge(goal);return;}
+});
+
 /* ====== DARK CONTINENT · EXPEDITIONS & SKILL TRAINING ====== */
 const EXPEDITION_ZONES = [
   { name: 'Awakening', min: 0 },
@@ -4460,7 +4643,7 @@ function expeditionOperations(goal) {
   const logHtml = logs.length ? logs.map(log => `<article class="gx-log"><span>${goalFieldDate(log.created)}</span><p>${esc(log.note)}</p><button type="button" data-goal-log-delete="${log.id}" aria-label="Delete field note">×</button></article>`).join('') : '<div class="gx-empty">No field notes yet. Record progress, evidence or a blocker.</div>';
   const threat = strategy.threat || 'Stable';
   return `<section class="gx-operations" data-goal-ops="${goal.id}">
-    <div class="gx-ops-head"><div><span>EXPEDITION OPERATIONS</span><h3>Field execution layer</h3></div><div class="gx-completion"><b>${done}/${checkpoints.length}</b><small>checkpoints cleared</small></div></div>
+    <div class="gx-ops-head"><div><span>EXPEDITION OPERATIONS</span><h3>Field execution layer</h3></div><div class="gx-ops-head-actions"><button type="button" class="gx-ai-bridge" data-expedition-ai="${goal.id}">✨ AI Bridge</button><div class="gx-completion"><b>${done}/${checkpoints.length}</b><small>checkpoints cleared</small></div></div></div>
     <div class="gx-ops-grid">
       <article class="gx-panel gx-checkpoints"><header><div><span>CHECKPOINTS</span><h4>Mission objectives</h4></div><b>${done}/${checkpoints.length}</b></header><p class="gx-retention-note">Completed checkpoints remain visible for 24 hours, then they are removed automatically.</p><div class="gx-check-list">${checkpointHtml}</div><form class="gx-inline-form" data-goal-check-form="${goal.id}"><input name="title" maxlength="180" placeholder="Add a concrete checkpoint" required><button type="submit">＋ Add</button></form></article>
       <article class="gx-panel gx-threat"><header><div><span>THREAT ANALYSIS</span><h4>Obstacle & countermeasure</h4></div><em class="gx-threat-badge threat-${threat.toLowerCase().replace(/\s+/g,'-')}">${esc(threat)}</em></header>
@@ -4771,7 +4954,7 @@ document.addEventListener('click',async(e)=>{
   if(e.target.closest('[data-open-knowledge-archive]')){await openKnowledgeArchive();return;}
   if(e.target.closest('[data-academy-explore]')&&active){const text=`<b>${esc(active.name)}</b><br><small>${esc(active.domain.name)} · ${esc(active.subcategory)}</small><p>${esc(active.summary)}</p><b>Investigate</b><ol>${(active.questions.length?active.questions:['What is it?','Why does it matter?','How is it applied?']).map(q=>`<li>${esc(q)}</li>`).join('')}</ol>`;const r=await modal({icon:active.domain.icon,title:'Research mission',text,okText:'Copy AI prompt',cancelText:'Close'});if(r){const p=academyResearchPrompt(active);try{await navigator.clipboard.writeText(p);toast('Research prompt copied')}catch(_){prompt('Copy this prompt:',p)}}return;}
   if(e.target.closest('[data-academy-books]')&&active){const books=active.books.length?active.books.map(b=>`<li>${esc(b)}${active.source==='ai-import'?' <small>· AI-suggested, verify before use</small>':''}</li>`).join(''):'<li>No verified reading saved. Prefer official documentation, universities or recognized institutions.</li>';await modal({icon:'📚',title:'Recommended reading',text:`<b>${esc(active.name)}</b><ul>${books}</ul><p class="hint">Resources are optional and never award progress.</p>`,okText:'Close'});return;}
-  if(e.target.closest('[data-academy-complete]')&&active){const st=academyReadState();const r=await modal({icon:'◆',title:'Archive learned concept',text:`Register <b>${esc(active.name)}</b> only when you feel you understand it. There is no deadline or streak.`,fields:[{type:'text',placeholder:'Optional: what did you understand?'}],okText:'Archive concept',cancelText:'Keep studying'});if(r===null)return;const today=hoyLocal();st.sessions=(Number(st.sessions)||0)+1;st.history.push({topicId:active.id,name:active.name,domain:active.domain.name,domainKey:active.domain.key,subcategory:active.subcategory,date:today,note:String(r[0]||'').trim().slice(0,300),source:active.source||'built-in'});if(!st.mastered.includes(active.id))st.mastered.push(active.id);if(!st.doneDates.includes(today))st.doneDates.push(today);const next=academyRecommendationFromState(st,academyAllSkills(st));st.activeSkillId=next?.id||'';if(next)st.domain=next.domain.key;await academySaveState(st);renderSkillAcademy();toast('Concept moved to Knowledge Archive');return;}
+  if(e.target.closest('[data-academy-complete]')&&active){const st=academyReadState();const r=await modal({icon:'◆',title:'Archive learned concept',text:`Register <b>${esc(active.name)}</b> only when you feel you understand it. There is no deadline or streak.`,fields:[{type:'text',label:'What did you understand? · optional',placeholder:'Short evidence in your own words'},{type:'select',label:'Memory Forge',value:'yes',options:[{v:'yes',t:'Also save it for future study cards'},{v:'no',t:'Archive only'}]}],okText:'Archive concept',cancelText:'Keep studying'});if(r===null)return;const today=hoyLocal(),note=String(r[0]||'').trim().slice(0,300);st.sessions=(Number(st.sessions)||0)+1;st.history.push({topicId:active.id,name:active.name,domain:active.domain.name,domainKey:active.domain.key,subcategory:active.subcategory,date:today,note,source:active.source||'built-in'});if(!st.mastered.includes(active.id))st.mastered.push(active.id);if(!st.doneDates.includes(today))st.doneDates.push(today);const next=academyRecommendationFromState(st,academyAllSkills(st));st.activeSkillId=next?.id||'';if(next)st.domain=next.domain.key;await academySaveState(st);if(r[1]==='yes'){const mf=memoryForgeRead();mf.concepts.push({id:`concept-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,concept:active.name,explanation:note||active.summary||'',folder:'Hunter Skill Academy',source:`${active.domain.name} · ${active.subcategory}`,tags:[active.domain.key,active.subcategory].filter(Boolean),created_at:today,status:'raw'});await memoryForgeSave(mf);}renderSkillAcademy();toast(r[1]==='yes'?'Concept archived and sent to Memory Forge':'Concept moved to Knowledge Archive');return;}
 });
 
 
@@ -6583,6 +6766,8 @@ document.addEventListener('click', async (e) => {
         const nv=Math.max(0,Math.min(100,parseInt(String(r[0]).replace(/[^0-9]/g,''),10)||0));
         await api('/api/career/course',{body:{id:course.id,field:'pct',value:nv}});
         toast(`📈 ${course.title} updated to ${nv}%. Career stage progress stays unchanged.`);
+        const saveConcept = await modal({icon:'🧠',title:'Save something to remember?',text:'Optional. Capture one concept from this study session for Memory Forge.',okText:'Save concept',cancelText:'Not now'});
+        if(saveConcept) await memoryCaptureConcept({folder:memoryFolderFromCareer(active.name),source:course.title,tags:[active.name,course.title]});
       } else if (active) {
         toast('Add an active course to this career before logging study progress.');
         return;
