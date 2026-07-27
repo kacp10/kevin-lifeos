@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 150  # V150 Gym Personal Trainer intelligence and AI handoff
+VERSION = 151  # V151 Gym weekly check-in, weight averages and measurement confidence
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)

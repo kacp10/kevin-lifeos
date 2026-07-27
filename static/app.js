@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 150;
+const FRONT_V = 151;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1878,6 +1878,70 @@ function effectiveGoal(g) {
 }
 
 
+
+function gymTrainerWeekKey(iso=hoyLocal()) { return weekKeyOf(iso); }
+function gymTrainerCheckins(g=getGym()) { return Array.isArray(g.trainerCheckins) ? g.trainerCheckins : []; }
+function gymTrainerWeights(g=getGym()) { return Array.isArray(g.weightLogs) ? g.weightLogs : []; }
+function gymTrainerLatestCheckin(g=getGym()) {
+  return gymTrainerCheckins(g).slice().sort((a,b)=>String(b.date||'').localeCompare(String(a.date||'')))[0] || null;
+}
+function gymTrainerCheckinForWeek(iso=hoyLocal(), g=getGym()) {
+  const wk=gymTrainerWeekKey(iso);
+  return gymTrainerCheckins(g).find(x=>gymTrainerWeekKey(x.date)===wk) || null;
+}
+function gymTrainerWeeklyWeights(g=getGym()) {
+  const rows=gymTrainerWeights(g).filter(x=>x&&x.date&&Number.isFinite(Number(x.weight)));
+  const groups={};
+  rows.forEach(x=>{const wk=gymTrainerWeekKey(x.date);(groups[wk]||(groups[wk]=[])).push(Number(x.weight));});
+  return Object.entries(groups).sort((a,b)=>a[0].localeCompare(b[0])).map(([week,vals])=>({week,count:vals.length,average:+(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(2)}));
+}
+function gymMeasurementQuality(entry) {
+  const q=entry?.conditions||{};
+  const yes=['morning','bathroom','fasted','sameMethod'].filter(k=>q[k]===true).length;
+  if(yes>=4) return {label:'high',score:4};
+  if(yes>=2) return {label:'medium',score:yes};
+  return {label:'low',score:yes};
+}
+function gymMeasurementWarnings(entry, previous) {
+  if(!entry||!previous)return [];
+  const limits={weight:3,waist:5,chest:5,arm:2.5,hip:5,thigh:4};
+  const out=[];
+  MEASURES.forEach(m=>{
+    const a=Number(previous[m.key]),b=Number(entry[m.key]);
+    if(!Number.isFinite(a)||!Number.isFinite(b)||!limits[m.key])return;
+    const d=+(b-a).toFixed(1);
+    if(Math.abs(d)>=limits[m.key])out.push(`${m.label}: ${d>0?'+':''}${d} ${m.unit}`);
+  });
+  return out;
+}
+async function openGymWeeklyCheckin() {
+  const g=getGym(), old=gymTrainerCheckinForWeek(hoyLocal(),g)||{};
+  const r=await modal({icon:'📝',title:'Weekly trainer check-in',text:'One minute. These answers make your AI report much more accurate.',fields:[
+    {type:'number',min:0,max:24,label:'Average sleep (hours)',value:old.sleepHours??'',placeholder:'e.g. 7'},
+    {type:'select',label:'Sleep quality',options:[{v:'poor',t:'Poor'},{v:'regular',t:'Regular'},{v:'good',t:'Good'}],value:old.sleepQuality||'regular'},
+    {type:'select',label:'Energy',options:[{v:'low',t:'Low'},{v:'medium',t:'Medium'},{v:'high',t:'High'}],value:old.energy||'medium'},
+    {type:'select',label:'Stress',options:[{v:'low',t:'Low'},{v:'medium',t:'Medium'},{v:'high',t:'High'}],value:old.stress||'medium'},
+    {type:'text',label:'Pain or discomfort',value:old.pain||'',placeholder:'None, or describe it briefly'},
+    {type:'select',label:'Protein in 2–3 meals',options:[{v:'rarely',t:'Rarely'},{v:'sometimes',t:'Sometimes'},{v:'usually',t:'Usually'}],value:old.protein||'usually'},
+    {type:'select',label:'Main-set effort',options:[{v:'easy',t:'Mostly easy'},{v:'challenging',t:'Mostly challenging'},{v:'near_failure',t:'Often near failure'},{v:'mixed',t:'Mixed'}],value:old.effort||'mixed'},
+    {type:'select',label:'Current priority',options:[{v:'waist',t:'Lose waist / definition'},{v:'muscle',t:'Gain muscle'},{v:'strength',t:'Increase strength'},{v:'maintain',t:'Maintain / recomposition'}],value:old.priority||'waist'}
+  ],okText:'Save check-in'});
+  if(!r)return false;
+  const row={date:hoyLocal(),sleepHours:Number(r[0])||0,sleepQuality:r[1],energy:r[2],stress:r[3],pain:String(r[4]||'').trim()||'None',protein:r[5],effort:r[6],priority:r[7]};
+  g.trainerCheckins=gymTrainerCheckins(g).filter(x=>gymTrainerWeekKey(x.date)!==gymTrainerWeekKey(row.date));
+  g.trainerCheckins.push(row);
+  await saveGym(g); toast('🧑‍🏫 Weekly check-in saved');
+  return true;
+}
+async function openGymWeightLog() {
+  const g=getGym(), latest=gymTrainerWeights(g).slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0];
+  const r=await modal({icon:'⚖️',title:"Today's weight",text:'Morning weight is best. Several entries create a reliable weekly average.',fields:[{type:'number',min:0,label:'Weight (kg)',value:latest?.weight??'',placeholder:'e.g. 77.2'}],okText:'Save weight'});
+  if(!r)return false;
+  const w=Number(String(r[0]||'').replace(',','.'));
+  if(!w){toast('Enter a valid weight');return false;}
+  g.weightLogs=gymTrainerWeights(g).filter(x=>x.date!==hoyLocal());g.weightLogs.push({date:hoyLocal(),weight:w});
+  await saveGym(g);toast('⚖️ Weight saved');return true;
+}
 function gymTrainerDaysSince(date) {
   if (!date) return 0;
   const d = new Date(date + 'T12:00:00');
@@ -1911,7 +1975,12 @@ function gymTrainerSnapshot() {
     exerciseTrends.push({id,name:EXERCISE_DB[id]?.n||id,group:EXERCISE_DB[id]?.grp||'other',sessions:dates.length,dir,firstDate:dates[0],lastDate:dates.at(-1)});
   });
   exerciseTrends.sort((a,b)=>b.sessions-a.sessions);
-  return {g,entries,baseline,latest,trainingDates,totalDays:trainingDates.length,recent28,weeks,perWeek,deltas,exerciseTrends};
+  const latestCheckin=gymTrainerLatestCheckin(g);
+  const weeklyWeights=gymTrainerWeeklyWeights(g);
+  const latestQuality=latest?gymMeasurementQuality(latest):null;
+  const previous=entries.length>1?entries[entries.length-2]:null;
+  const measurementWarnings=gymMeasurementWarnings(latest,previous);
+  return {g,entries,baseline,latest,trainingDates,totalDays:trainingDates.length,recent28,weeks,perWeek,deltas,exerciseTrends,latestCheckin,weeklyWeights,latestQuality,measurementWarnings};
 }
 function gymTrainerAssessment(snap=gymTrainerSnapshot()) {
   const notes=[];
@@ -1939,7 +2008,10 @@ function gymTrainerAssessment(snap=gymTrainerSnapshot()) {
   const improved=snap.exerciseTrends.filter(x=>x.dir==='improved').length, declined=snap.exerciseTrends.filter(x=>x.dir==='declined').length, stable=snap.exerciseTrends.filter(x=>x.dir==='stable').length;
   if(snap.exerciseTrends.length) notes.push({tone:improved>=declined?'ok':'warn',icon:'🏋️',title:'Strength signal',text:`Across tracked exercises: ${improved} improving, ${stable} stable and ${declined} below the first recorded performance. Use this as a signal, not a diagnosis—exercise swaps and technique changes affect comparisons.`});
   else notes.push({tone:'mut',icon:'🏋️',title:'Strength history is still forming',text:'Log the same core exercises for several sessions to separate real progress from normal day-to-day variation.'});
-  return notes.slice(0,5);
+  if(!snap.latestCheckin) notes.push({tone:'warn',icon:'📝',title:'Weekly check-in missing',text:'Sleep, energy, pain, protein and effort are still unknown. Complete the short Friday check-in.'});
+  else if(snap.latestCheckin.pain && !/^none$/i.test(snap.latestCheckin.pain)) notes.push({tone:'warn',icon:'🩹',title:'Discomfort reported',text:snap.latestCheckin.pain});
+  if(snap.measurementWarnings?.length) notes.push({tone:'warn',icon:'⚠️',title:'Measurement needs confirmation',text:snap.measurementWarnings.join(' · ')});
+  return notes.slice(0,8);
 }
 function gymTrainerDataText(snap=gymTrainerSnapshot()) {
   const fmt=(v,u='')=>v==null?'not recorded':`${v}${u}`;
@@ -1955,6 +2027,14 @@ function gymTrainerDataText(snap=gymTrainerSnapshot()) {
     const a=snap.baseline?.[m.key], b=snap.latest?.[m.key], d=snap.deltas[m.key];
     lines.push(`- ${m.label}: ${fmt(a,' '+m.unit)} → ${fmt(b,' '+m.unit)}${d!=null?` | ${d>0?'+':''}${d} ${m.unit}`:''}`);
   });
+  lines.push('Weekly weight averages:');
+  if(!snap.weeklyWeights.length) lines.push('- Not recorded.');
+  else snap.weeklyWeights.slice(-6).forEach(x=>lines.push(`- Week ${x.week}: ${x.average} kg average from ${x.count} measurement(s)`));
+  lines.push('Recovery and nutrition check-in:');
+  if(!snap.latestCheckin) lines.push('- No weekly check-in recorded.');
+  else { const c=snap.latestCheckin; lines.push(`- Date: ${c.date}`); lines.push(`- Sleep: ${c.sleepHours||'not recorded'} hours; quality ${c.sleepQuality}`); lines.push(`- Energy: ${c.energy}; stress: ${c.stress}`); lines.push(`- Pain/discomfort: ${c.pain||'None'}`); lines.push(`- Protein in 2–3 meals: ${c.protein}`); lines.push(`- Main-set effort: ${c.effort}`); lines.push(`- Current priority: ${c.priority}`); }
+  lines.push(`Latest measurement confidence: ${snap.latestQuality?.label||'unknown'}`);
+  if(snap.measurementWarnings?.length) lines.push(`Measurement warnings: ${snap.measurementWarnings.join('; ')}`);
   const top=snap.exerciseTrends.slice(0,12);
   lines.push('Exercise history signals:');
   if(!top.length) lines.push('- Not enough repeated exercise sessions yet.');
@@ -1981,6 +2061,7 @@ function openGymTrainer() {
     <div class="doc-body gym-trainer-body">
       <section class="trainer-hero"><div><b>${snap.totalDays}</b><span>training days</span></div><div><b>${snap.recent28}</b><span>last 28 days</span></div><div><b>${latestDate}</b><span>latest measure</span></div></section>
       <section class="trainer-section"><div class="trainer-section-head"><h4>Current reading</h4><span>Based only on logged data</span></div><div class="trainer-findings">${notes.map(n=>`<article class="trainer-finding ${n.tone}"><span>${n.icon}</span><div><b>${esc(n.title)}</b><p>${esc(n.text)}</p></div></article>`).join('')}</div></section>
+      <section class="trainer-section trainer-checkin-section"><div class="trainer-section-head"><h4>Weekly data</h4><span>${snap.latestCheckin?`Last check-in · ${snap.latestCheckin.date}`:'Next check-in · Friday'}</span></div><div class="trainer-action-grid"><button type="button" class="trainer-action-btn" data-trainer-action="checkin"><span>📝</span><b>Weekly check-in</b><small>Sleep, recovery, nutrition and effort.</small></button><button type="button" class="trainer-action-btn" data-trainer-action="weight"><span>⚖️</span><b>Log weight</b><small>${snap.weeklyWeights.length?`Latest weekly average: ${snap.weeklyWeights.at(-1).average} kg`:'Build a weekly average.'}</small></button></div></section>
       <section class="trainer-section trainer-prompts"><div class="trainer-section-head"><h4>AI coach handoff</h4><button class="help-dot trainer-help" type="button" aria-label="How trainer prompts work">?</button></div>
         <p class="trainer-help-text" hidden>The permanent prompt restores the trainer role in a new conversation. The current report includes your latest measurements, training frequency and exercise trends. The AI can evaluate the report, but it cannot see information you did not log.</p>
         <div class="trainer-prompt-grid">
@@ -1994,6 +2075,7 @@ function openGymTrainer() {
   const close=()=>{back.classList.remove('show');setTimeout(()=>back.remove(),240)};
   back.querySelector('.doc-x').onclick=close; back.addEventListener('click',e=>{if(e.target===back)close()});
   back.querySelector('.trainer-help').onclick=()=>{const p=back.querySelector('.trainer-help-text');p.hidden=!p.hidden};
+  back.addEventListener('click',async e=>{const b=e.target.closest('[data-trainer-action]');if(!b)return;const ok=b.dataset.trainerAction==='checkin'?await openGymWeeklyCheckin():await openGymWeightLog();if(ok){close();await load();setTimeout(openGymTrainer,180);}});
   back.addEventListener('click',e=>{const b=e.target.closest('[data-trainer-copy]');if(!b)return;gymCopyPrompt(b.dataset.trainerCopy==='activation'?gymTrainerActivationPrompt():gymTrainerReportPrompt(),b.dataset.trainerCopy==='activation'?'Trainer prompt':'Progress report')});
 }
 
@@ -2121,9 +2203,13 @@ document.getElementById('gymLogBtn')?.addEventListener('click', async () => {
   const g = getGym();
   const last = (g.entries || []).slice().sort((a, b) => (a.date < b.date ? 1 : -1))[0] || {};
   const r = await modal({ icon: '🏋️', title: 'Log this week',
-    text: 'Morning, relaxed, same day each week. Leave blank what you didn’t measure.',
-    fields: MEASURES.map(m => ({ type: 'number', min: 0, label: `${m.label} (${m.unit})`, placeholder: last[m.key] != null ? 'last: ' + last[m.key] : m.unit })),
-    okText: 'Save week' });
+    text: 'Measurements first. Four quick condition checks help the trainer judge reliability.',
+    fields: MEASURES.map(m => ({ type: 'number', min: 0, label: `${m.label} (${m.unit})`, placeholder: last[m.key] != null ? 'last: ' + last[m.key] : m.unit })).concat([
+      {type:'select',label:'Measured in the morning?',options:[{v:'yes',t:'Yes'},{v:'no',t:'No'}]},
+      {type:'select',label:'After bathroom?',options:[{v:'yes',t:'Yes'},{v:'no',t:'No'}]},
+      {type:'select',label:'Before food/drink?',options:[{v:'yes',t:'Yes'},{v:'no',t:'No'}]},
+      {type:'select',label:'Same tape position/method?',options:[{v:'yes',t:'Yes'},{v:'no',t:'Not sure'}]}
+    ]), okText: 'Save week' });
   if (!r) return;
   const entry = { date: hoyLocal() };
   let any = false;
@@ -2132,6 +2218,10 @@ document.getElementById('gymLogBtn')?.addEventListener('click', async () => {
     if (raw !== '') { entry[m.key] = +raw.replace(/[^0-9.]/g, '') || 0; any = true; }
   });
   if (!any) { toast('Add at least one measure to save'); return; }
+  const qi=MEASURES.length; entry.conditions={morning:r[qi]==='yes',bathroom:r[qi+1]==='yes',fasted:r[qi+2]==='yes',sameMethod:r[qi+3]==='yes'};
+  const warnings=gymMeasurementWarnings(entry,last);
+  if(warnings.length && !await confirmModal('Check this measurement',`Large change detected:<br><b>${warnings.map(esc).join('<br>')}</b><br><br>Keep it only if you measured in the same place and conditions.`)) return;
+  if(entry.weight) { g.weightLogs=gymTrainerWeights(g).filter(x=>x.date!==entry.date); g.weightLogs.push({date:entry.date,weight:entry.weight}); }
   g.entries = (g.entries || []).filter(e => e.date !== entry.date);
   g.entries.push(entry);
   if (!g.start) g.start = entry.date;
@@ -6081,6 +6171,12 @@ function renderRoutineDay() {
       }
     }
   } catch { /* sin datos de gym aún: no mostrar el recordatorio */ }
+  // 🧑‍🏫 Friday trainer check-in: one compact weekly recovery/nutrition check.
+  try {
+    const gymData=JSON.parse((S.profile||{}).gym_data||'{}');
+    const doneThisWeek=(gymData.trainerCheckins||[]).some(x=>weekKeyOf(x.date)===weekKeyOf(iso));
+    if(wd===4 && !doneThisWeek && !hiddenDay.has(`${iso}|gymtrainercheck`)) lista.push({t:'19:30',title:'🧑‍🏫 Trainer check-in',d:'One-minute weekly review: sleep, energy, pain, protein and training effort.',key:'gymtrainercheck'});
+  } catch {}
   // Recovery missions selected for this date. They complete the ORIGINAL Habit day, not today's habit.
   const recoveryToday = recoveryPending().filter(x => x.added_to_day === iso);
   for (const x of recoveryToday) {
@@ -6464,6 +6560,7 @@ document.addEventListener('click', async (e) => {
   const marcando = recovery ? true : !c.classList.contains('on');
 
   if (marcando) {
+    if(act==='gymtrainercheck') { const saved=await openGymWeeklyCheckin(); if(!saved)return; }
     // V121 · English opens one persistent Language Hunter mission modal.
     // Partial steps never affect Habits/Goals. Only completing every step allows the official check below.
     if (act === 'ingles') {
