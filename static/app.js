@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 153;
+const FRONT_V = 154;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -5349,7 +5349,8 @@ function renderHunterProfile() {
     <section class="hunter-profile-license"><div id="hunterProfileLicense"></div></section>
     <section class="hunter-profile-mission"><span>CURRENT EXPEDITION</span><h2>${esc(activeGoal?.name||activeCareer?.name||'Choose an active career')}</h2><p>${esc(activeGoal?.next_step||(S.career_courses||[]).find(x=>String(x.career_id)===String(activeCareer?.id))?.title||'Set the next field action in Goals or Life.')}</p><div class="mini-bar green"><i style="width:${activeGoal?.pct||progresoCareer(activeCareer||{})||0}%"></i></div><small>${activeGoal?.pct||progresoCareer(activeCareer||{})||0}% expedition progress</small></section>
   </div>
-  <section class="hunter-profile-stats"><div><b>${rank.xp}</b><span>Expedition XP</span></div><div><b>${finished}</b><span>Finished courses</span></div><div><b>${skills.length}</b><span>Professional skills</span></div><div><b>${unlocked}</b><span>Archive records</span></div><div><b>${defeated}</b><span>Debts defeated</span></div><div><b>${books}</b><span>Books finished</span></div></section>
+  <section class="hunter-profile-stats"><div><b>${rank.xp}</b><span>Expedition XP</span></div><div><b>${finished}</b><span>Finished courses</span></div><div><b>${skills.length}</b><span>Professional skills</span></div><div><b>${credentialState().items.length}</b><span>Credentials</span></div><div><b>${defeated}</b><span>Debts defeated</span></div><div><b>${books}</b><span>Books finished</span></div></section>
+  <section class="hunter-profile-section credentials-summary"><div class="row-between"><div><span class="profile-kicker">VERIFIED TRAINING</span><h2>🏅 Credentials</h2></div><button class="btn-ghost" data-open-credentials>Open credentials</button></div><p>Keep public verification links, credential IDs and the skills earned from courses or official exams.</p></section>
   <section class="hunter-profile-section"><div class="row-between"><div><span class="profile-kicker">PROFESSIONAL SKILLS</span><h2>Training evidence</h2></div><small>Backed by finished courses${skills.some(x=>x.practiced)?' and Skill Academy practice':''}.</small></div>${skills.length?`<div class="profile-skill-grid">${skills.map(x=>`<article class="profile-skill-card"><div><b>${esc(x.name)}</b><span>${esc(x.level)}</span></div><p>${x.evidence} completed course${x.evidence===1?'':'s'}${x.practiced?' · Skill Academy mastered':''}</p></article>`).join('')}</div>`:'<div class="profile-empty">Finish a course and record its skills to build your professional profile.</div>'}</section>
   ${pending.length?`<section class="hunter-profile-section pending-review"><div><span class="profile-kicker">SKILLS PENDING REVIEW</span><h2>${pending.length} finished course${pending.length===1?' has':'s have'} no registered skills</h2></div><div class="profile-review-list">${pending.map(c=>`<button data-course-skills="${c.id}"><span>✓ ${esc(c.title)}</span><small>${esc(c.career||'Career')}</small><b>Review skills →</b></button>`).join('')}</div></section>`:''}
   <section class="hunter-profile-section pirate-position-panel"><div class="pirate-position-summary"><div class="pirate-position-art">${pirateBadgeSVG(pirate.current.key)}</div><div><span class="profile-kicker">PIRATE POSITION</span><h2>${esc(pirate.current.name)}</h2><p>${esc(pirate.current.subtitle)} · ${esc(hakiLevelFor(pirate.metrics.conqueredMonths).name)}</p></div></div><div class="pirate-position-next"><div><span>${pirate.next?'NEXT POSITION':'FINAL POSITION'}</span><b>${pirate.next?esc(pirate.next.name):'The throne is yours'}</b></div><div class="mini-bar green"><i style="width:${pirate.progress}%"></i></div><button class="btn-ghost" data-open-pirate-route>View route</button></div></section>
@@ -6459,7 +6460,7 @@ function renderCareer() {
       <header class="career-head"><div><span class="career-kicker">HUNTER TRAINING ROUTE</span><b>${c.icon || '🎯'} ${esc(c.name)}</b></div><span class="career-prog">${prog}% to goal</span></header>
       <div class="peldano-row">${dots}</div>
       <div class="mini-bar green career-overall-bar"><i style="width:${prog}%"></i></div>
-      ${esIngles ? `<section class="career-stage-head english-career-stage"><div><span>IMMERSION PATH</span><h3>${PELDANOS[step] || 'Professional'}</h3><p>Progress comes from completed English training days; CEFR level is verified through assessments.</p></div><a class="btn-ghost english-panel-link" href="#englishPanel">Open English mastery</a></section><div class="eng-auto">🔥 <b>${diasIng} days</b> of English practice logged · <b>${prog}%</b> training progress.</div>` : `<section class="career-stage-head"><div><span>STEP ${step + 1}</span><h3>${PELDANOS[step]}</h3><p>${STEP_DESC[step] || ''}</p></div><button class="advance-career-stage ${completedPath ? 'done' : ''}" data-advance-stage="${c.id}" ${completedPath ? 'disabled' : ''}>${completedPath ? '✓ Path conquered' : nextLabel}</button></section><section class="career-active-courses"><div class="career-section-title"><div><span>ACTIVE COURSES</span><b>${PELDANOS[step]} training</b></div><button class="add-active-course" data-add-active-course="${c.id}">＋ Add course</button></div>${activeHtml}</section>`}
+      ${esIngles ? `<section class="career-stage-head english-career-stage"><div><span>IMMERSION PATH</span><h3>${PELDANOS[step] || 'Professional'}</h3><p>Progress comes from completed English training days; CEFR level is verified through assessments.</p></div><a class="btn-ghost english-panel-link" href="#englishPanel">Open English mastery</a></section><div class="eng-auto">🔥 <b>${diasIng} days</b> of English practice logged · <b>${prog}%</b> training progress.</div>` : `<section class="career-stage-head"><div><span>STEP ${step + 1}</span><h3>${PELDANOS[step]}</h3><p>${STEP_DESC[step] || ''}</p></div><button class="advance-career-stage ${completedPath ? 'done' : ''}" data-advance-stage="${c.id}" ${completedPath ? 'disabled' : ''}>${completedPath ? '✓ Path conquered' : nextLabel}</button></section><section class="career-active-courses"><div class="career-section-title"><div><span>ACTIVE COURSES</span><b>${PELDANOS[step]} training · ${careerActiveCourses.length}/5</b></div><div class="career-route-actions"><button class="route-tutor-btn" data-route-tutor="${c.id}" title="Career Route Tutor">🧭 Tutor</button><button class="add-active-course" data-add-active-course="${c.id}" ${careerActiveCourses.length>=5?'disabled title="Maximum 5 active courses"':''}>＋ Add course</button></div></div>${activeHtml}</section>`}
       <footer class="career-foot">${c.active ? '<span class="active-badge">★ Active focus</span>' : `<button class="set-active" data-career="${c.id}">Set as focus</button>`}<button class="del-x" data-type="career" data-id="${c.id}" title="Delete career">✕</button></footer>
       ${esIngles ? '' : `<section class="career-courses"><b class="mini-title">Finished courses</b>${finishedHtml}</section>`}
     </article>`;
@@ -6816,6 +6817,8 @@ document.addEventListener('click', async (e) => {
   if (addActive) {
     const career = (S.careers || []).find(x => String(x.id) === String(addActive.dataset.addActiveCourse));
     if (!career) return;
+    const activeCount=(S.career_courses||[]).filter(x=>String(x.career_id)===String(career.id)).length;
+    if(activeCount>=5){toast('This route already has 5 active courses','warn');return;}
     const r = await modal({ icon:'🎓', title:`Add ${PELDANOS[career.step || 0]} course`, text:`Every course has equal value as training evidence. The career stage changes only when you explicitly conquer it.`, fields:[{type:'text',label:'Course name',placeholder:'e.g. Azure Data Fundamentals'},{type:'select',label:'Platform',options:['Coursera','Udemy','Microsoft Learn','LinkedIn Learning','edX','YouTube','Platzi','Other'].map(v=>({v,t:v}))},{type:'select',label:'Training stage',options:PELDANOS.map((name,i)=>({v:String(i),t:`Step ${i+1}: ${name}`})),value:String(career.step||0)},{type:'number',label:'Initial progress %',value:0,min:0,max:100}], okText:'Add course'});
     if (!r || !String(r[0]||'').trim()) return;
     await api('/api/career/course/new',{body:{career_id:career.id,step:+r[2]||0,title:String(r[0]).trim(),platform:r[1]||'Other',pct:+r[3]||0}});
@@ -8159,4 +8162,164 @@ document.addEventListener('click', async (event) => {
     text:'Register purchases, experiences or dreams you want to prepare for. Update the target value and the amount saved directly on each card. When you are ready to buy, send the target to Shopping. Mark it as claimed only after it is truly acquired.<br><br><b>Hunter rule:</b> prepare the resources first and avoid creating new installment debt.',
     okText:'Understood'
   });
+});
+
+// V154 · Career Route Tutor and verified credentials.
+function credentialState(){
+  try{const raw=JSON.parse((S.profile||{}).credentials_v1||'{}');return {items:Array.isArray(raw.items)?raw.items:[]};}
+  catch(_){return {items:[]};}
+}
+async function saveCredentialState(st){
+  const value=JSON.stringify({items:st.items||[]});
+  await api('/api/profile',{body:{key:'credentials_v1',value}});
+  S.profile=S.profile||{};S.profile.credentials_v1=value;
+}
+function routeTutorState(){
+  try{const raw=JSON.parse((S.profile||{}).career_route_tutor_v1||'{}');return {reviews:raw.reviews||{},course_meta:raw.course_meta||{}};}
+  catch(_){return {reviews:{},course_meta:{}};}
+}
+async function saveRouteTutorState(st){
+  const value=JSON.stringify(st);
+  await api('/api/profile',{body:{key:'career_route_tutor_v1',value}});
+  S.profile=S.profile||{};S.profile.career_route_tutor_v1=value;
+}
+function credentialTypeLabel(v){return ({course:'Course certificate',professional_certificate:'Professional certificate',official_certification:'Official certification',exam:'Certification exam'})[v]||'Credential';}
+function routeTutorPrompt(career){
+  const active=(S.career_courses||[]).filter(x=>String(x.career_id)===String(career.id));
+  const done=(S.courses_done||[]).filter(x=>String(x.career_id||'')===String(career.id)||x.career===career.name);
+  const creds=credentialState().items.filter(x=>String(x.career_id||'')===String(career.id)||String(x.route||'').toLowerCase()===String(career.name||'').toLowerCase());
+  const stage=Math.max(0,Math.min(3,Number(career.step||0)));
+  const payload={
+    route:{id:career.id,name:career.name,stage,stage_name:PELDANOS[stage],progress:progresoCareer(career)},
+    limits:{maximum_active_items:5,available_slots:Math.max(0,5-active.length)},
+    active_courses:active.map(x=>({title:x.title,platform:x.platform,progress:Number(x.pct||0),stage:Number(x.step||0)})),
+    completed_courses:done.map(x=>({title:x.title,platform:x.platform,stage:Number(x.step||0)})),
+    credentials:creds.map(x=>({title:x.title,issuer:x.issuer,type:x.type,issued:x.issued,credential_url:x.url||''})),
+    preferences:{current_access:'Prefer free learning access when possible. Clearly state when the certificate or exam requires payment.',avoid:'Do not invent, recommend retired programs, or fill all five slots without a reason.'}
+  };
+  return `You are the Kevin LifeOS Career Route Tutor. Build a realistic, evidence-based learning route for the supplied career.
+
+MANDATORY RESEARCH RULES
+- Browse the web before recommending anything.
+- Recommend only real, currently available courses, professional certificates, projects, learning paths, or official certification exams.
+- Prefer official provider pages: Coursera/provider pages, Microsoft Learn, Google, IBM, universities, edX, AWS, Cisco, CompTIA, or other recognized organizations.
+- Include a direct public URL for every recommendation and the date you verified it.
+- Never invent a title, provider, credential, exam, price, or URL.
+- Distinguish free learning access from a paid certificate or paid exam.
+- Avoid obscure recommendations when a recognized option teaches the same skill.
+
+ROUTE RULES
+- Maximum 5 active items for this route, including existing active courses.
+- Do not replace an active course unless there is a clear reason.
+- A good stage usually mixes learning, practice, a portfolio project, and—only when appropriate—certification preparation.
+- Decide whether the learner should stay in the current stage, advance, replace an item, prepare a certification, or build a project first.
+- Course completion alone is not enough to advance when practical evidence is missing.
+- Recommend fewer than 5 items when fewer are sufficient.
+
+Return ONLY valid JSON with this exact shape:
+{
+  "type":"career_route_import",
+  "career_id":${JSON.stringify(String(career.id))},
+  "route":${JSON.stringify(career.name)},
+  "stage":${stage},
+  "stage_name":${JSON.stringify(PELDANOS[stage])},
+  "decision":"stay|advance|replace_course|prepare_certification|build_project_first",
+  "reason":"brief evidence-based reason",
+  "stage_requirements":["short requirement"],
+  "recommendations":[
+    {
+      "title":"official title",
+      "provider":"issuer or organization",
+      "platform":"platform",
+      "type":"course|professional_certificate|project|learning_path|certification_exam",
+      "level":"beginner|intermediate|advanced",
+      "stage":${stage},
+      "priority":1,
+      "url":"https://official-or-provider-page",
+      "verified_on":"YYYY-MM-DD",
+      "credential_available":true,
+      "credential_kind":"completion_certificate|professional_certificate|official_certification|none",
+      "free_learning_access":"yes|no|limited|unknown",
+      "certificate_or_exam_paid":"yes|no|unknown",
+      "skills":["skill"],
+      "why":"one concise sentence"
+    }
+  ]
+}
+
+CURRENT KEVIN LIFEOS CONTEXT
+${JSON.stringify(payload,null,2)}`;
+}
+function normalizeRouteImport(raw,career){
+  if(!raw||raw.type!=='career_route_import'||!Array.isArray(raw.recommendations))throw new Error('Invalid career route JSON');
+  const valid=[];
+  raw.recommendations.slice(0,8).forEach((x,i)=>{
+    const title=String(x.title||'').trim(),url=String(x.url||'').trim();
+    if(!title||!/^https?:\/\//i.test(url))return;
+    valid.push({title:title.slice(0,180),provider:String(x.provider||'').trim().slice(0,100),platform:String(x.platform||x.provider||'Other').trim().slice(0,80),type:String(x.type||'course'),level:String(x.level||''),stage:Math.max(0,Math.min(3,Number(x.stage??career.step??0))),priority:Number(x.priority||i+1),url,verified_on:String(x.verified_on||''),credential_available:!!x.credential_available,credential_kind:String(x.credential_kind||'none'),free_learning_access:String(x.free_learning_access||'unknown'),certificate_or_exam_paid:String(x.certificate_or_exam_paid||'unknown'),skills:Array.isArray(x.skills)?x.skills.map(v=>String(v).slice(0,60)).slice(0,8):[],why:String(x.why||'').trim().slice(0,240)});
+  });
+  return {decision:String(raw.decision||'stay'),reason:String(raw.reason||'').slice(0,500),stage_requirements:Array.isArray(raw.stage_requirements)?raw.stage_requirements.map(v=>String(v).slice(0,160)).slice(0,8):[],recommendations:valid};
+}
+async function routeImportPreview(career,pack){
+  const existing=(S.career_courses||[]).filter(x=>String(x.career_id)===String(career.id));
+  const slots=Math.max(0,5-existing.length);
+  const duplicateTitles=new Set(existing.map(x=>String(x.title||'').trim().toLowerCase()));
+  const candidates=pack.recommendations.filter(x=>!duplicateTitles.has(x.title.toLowerCase())).sort((a,b)=>a.priority-b.priority);
+  return new Promise(resolve=>{
+    const back=document.createElement('div');back.className='modal-back route-import-back';
+    back.innerHTML=`<div class="modal-card route-import-modal"><button class="modal-x" aria-label="Close">✕</button><div class="modal-icon">🧭</div><h3>Route import preview</h3><p><b>${esc(career.name)}</b> · ${esc(PELDANOS[Number(career.step||0)])}</p><div class="route-decision"><span>${esc(pack.decision.replace(/_/g,' '))}</span><p>${esc(pack.reason||'No reason supplied.')}</p></div><div class="route-slot-note">${existing.length}/5 active · ${slots} slot${slots===1?'':'s'} available</div><div class="route-import-list">${candidates.length?candidates.map((x,i)=>`<label class="route-import-item"><input type="checkbox" data-route-choice="${i}" ${i<slots?'checked':''} ${i>=slots?'disabled':''}><div><b>${esc(x.title)}</b><span>${esc(x.provider||x.platform)} · ${esc(x.type.replace(/_/g,' '))}</span><small>${esc(x.why||'')}<br>${esc(x.free_learning_access)} free access · credential ${x.credential_available?'available':'not confirmed'}</small><a href="${esc(x.url)}" target="_blank" rel="noopener">Verify source ↗</a></div></label>`).join(''):'<div class="profile-empty">No new valid recommendations detected.</div>'}</div><div class="modal-btns"><button class="m-cancel">Cancel</button><button class="m-ok" ${!candidates.length||!slots?'disabled':''}>Add selected</button></div></div>`;
+    const close=v=>{back.classList.remove('show');setTimeout(()=>back.remove(),180);resolve(v)};
+    back.querySelector('.modal-x').onclick=()=>close(null);back.querySelector('.m-cancel').onclick=()=>close(null);back.querySelector('.m-ok').onclick=()=>{const idx=[...back.querySelectorAll('[data-route-choice]:checked')].map(x=>Number(x.dataset.routeChoice));close(idx.map(i=>candidates[i]).filter(Boolean).slice(0,slots));};
+    document.body.appendChild(back);document.body.classList.add('modal-open');requestAnimationFrame(()=>back.classList.add('show'));
+  });
+}
+async function applyRouteImport(career,pack,selected){
+  const st=routeTutorState();
+  const added=[];
+  for(const item of selected){
+    const result=await api('/api/career/course/new',{body:{career_id:career.id,step:item.stage,title:item.title,platform:item.platform||item.provider||'Other',pct:0}});
+    if(result?.id){st.course_meta[String(result.id)]={...item,career_id:career.id,imported_at:hoyLocal()};added.push(item.title);}
+  }
+  st.reviews[String(career.id)]={date:hoyLocal(),decision:pack.decision,reason:pack.reason,stage_requirements:pack.stage_requirements};
+  await saveRouteTutorState(st);
+  return added;
+}
+async function openRouteTutor(career){
+  const active=(S.career_courses||[]).filter(x=>String(x.career_id)===String(career.id));
+  const review=routeTutorState().reviews[String(career.id)];
+  const choice=await modal({icon:'🧭',title:`${career.name} Route Tutor`,text:`<b>${PELDANOS[Number(career.step||0)]}</b> · ${active.length}/5 active courses${review?`<br><small>Last review: ${esc(review.date)} · ${esc(String(review.decision||'').replace(/_/g,' '))}</small>`:''}<br><br>The tutor researches real current courses, credentials, projects and certification exams. Nothing is added without preview.`,fields:[{type:'select',label:'Action',value:'copy',options:[{v:'copy',t:'Copy tutor prompt'},{v:'import',t:'Import tutor JSON'}]}],okText:'Continue'});
+  if(!choice)return;
+  if(choice[0]==='copy'){
+    const text=routeTutorPrompt(career);try{await navigator.clipboard.writeText(text);toast('🧭 Route Tutor prompt copied');}catch(_){prompt('Copy this prompt:',text)}return;
+  }
+  const r=await modal({icon:'📥',title:'Import route JSON',text:'Paste the JSON returned by the Career Route Tutor.',fields:[{type:'textarea',rows:15,placeholder:'{"type":"career_route_import",...}'}],okText:'Validate'});if(!r)return;
+  let raw;try{raw=JSON.parse(r[0])}catch(_){toast('Invalid JSON','err');return;}
+  let pack;try{pack=normalizeRouteImport(raw,career)}catch(err){toast(err.message,'err');return;}
+  const selected=await routeImportPreview(career,pack);if(!selected)return;
+  const added=await applyRouteImport(career,pack,selected);toast(added.length?`🧭 ${added.length} route item${added.length===1?'':'s'} added`:'Route review saved');await load();
+}
+function credentialModalList(){
+  const st=credentialState();
+  return new Promise(resolve=>{
+    const back=document.createElement('div');back.className='modal-back credentials-back';
+    const draw=()=>{
+      const items=[...st.items].sort((a,b)=>String(b.issued||'').localeCompare(String(a.issued||'')));
+      back.innerHTML=`<div class="modal-card credentials-modal"><button class="modal-x" aria-label="Close">✕</button><div class="modal-icon">🏅</div><h3>Credentials</h3><p>Private record with public verification links.</p><div class="credentials-list">${items.length?items.map(x=>`<article class="credential-card"><div><span>${esc(credentialTypeLabel(x.type))}</span><h4>${esc(x.title)}</h4><p>${esc(x.issuer)}${x.platform?` · ${esc(x.platform)}`:''}</p><small>${x.issued?`Issued ${esc(x.issued)}`:'Issue date not recorded'}${x.credential_id?` · ID ${esc(x.credential_id)}`:''}</small></div><div class="credential-actions">${x.url?`<a href="${esc(x.url)}" target="_blank" rel="noopener">Verify ↗</a>`:''}<button data-edit-credential="${esc(x.id)}">Edit</button><button data-delete-credential="${esc(x.id)}">✕</button></div></article>`).join(''):'<div class="profile-empty">No credentials recorded yet.</div>'}</div><div class="modal-btns"><button class="m-cancel">Close</button><button class="m-ok">＋ Add credential</button></div></div>`;
+      back.querySelector('.modal-x').onclick=()=>close();back.querySelector('.m-cancel').onclick=()=>close();back.querySelector('.m-ok').onclick=()=>editCredential(null);
+      back.querySelectorAll('[data-edit-credential]').forEach(b=>b.onclick=()=>editCredential(st.items.find(x=>String(x.id)===String(b.dataset.editCredential))));
+      back.querySelectorAll('[data-delete-credential]').forEach(b=>b.onclick=async()=>{const item=st.items.find(x=>String(x.id)===String(b.dataset.deleteCredential));if(!item)return;const ok=await confirmAction({icon:'✕',title:'Remove credential?',text:`Remove <b>${esc(item.title)}</b> from your private file?`,okText:'Remove',cancelText:'Keep',danger:true});if(!ok)return;st.items=st.items.filter(x=>String(x.id)!==String(item.id));await saveCredentialState(st);draw();});
+    };
+    const editCredential=async item=>{
+      const careers=(S.careers||[]).map(c=>({v:String(c.id),t:c.name}));
+      const r=await modal({icon:'🏅',title:item?'Edit credential':'Add credential',fields:[{type:'text',label:'Official title',value:item?.title||'',placeholder:'Google Data Analytics Professional Certificate'},{type:'text',label:'Issuer',value:item?.issuer||'',placeholder:'Google'},{type:'text',label:'Platform',value:item?.platform||'',placeholder:'Coursera, Microsoft Learn...'},{type:'select',label:'Type',value:item?.type||'course',options:[{v:'course',t:'Course certificate'},{v:'professional_certificate',t:'Professional certificate'},{v:'official_certification',t:'Official certification'},{v:'exam',t:'Certification exam'}]},{type:'text',label:'Issued date',value:item?.issued||'',placeholder:'YYYY-MM-DD'},{type:'text',label:'Expiration · optional',value:item?.expires||'',placeholder:'YYYY-MM-DD or No expiration'},{type:'text',label:'Credential ID · optional',value:item?.credential_id||''},{type:'url',label:'Public credential URL',value:item?.url||'',placeholder:'https://...'},{type:'select',label:'Linked route · optional',value:String(item?.career_id||''),options:[{v:'',t:'No linked route'},...careers]},{type:'text',label:'Skills · comma separated',value:(item?.skills||[]).join(', '),placeholder:'SQL, spreadsheets, data cleaning'}],okText:'Save credential'});
+      if(!r)return;const title=String(r[0]||'').trim(),issuer=String(r[1]||'').trim(),url=String(r[7]||'').trim();if(!title||!issuer){toast('Title and issuer are required','warn');return;}if(url&&!/^https?:\/\//i.test(url)){toast('Credential URL must begin with http:// or https://','warn');return;}
+      const next={id:item?.id||`cred_${Date.now()}`,title,issuer,platform:String(r[2]||'').trim(),type:r[3]||'course',issued:String(r[4]||'').trim(),expires:String(r[5]||'').trim(),credential_id:String(r[6]||'').trim(),url,career_id:String(r[8]||''),route:(S.careers||[]).find(c=>String(c.id)===String(r[8]||''))?.name||'',skills:String(r[9]||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,12),updated_at:hoyLocal()};
+      const idx=st.items.findIndex(x=>String(x.id)===String(next.id));if(idx>=0)st.items[idx]=next;else st.items.push(next);await saveCredentialState(st);draw();toast('🏅 Credential saved');
+    };
+    const close=()=>{back.classList.remove('show');setTimeout(()=>back.remove(),180);resolve();};document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));
+  });
+}
+document.addEventListener('click',async e=>{
+  const tutor=e.target.closest('[data-route-tutor]');if(tutor){const career=(S.careers||[]).find(x=>String(x.id)===String(tutor.dataset.routeTutor));if(career)await openRouteTutor(career);return;}
+  if(e.target.closest('[data-open-credentials]')){await credentialModalList();renderHunterProfile();return;}
 });

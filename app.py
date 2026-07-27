@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 153  # V153 Memory export tracking and Life hardening
+VERSION = 154  # V154 Career Route Tutor and Credentials
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -2549,6 +2549,9 @@ def career_course_new():
         return jsonify(error='Course name is required'), 400
     if not db().execute('SELECT 1 FROM careers WHERE id=?', (career_id,)).fetchone():
         return jsonify(error='Career not found'), 404
+    active_count = db().execute('SELECT COUNT(*) AS n FROM career_courses WHERE career_id=?', (career_id,)).fetchone()
+    if active_count and int(dict(active_count).get('n') or 0) >= 5:
+        return jsonify(error='This route already has the maximum of 5 active courses'), 409
     now = datetime.now().isoformat(timespec='seconds')
     db().execute(
         '''INSERT INTO career_courses (career_id,step,title,platform,pct,created_at,updated_at)
