@@ -4503,15 +4503,19 @@ Transform the supplied learning material into clean, useful flashcards for Kevin
 
 CARD QUALITY RULES
 - Never invent facts not supported by the input.
-- Create ONE testable idea per card.
-- Front must be a clear question, prompt, term, or correction task.
-- Back must directly answer the front. Do not repeat the question.
-- Keep front under 140 characters and the core answer under 350 characters.
-- Avoid vague fronts such as "Explain this", isolated headings, trivia, duplicates, and cards that require missing context.
+- Create exactly ONE testable idea per card.
+- Front must be understandable by itself: a direct question, a term, or a short correction task.
+- Back must answer only that front. Never repeat the question or add unrelated teaching notes.
+- Front: maximum 100 characters.
+- Back: maximum 180 characters and normally 1 sentence; use 2 short sentences only when essential.
+- No long paragraphs, introductions, conclusions, headings, filler, or more than 3 list items.
+- Split broad material into several small cards instead of one large card.
+- Reject vague fronts such as "Explain this", "What did I learn?", isolated headings, trivia, duplicates, and cards requiring missing context.
 - Do not create a card when the source note is too unclear to support a correct answer.
-- Technical cards should prefer definition, comparison, procedure, error diagnosis, or applied-example questions.
-- English vocabulary cards: front = English word or short expression; back = Spanish meaning. Add one natural A2-B1 example and its Spanish translation in the separate fields.
-- English correction cards: front = incorrect sentence or correction task; back = corrected sentence plus a brief reason.
+- Technical cards: prefer one definition, one comparison, one step, one diagnostic clue, or one applied fact per card.
+- English vocabulary: front = one English word or short fixed expression; back = concise Spanish meaning only. Put one natural A2-B1 example and its Spanish translation in the separate fields.
+- English correction: front = the incorrect sentence or "Correct: ..."; back = corrected sentence plus one brief reason of no more than 12 words.
+- Never turn a full conversation or several mistakes into one card.
 - Never place a full sentence in Word Hunter vocabulary unless it is a short fixed expression.
 - Use only these decks: Kevin LifeOS::English, Kevin LifeOS::Data Analytics, Kevin LifeOS::Programming, Kevin LifeOS::Cybersecurity, Kevin LifeOS::Hunter Skill Academy.
 - Return VALID JSON ONLY. No markdown and no commentary outside JSON.
@@ -4533,7 +4537,13 @@ OUTPUT SCHEMA
 }
 
 FINAL CHECK BEFORE RETURNING JSON
-For every card verify that a learner can understand the front without seeing the source material and that the back answers exactly that front.
+Delete any card that fails one of these checks:
+1. It tests more than one idea.
+2. The front is vague or longer than 100 characters.
+3. The back is longer than 180 characters or contains unnecessary context.
+4. The answer repeats the question.
+5. The learner would need the original notes to understand it.
+6. A shorter, clearer card can express the same fact.
 
 INPUT
 ${JSON.stringify(payload,null,2)}`;
@@ -4543,18 +4553,41 @@ async function copyMemoryBridgePrompt(){
   try{await navigator.clipboard.writeText(txt);toast('✨ Memory Forge prompt copied.');}
   catch(_){prompt('Copy this prompt:',txt);}
 }
+function memoryCompactText(value='',limit=180){
+  let text=String(value||'').replace(/\s+/g,' ').trim();
+  if(text.length<=limit)return text;
+  const cut=text.slice(0,limit+1);
+  const sentence=Math.max(cut.lastIndexOf('. '),cut.lastIndexOf('? '),cut.lastIndexOf('! '));
+  if(sentence>=Math.floor(limit*.55))return cut.slice(0,sentence+1).trim();
+  const space=cut.lastIndexOf(' ');
+  return `${cut.slice(0,space>40?space:limit).trim()}…`;
+}
+function memoryCardQualityIssue(front='',back=''){
+  const f=String(front||'').trim(),b=String(back||'').trim();
+  if(!f||!b)return 'missing content';
+  if(f.length>100)return 'front too long';
+  if(b.length>180)return 'back too long';
+  if(/^(explain|describe|discuss|tell me about|what did i learn)\b/i.test(f))return 'vague front';
+  const questionMarks=(f.match(/\?/g)||[]).length;
+  if(questionMarks>1)return 'multiple questions';
+  const norm=x=>x.toLowerCase().replace(/[^a-z0-9áéíóúüñ ]/gi,'').replace(/\s+/g,' ').trim();
+  const nf=norm(f),nb=norm(b);
+  if(nf&&nb&&(nf===nb||nb.startsWith(nf+' ')))return 'answer repeats front';
+  return '';
+}
 function normalizeMemoryCard(raw={}) {
   const folder=String(raw.folder||raw.category||'General').trim()||'General';
-  const front=String(raw.front||raw.question||raw.term||'').trim();
-  const back=String(raw.back||raw.answer||raw.definition||'').trim();
-  if(!front||!back)return null;
+  const front=memoryCompactText(raw.front||raw.question||raw.term||'',100);
+  const back=memoryCompactText(raw.back||raw.answer||raw.definition||'',180);
+  const issue=memoryCardQualityIssue(front,back);
+  if(issue)return null;
   return {
     id:String(raw.id||`card-${Date.now()}-${Math.random().toString(36).slice(2,8)}`),
     deck:String(raw.deck||memoryDeckFor(folder)).trim(), folder,
     front, back,
-    example:String(raw.example||'').trim(), example_es:String(raw.example_es||raw.translation||'').trim(),
-    source:String(raw.source||'AI Bridge').trim(),
-    tags:Array.isArray(raw.tags)?raw.tags.map(x=>String(x).trim()).filter(Boolean).slice(0,20):String(raw.tags||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,20),
+    example:memoryCompactText(raw.example||'',140), example_es:memoryCompactText(raw.example_es||raw.translation||'',160),
+    source:String(raw.source||'AI Bridge').trim().slice(0,100),
+    tags:Array.isArray(raw.tags)?raw.tags.map(x=>String(x).trim()).filter(Boolean).slice(0,12):String(raw.tags||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,12),
     created_at:hoyLocal(), status:'ready'
   };
 }
@@ -4563,10 +4596,12 @@ async function importMemoryForgeJSON() {
   if(!r)return;
   let data;try{data=JSON.parse(r[0]);}catch(_){toast('Invalid JSON.');return;}
   const rows=Array.isArray(data)?data:(Array.isArray(data.cards)?data.cards:[]);
-  const cards=rows.map(normalizeMemoryCard).filter(Boolean).slice(0,500);
-  if(!cards.length){toast('No valid cards detected.');return;}
+  const normalized=rows.map(normalizeMemoryCard);
+  const cards=normalized.filter(Boolean).slice(0,500);
+  const rejected=normalized.filter(x=>!x).length;
+  if(!cards.length){toast('No concise, valid cards detected. Review the AI prompt output.');return;}
   const decks=[...new Set(cards.map(x=>x.deck))];
-  const preview=`<div class="memory-import-preview"><b>${cards.length} cards detected</b><span>${decks.map(esc).join(' · ')}</span><ul>${cards.slice(0,8).map(x=>`<li><strong>${esc(x.front)}</strong><small>${esc(x.deck)}</small></li>`).join('')}</ul>${cards.length>8?`<p>+ ${cards.length-8} more</p>`:''}</div>`;
+  const preview=`<div class="memory-import-preview"><b>${cards.length} concise cards detected</b><span>${decks.map(esc).join(' · ')}</span>${rejected?`<p>${rejected} long or unclear card${rejected===1?' was':'s were'} rejected.</p>`:''}<ul>${cards.slice(0,8).map(x=>`<li><strong>${esc(x.front)}</strong><small>${esc(x.deck)}</small></li>`).join('')}</ul>${cards.length>8?`<p>+ ${cards.length-8} more</p>`:''}</div>`;
   const ok=await modal({icon:'✓',title:'Import preview',text:preview,okText:`Import ${cards.length}`,cancelText:'Cancel'});
   if(!ok)return;
   const state=memoryForgeRead();
