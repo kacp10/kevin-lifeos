@@ -8216,6 +8216,17 @@ ROUTE RULES
 - Course completion alone is not enough to advance when practical evidence is missing.
 - Recommend fewer than 5 items when fewer are sufficient.
 
+OPTIONAL OPPORTUNITY RULES
+- Complete the core route first. Discounts, subscriptions, bundles and paid offers must never influence the main recommendation order.
+- After the core route, research only real, current opportunities from official provider pages or recognized platforms.
+- Include optional discounted courses, certification promotions, annual learning subscriptions, bundles or exam vouchers only when the offer is verifiable today.
+- State the current price exactly as shown by the provider, the normal price when available, the currency, the discount, the expiration date or "unknown", and the official URL.
+- Never invent a promotion, use affiliate links, or claim a discount when the provider does not show one.
+- Explain whether the credential is an official certification, professional certificate, completion certificate, or no credential.
+- Mark every opportunity with "consider", "skip", or "buy_only_if_budget_allows" and give one short reason.
+- These opportunities are advisory only. Do not place them in recommendations or active course slots unless the learner later explicitly asks you to revise the JSON.
+- Add concise GitHub and portfolio advice based on the current stage: 1–3 practical repository or project ideas, what evidence each should show, and the next action.
+
 Return ONLY valid JSON with this exact shape:
 {
   "type":"career_route_import",
@@ -8243,6 +8254,30 @@ Return ONLY valid JSON with this exact shape:
       "certificate_or_exam_paid":"yes|no|unknown",
       "skills":["skill"],
       "why":"one concise sentence"
+    }
+  ],
+  "portfolio_advice":[
+    {
+      "title":"short GitHub or portfolio action",
+      "evidence":"what skill or proof the repository should demonstrate",
+      "next_action":"one concrete next step"
+    }
+  ],
+  "optional_opportunities":[
+    {
+      "title":"official offer title",
+      "provider":"provider",
+      "kind":"discounted_course|certification_discount|annual_subscription|bundle|exam_voucher",
+      "credential_kind":"completion_certificate|professional_certificate|official_certification|none",
+      "current_price":"exact displayed price or unknown",
+      "normal_price":"exact displayed normal price or unknown",
+      "currency":"displayed currency or unknown",
+      "discount":"displayed discount or unknown",
+      "expires_on":"YYYY-MM-DD|unknown",
+      "url":"https://official-provider-page",
+      "verified_on":"YYYY-MM-DD",
+      "recommendation":"consider|skip|buy_only_if_budget_allows",
+      "reason":"one concise sentence"
     }
   ]
 }
