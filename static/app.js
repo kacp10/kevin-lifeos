@@ -4496,7 +4496,47 @@ function memoryBridgePayload() {
 }
 function memoryBridgePrompt() {
   const payload=memoryBridgePayload();
-  return `You are the Kevin LifeOS Memory Forge Bridge.\n\nGOAL\nTransform the supplied learning material into high-quality, atomic study cards for Anki and a clean Kevin LifeOS import.\n\nRULES\n- Never invent facts not supported by the input.\n- Preserve the original meaning, but rewrite unclear notes accurately and simply.\n- English cards must include Spanish meaning, one natural A2-B1 example, Spanish translation, and correction details when relevant.\n- Technical cards must test one idea at a time. Prefer question/answer, definition, comparison, procedure, error diagnosis or applied example cards.\n- Avoid duplicates and trivia.\n- Use these decks only: Kevin LifeOS::English, Kevin LifeOS::Data Analytics, Kevin LifeOS::Programming, Kevin LifeOS::Cybersecurity, Kevin LifeOS::Hunter Skill Academy.\n- Add useful tags such as source, course, topic and difficulty.\n- Return VALID JSON ONLY. No markdown.\n\nOUTPUT SCHEMA\n{\n  "type":"memory_forge_import",\n  "summary":"",\n  "cards":[{\n    "deck":"Kevin LifeOS::Data Analytics",\n    "front":"",\n    "back":"",\n    "example":"",\n    "example_es":"",\n    "source":"",\n    "tags":[""],\n    "folder":"Data Analytics"\n  }]\n}\n\nINPUT\n${JSON.stringify(payload,null,2)}`;
+  return `You are the Kevin LifeOS Memory Forge Bridge.
+
+GOAL
+Transform the supplied learning material into clean, useful flashcards for Kevin LifeOS and AlgoApp.
+
+CARD QUALITY RULES
+- Never invent facts not supported by the input.
+- Create ONE testable idea per card.
+- Front must be a clear question, prompt, term, or correction task.
+- Back must directly answer the front. Do not repeat the question.
+- Keep front under 140 characters and the core answer under 350 characters.
+- Avoid vague fronts such as "Explain this", isolated headings, trivia, duplicates, and cards that require missing context.
+- Do not create a card when the source note is too unclear to support a correct answer.
+- Technical cards should prefer definition, comparison, procedure, error diagnosis, or applied-example questions.
+- English vocabulary cards: front = English word or short expression; back = Spanish meaning. Add one natural A2-B1 example and its Spanish translation in the separate fields.
+- English correction cards: front = incorrect sentence or correction task; back = corrected sentence plus a brief reason.
+- Never place a full sentence in Word Hunter vocabulary unless it is a short fixed expression.
+- Use only these decks: Kevin LifeOS::English, Kevin LifeOS::Data Analytics, Kevin LifeOS::Programming, Kevin LifeOS::Cybersecurity, Kevin LifeOS::Hunter Skill Academy.
+- Return VALID JSON ONLY. No markdown and no commentary outside JSON.
+
+OUTPUT SCHEMA
+{
+  "type":"memory_forge_import",
+  "summary":"",
+  "cards":[{
+    "deck":"Kevin LifeOS::Data Analytics",
+    "front":"What is a primary key?",
+    "back":"A column or group of columns that uniquely identifies each row in a table.",
+    "example":"customer_id can be the primary key of a customers table.",
+    "example_es":"customer_id puede ser la clave primaria de una tabla de clientes.",
+    "source":"SQL course",
+    "tags":["sql","database"],
+    "folder":"Data Analytics"
+  }]
+}
+
+FINAL CHECK BEFORE RETURNING JSON
+For every card verify that a learner can understand the front without seeing the source material and that the back answers exactly that front.
+
+INPUT
+${JSON.stringify(payload,null,2)}`;
 }
 async function copyMemoryBridgePrompt(){
   const txt=memoryBridgePrompt();
@@ -4538,21 +4578,52 @@ async function importMemoryForgeJSON() {
   toast(`📥 ${added.length} new cards imported${added.length<cards.length?' · duplicates skipped':''}.`);
 }
 function csvCell(v){return `"${String(v??'').replace(/"/g,'""')}"`;}
-function exportMemoryForgeCSV(){
-  const cards=memoryForgeRead().cards||[];
+function memoryAlgoDeckName(card={}) {
+  const raw=String(card.folder||card.deck||'Memory Forge').replace(/^Kevin LifeOS::/i,'').trim()||'Memory Forge';
+  return raw.replace(/[\\/:*?"<>|]+/g,' - ').replace(/\s+/g,' ').trim().slice(0,70)||'Memory Forge';
+}
+function memoryAlgoBack(card={}) {
+  const parts=[String(card.back||'').trim()];
+  const example=String(card.example||'').trim(), exampleEs=String(card.example_es||'').trim();
+  if(example)parts.push(`Example: ${example}`);
+  if(exampleEs)parts.push(`Español: ${exampleEs}`);
+  return parts.filter(Boolean).join('\n\n');
+}
+function downloadTextFile(filename,text,type='text/plain;charset=utf-8'){
+  const blob=new Blob(['\ufeff'+text],{type});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},700);
+}
+async function exportMemoryForgeCards(){
+  const cards=(memoryForgeRead().cards||[]).filter(c=>String(c.front||'').trim()&&String(c.back||'').trim());
   if(!cards.length){toast('Import or create cards before exporting.');return;}
-  const header=['Deck','Front','Back','Example','Example_ES','Source','Tags','KevinLifeOS_ID'];
+  const deckNames=[...new Set(cards.map(memoryAlgoDeckName))].sort((a,b)=>a.localeCompare(b));
+  const options=deckNames.map(x=>({v:x,t:`${x} · ${cards.filter(c=>memoryAlgoDeckName(c)===x).length} cards`}));
+  options.unshift({v:'__all__',t:`All cards in one deck · ${cards.length} cards`});
+  const r=await modal({icon:'📤',title:'Export cards',text:'AlgoApp works best with one deck per CSV. The file contains only Front and Back, so technical metadata will not appear on the cards.',fields:[{type:'select',label:'Deck to export',value:deckNames[0]||'__all__',options},{type:'select',label:'Format',value:'algo',options:[{v:'algo',t:'AlgoApp CSV · Front / Back'},{v:'universal',t:'Universal CSV · Deck / Front / Back'},{v:'json',t:'JSON backup'}]}],okText:'Export',cancelText:'Cancel'});
+  if(!r)return;
+  const selected=String(r[0]||'__all__'),format=String(r[1]||'algo');
+  const rows=selected==='__all__'?cards:cards.filter(c=>memoryAlgoDeckName(c)===selected);
+  if(!rows.length){toast('No cards found in that deck.');return;}
+  const safeName=(selected==='__all__'?'Kevin LifeOS Memory Forge':selected).replace(/[\\/:*?"<>|]+/g,' - ').replace(/\s+/g,' ').trim();
+  if(format==='json'){
+    downloadTextFile(`${safeName}_${hoyLocal()}.json`,JSON.stringify({type:'kevin_lifeos_cards_backup',exported_at:hoyLocal(),cards:rows},null,2),'application/json;charset=utf-8');
+    toast(`📤 ${rows.length} cards exported as JSON.`);return;
+  }
+  const header=format==='algo'?['Front','Back']:['Deck','Front','Back'];
   const lines=[header.map(csvCell).join(',')];
-  cards.forEach(c=>lines.push([c.deck,c.front,c.back,c.example,c.example_es,c.source,(c.tags||[]).join(' '),c.id].map(csvCell).join(',')));
-  const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=`Kevin_LifeOS_Anki_${hoyLocal()}.csv`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);
-  toast(`📤 ${cards.length} cards exported for Anki.`);
+  rows.forEach(c=>{
+    const line=format==='algo'?[c.front,memoryAlgoBack(c)]:[memoryAlgoDeckName(c),c.front,memoryAlgoBack(c)];
+    lines.push(line.map(csvCell).join(','));
+  });
+  downloadTextFile(`${safeName}_${hoyLocal()}.csv`,lines.join('\r\n'),'text/csv;charset=utf-8');
+  toast(`📤 ${rows.length} clean cards exported for ${format==='algo'?'AlgoApp':'CSV'}.`);
 }
 function openMemoryForge() {
   const previous=document.activeElement,back=document.createElement('div');back.className='modal-back memory-forge-back';
   const close=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();},240)};
-  const draw=()=>{const st=memoryForgeRead(),payload=memoryBridgePayload();back.innerHTML=`<div class="modal-card memory-forge-card"><div class="memory-forge-head"><div><span>MEMORY FORGE</span><h3>Knowledge bridge</h3><p>Kevin LifeOS organizes. ChatGPT improves. Anki helps you remember.</p></div><button type="button" data-memory-close>✕</button></div><div class="memory-forge-stats"><div><b>${payload.english.length}</b><span>English signals</span></div><div><b>${payload.concepts.length}</b><span>saved concepts</span></div><div><b>${payload.academy.length}</b><span>Academy practices</span></div><div><b>${st.cards.length}</b><span>ready cards</span></div></div><div class="memory-forge-actions"><button data-memory-capture>＋ Capture</button><button data-memory-copy>✨ Copy AI Bridge</button><button data-memory-import>📥 Import JSON</button><button data-memory-export>📤 Anki CSV</button></div><div class="memory-forge-foot"><button data-memory-help>?</button><span>English is collected automatically. Technical concepts are optional and stay editable before AI processing.</span></div></div>`;bind();};
-  const bind=()=>{back.querySelector('[data-memory-close]').onclick=close;back.querySelector('[data-memory-capture]').onclick=async()=>{await memoryCaptureConcept();draw();};back.querySelector('[data-memory-copy]').onclick=copyMemoryBridgePrompt;back.querySelector('[data-memory-import]').onclick=async()=>{await importMemoryForgeJSON();draw();};back.querySelector('[data-memory-export]').onclick=exportMemoryForgeCSV;back.querySelector('[data-memory-help]').onclick=()=>modal({icon:'?',title:'Memory Forge',text:'English comes automatically from Language Hunter and Word Hunter. Data, Programming, Cybersecurity and Academy concepts are captured only when you choose. Copy one bridge prompt to ChatGPT, import its JSON after review, then export all approved cards to Anki.',okText:'Understood'});};
+  const draw=()=>{const st=memoryForgeRead(),payload=memoryBridgePayload();back.innerHTML=`<div class="modal-card memory-forge-card"><div class="memory-forge-head"><div><span>MEMORY FORGE</span><h3>Knowledge bridge</h3><p>Kevin LifeOS organizes. ChatGPT improves. AlgoApp helps you review.</p></div><button type="button" data-memory-close>✕</button></div><div class="memory-forge-stats"><div><b>${payload.english.length}</b><span>English signals</span></div><div><b>${payload.concepts.length}</b><span>saved concepts</span></div><div><b>${payload.academy.length}</b><span>Academy practices</span></div><div><b>${st.cards.length}</b><span>ready cards</span></div></div><div class="memory-forge-actions"><button data-memory-capture>＋ Capture</button><button data-memory-copy>✨ Copy AI Bridge</button><button data-memory-import>📥 Import JSON</button><button data-memory-export>📤 Export cards</button></div><div class="memory-forge-foot"><button data-memory-help>?</button><span>English is collected automatically. Technical concepts are optional and stay editable before AI processing.</span></div></div>`;bind();};
+  const bind=()=>{back.querySelector('[data-memory-close]').onclick=close;back.querySelector('[data-memory-capture]').onclick=async()=>{await memoryCaptureConcept();draw();};back.querySelector('[data-memory-copy]').onclick=copyMemoryBridgePrompt;back.querySelector('[data-memory-import]').onclick=async()=>{await importMemoryForgeJSON();draw();};back.querySelector('[data-memory-export]').onclick=exportMemoryForgeCards;back.querySelector('[data-memory-help]').onclick=()=>modal({icon:'?',title:'Memory Forge',text:'English comes automatically from Language Hunter and Word Hunter. Data, Programming, Cybersecurity and Academy concepts are captured only when you choose. Copy one bridge prompt to ChatGPT, import its JSON after review, then export one clean deck at a time to AlgoApp or create a universal backup.',okText:'Understood'});};
   document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));
 }
 function expeditionBridgePrompt(goal){
