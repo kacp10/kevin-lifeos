@@ -6303,7 +6303,7 @@ function actividadesDelDia(wd, shiftKey) {
     : 'Advance one active course + take notes.';
 
   if (shiftKey === 'descanso') {
-    return { rest: true, msg: 'Rest Sunday 🌿', acts: [
+    return { rest: true, msg: `Rest ${DIAS[wd]} 🌿`, acts: [
       { t: '9:00', title: 'Wake up without an alarm', d: 'Rest for real. The body also trains by resting.', key: 'wake' },
       { t: '10:00', title: 'Skincare + something tasty', d: 'Take care of your skin, no rush.', key: 'skincare' },
       { t: 'Free', title: 'Light reading or anime', d: 'One book chapter or one episode. Enjoy guilt-free.', key: 'leer' },
@@ -6568,12 +6568,19 @@ document.addEventListener('change', async (e) => {
   if (e.target.matches('#shiftGrid select')) {
     const wd = +e.target.dataset.wd;
     await api('/api/shift', { body: { weekday: wd, shift: e.target.value } });
-    if (e.target.value === 'descanso' && wd <= 4) {
-      const restIso = nextVisibleDateForWeekday(wd);
-      await saveLifeRestDate(restIso);
-      toast(`🌿 Rest saved for ${restIso}. It will not break Habit streaks.`);
+    const visibleIso = nextVisibleDateForWeekday(wd);
+    if (e.target.value === 'descanso') {
+      await saveLifeRestDate(visibleIso);
+      toast(`🌿 Rest saved for ${DIAS[wd]}. It will not break Habit streaks.`);
     } else {
-      toast('📅 Shift updated.');
+      // A previous one-off REST date must not keep overriding Day off or a work shift.
+      // Only remove the exact visible date being edited; other protected REST dates stay intact.
+      if (visibleIso && isLifeRestDate(visibleIso)) {
+        await removeLifeRestDate(visibleIso);
+      }
+      toast(e.target.value === 'libre'
+        ? `📅 Day off saved for ${DIAS[wd]}. Your normal routine remains active.`
+        : '📅 Shift updated.');
     }
     load();
   } else if (e.target.matches('[data-career]')) {
