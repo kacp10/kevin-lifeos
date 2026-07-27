@@ -4691,25 +4691,50 @@ function downloadTextFile(filename,text,type='text/plain;charset=utf-8'){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;document.body.appendChild(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},700);
 }
+async function markPreviousEnglishExport(){
+  const state=memoryForgeRead();
+  const english=(state.cards||[]).filter(c=>memoryAlgoDeckName(c)==='English' && c.status!=='exported');
+  if(!english.length){toast('No pending English cards need repair.');return false;}
+  const ok=await confirmModal('Mark previous English export',`Mark <b>${english.length}</b> English cards as already exported?<br><br>This will not download them again and will not affect Hunter Skill Academy or other decks.`,false);
+  if(!ok)return false;
+  const stamp=hoyLocal();
+  const ids=new Set(english.map(c=>String(c.id)));
+  state.cards=(state.cards||[]).map(c=>ids.has(String(c.id))?{...c,status:'exported',exported_at:stamp,export_reason:'previous_english_export'}:c);
+  await memoryForgeSave(state);
+  toast(`✓ ${english.length} English cards marked as previously exported.`);
+  return true;
+}
 async function exportMemoryForgeCards(){
   const state=memoryForgeRead();
   const allCards=(state.cards||[]).filter(c=>String(c.front||'').trim()&&String(c.back||'').trim());
-  if(!allCards.length){toast('Import or create cards before exporting.');return;}
+  if(!allCards.length){toast('Import or create cards before exporting.');return false;}
   const ready=allCards.filter(c=>c.status!=='exported');
   const deckNames=[...new Set(allCards.map(memoryAlgoDeckName))].sort((a,b)=>a.localeCompare(b));
   const options=deckNames.map(x=>({v:x,t:`${x} · ${ready.filter(c=>memoryAlgoDeckName(c)===x).length} new / ${allCards.filter(c=>memoryAlgoDeckName(c)===x).length} total`}));
   options.unshift({v:'__all__',t:`All decks · ${ready.length} new / ${allCards.length} total`});
-  const r=await modal({icon:'📤',title:'Export cards',text:'New cards exports only cards that have never been downloaded. Re-export all is available only when you intentionally need a full replacement file.',fields:[
+  const r=await modal({icon:'📤',title:'Export cards',text:'New cards exports only cards that have never been downloaded. Use the repair option only for the English cards you exported before tracking was added.',fields:[
+    {type:'select',label:'Action',value:'export',options:[{v:'export',t:'Export cards'},{v:'repair_english',t:'Mark previous English export · no download'}]},
     {type:'select',label:'Deck to export',value:deckNames[0]||'__all__',options},
     {type:'select',label:'Cards',value:'new',options:[{v:'new',t:'New cards only · recommended'},{v:'all',t:'Re-export all cards'}]},
     {type:'select',label:'Format',value:'algo',options:[{v:'algo',t:'AlgoApp CSV · Front / Back'},{v:'universal',t:'Universal CSV · Deck / Front / Back'},{v:'json',t:'JSON backup'}]}
-  ],okText:'Export',cancelText:'Cancel'});
-  if(!r)return;
-  const selected=String(r[0]||'__all__'),scope=String(r[1]||'new'),format=String(r[2]||'algo');
+  ],okText:'Continue',cancelText:'Cancel'});
+  if(!r)return false;
+  const action=String(r[0]||'export');
+  if(action==='repair_english')return await markPreviousEnglishExport();
+  const selected=String(r[1]||'__all__'),scope=String(r[2]||'new'),format=String(r[3]||'algo');
   let rows=selected==='__all__'?allCards:allCards.filter(c=>memoryAlgoDeckName(c)===selected);
   if(scope==='new')rows=rows.filter(c=>c.status!=='exported');
-  if(!rows.length){toast(scope==='new'?'This deck has no new cards to export.':'No cards found in that deck.');return;}
+  if(!rows.length){toast(scope==='new'?'This deck has no new cards to export.':'No cards found in that deck.');return false;}
   const safeName=(selected==='__all__'?'Kevin LifeOS Memory Forge':selected).replace(/[\\/:*?"<>|]+/g,' - ').replace(/\s+/g,' ').trim();
+
+  // Persist first. On iPhone the download/share handoff can interrupt later async work.
+  if(scope==='new'){
+    const exportedIds=new Set(rows.map(c=>String(c.id)));
+    const stamp=hoyLocal();
+    state.cards=(state.cards||[]).map(c=>exportedIds.has(String(c.id))?{...c,status:'exported',exported_at:stamp}:c);
+    try{await memoryForgeSave(state);}catch(err){toast('Could not save export status. Download cancelled.');throw err;}
+  }
+
   if(format==='json'){
     downloadTextFile(`${safeName}_${scope}_${hoyLocal()}.json`,JSON.stringify({type:'kevin_lifeos_cards_backup',exported_at:hoyLocal(),scope,cards:rows},null,2),'application/json;charset=utf-8');
   }else{
@@ -4721,18 +4746,14 @@ async function exportMemoryForgeCards(){
     });
     downloadTextFile(`${safeName}_${scope}_${hoyLocal()}.csv`,lines.join('\r\n'),'text/csv;charset=utf-8');
   }
-  if(scope==='new'){
-    const exportedIds=new Set(rows.map(c=>String(c.id)));
-    state.cards=(state.cards||[]).map(c=>exportedIds.has(String(c.id))?{...c,status:'exported',exported_at:hoyLocal()}:c);
-    await memoryForgeSave(state);
-  }
   toast(`📤 ${rows.length} ${scope==='new'?'new ':''}cards exported${scope==='new'?' and marked as exported':''}.`);
+  return true;
 }
 function openMemoryForge() {
   const previous=document.activeElement,back=document.createElement('div');back.className='modal-back memory-forge-back';
   const close=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();},240)};
   const draw=()=>{const st=memoryForgeRead(),payload=memoryBridgePayload();back.innerHTML=`<div class="modal-card memory-forge-card"><div class="memory-forge-head"><div><span>MEMORY FORGE</span><h3>Knowledge bridge</h3><p>Kevin LifeOS organizes. ChatGPT improves. AlgoApp helps you review.</p></div><button type="button" data-memory-close>✕</button></div><div class="memory-forge-stats"><div><b>${payload.english.length}</b><span>English signals</span></div><div><b>${payload.concepts.length}</b><span>saved concepts</span></div><div><b>${payload.academy.length}</b><span>Academy practices</span></div><div><b>${st.cards.filter(x=>x.status!=='exported').length}</b><span>new cards</span><small>${st.cards.filter(x=>x.status==='exported').length} exported</small></div></div><div class="memory-forge-actions"><button data-memory-capture>＋ Capture</button><button data-memory-copy>✨ Copy AI Bridge</button><button data-memory-import>📥 Import JSON</button><button data-memory-export>📤 Export cards</button></div><div class="memory-forge-foot"><button data-memory-help>?</button><span>English is collected automatically. Technical concepts are optional and stay editable before AI processing.</span></div></div>`;bind();};
-  const bind=()=>{back.querySelector('[data-memory-close]').onclick=close;back.querySelector('[data-memory-capture]').onclick=async()=>{await memoryCaptureConcept();draw();};back.querySelector('[data-memory-copy]').onclick=copyMemoryBridgePrompt;back.querySelector('[data-memory-import]').onclick=async()=>{await importMemoryForgeJSON();draw();};back.querySelector('[data-memory-export]').onclick=exportMemoryForgeCards;back.querySelector('[data-memory-help]').onclick=()=>modal({icon:'?',title:'Memory Forge',text:'Only active, unprocessed English signals and study concepts enter the next AI prompt. Imported sources are remembered, and exported cards are excluded from the next normal download. Use Re-export all only when you intentionally need every card again.',okText:'Understood'});};
+  const bind=()=>{back.querySelector('[data-memory-close]').onclick=close;back.querySelector('[data-memory-capture]').onclick=async()=>{await memoryCaptureConcept();draw();};back.querySelector('[data-memory-copy]').onclick=copyMemoryBridgePrompt;back.querySelector('[data-memory-import]').onclick=async()=>{await importMemoryForgeJSON();draw();};back.querySelector('[data-memory-export]').onclick=async()=>{const changed=await exportMemoryForgeCards();if(changed)draw();};back.querySelector('[data-memory-help]').onclick=()=>modal({icon:'?',title:'Memory Forge',text:'Only active, unprocessed English signals and study concepts enter the next AI prompt. Imported sources are remembered, and exported cards are excluded from the next normal download. Use Re-export all only when you intentionally need every card again.',okText:'Understood'});};
   document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));
 }
 function expeditionBridgePrompt(goal){
