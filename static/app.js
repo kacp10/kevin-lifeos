@@ -834,7 +834,7 @@ function languageTutorPrompt(wd, minutes = 25) {
   const phraseText = learning.phrases.length ? learning.phrases.map((x,i)=>`${i+1}. ${x.phrase}${x.example ? ` — ${x.example}` : ''}`).join('\n') : 'No useful phrases saved yet.';
   const wordText = learning.words.length ? learning.words.map((x,i)=>`${i+1}. ${x.word||x.correct}${x.wrong ? ` (previous error: ${x.wrong})` : ''}`).join('\n') : 'No priority words due today.';
   const previous = languageSessions().slice(-1)[0] || {};
-  return `You are my Language Hunter English tutor.\n\nTODAY\nDay: ${DIAS[wd]}\nMission: ${titulo}\nVerified level: ${verified}\nCurrent target: ${target}\nAvailable time: ${minutes} minutes\n\nSTUDY LESSON\nBook: ${cfg.book || 'Not specified'}\nBook level: ${cfg.level || 'Not specified'}\nUnit: ${cfg.unit || 'Not specified'}\nPages: ${cfg.pages || 'Not specified'}\nTopics: ${cfg.topic || 'Not specified'}\nGrammar focuses: ${cfg.grammar || 'Not specified'}\n\nMISSION STEPS\n${pasos.map((p,i)=>`${i+1}. ${p.s}: ${p.how}`).join('\n')}\n\nRECURRING ERRORS TO RETRAIN\n${errorText}\n\nUSEFUL PHRASES TO REUSE\n${phraseText}\n\nWORDS TO RETRAIN\n${wordText}\n\nPREVIOUS SESSION\nMain issue: ${previous.issue || 'No previous issue logged'}\nHomework: ${previous.homework || 'No pending homework'}\n\nRULES\nSpeak mainly in English. Ask one question at a time. Make me produce English before explaining. Correct the most important errors, ask me to retry the corrected form, deliberately reuse the saved phrases, and finish with the exact LANGUAGE HUNTER SESSION REPORT plus a compact APP LOG line.`;
+  return `You are my Language Hunter English tutor.\n\nTODAY\nDay: ${DIAS[wd]}\nMission: ${titulo}\nVerified level: ${verified}\nCurrent target: ${target}\nAvailable time: ${minutes} minutes\n\nSTUDY LESSON\nBook: ${cfg.book || 'Not specified'}\nBook level: ${cfg.level || 'Not specified'}\nUnit: ${cfg.unit || 'Not specified'}\nPages: ${cfg.pages || 'Not specified'}\nTopics: ${cfg.topic || 'Not specified'}\nGrammar focuses: ${cfg.grammar || 'Not specified'}\n\nMISSION STEPS\n${pasos.map((p,i)=>`${i+1}. ${p.s}: ${p.how}`).join('\n')}\n\nRECURRING ERRORS TO RETRAIN\n${errorText}\n\nUSEFUL PHRASES TO REUSE\n${phraseText}\n\nWORDS TO RETRAIN\n${wordText}\n\nPREVIOUS SESSION\nMain issue: ${previous.issue || 'No previous issue logged'}\nHomework: ${previous.homework || 'No pending homework'}\n\nRULES\nSpeak mainly in English. Ask one question at a time. Make me produce English before explaining. Correct the most important errors, ask me to retry the corrected form, deliberately reuse the saved phrases, and finish with the exact LANGUAGE HUNTER SESSION REPORT plus a compact APP LOG line.\n\nIn the report, include a section named NEW WORDS FOR WORD HUNTER. Add only isolated English words the learner did not know, could not recall, mistranslated or used incorrectly. Do not put full sentences there. Use one line per word in this exact format:\nword | Spanish meaning | one natural A2-B1 example\nIf there are no new isolated words, write: None.`;
 }
 
 function copyLanguageTutorPrompt(wd) {
@@ -883,13 +883,19 @@ function parseTutorReport(raw) {
   };
   const mission = reportSection(text, 'MISSION RESULT', ['TOP CORRECTIONS']);
   const correctionsRaw = reportSection(text, 'TOP CORRECTIONS', ['NEW USEFUL PHRASES']);
-  const phrasesRaw = reportSection(text, 'NEW USEFUL PHRASES', ['PRONUNCIATION OR SHADOWING NOTE']);
+  const phrasesRaw = reportSection(text, 'NEW USEFUL PHRASES', ['NEW WORDS FOR WORD HUNTER','PRONUNCIATION OR SHADOWING NOTE']);
+  const wordsRaw = reportSection(text, 'NEW WORDS FOR WORD HUNTER', ['PRONUNCIATION OR SHADOWING NOTE']);
   const list = rawSection => rawSection.split('\n').map(x=>x.replace(/^\s*\d+[.)]\s*/, '').trim()).filter(Boolean);
   const corrections = list(correctionsRaw).slice(0, 3).map(line => {
     const parts = line.split(/\s*(?:→|->|=>)\s*/);
     return { raw:line, wrong:(parts[0] || '').trim(), correct:(parts[1] || '').trim() };
   });
   const phrases = list(phrasesRaw).slice(0, 5);
+  const words = list(wordsRaw).filter(x=>!/^none$/i.test(x)).slice(0,10).map(line=>{
+    const parts=line.split('|').map(x=>x.trim());
+    const word=String(parts[0]||'').trim();
+    return {word,meaning:String(parts[1]||'').trim(),example:String(parts.slice(2).join('|')||'').trim()};
+  }).filter(x=>/^[A-Za-z][A-Za-z'-]*$/.test(x.word));
   const difficultyMatch = mission.match(/Difficulty\s*:\s*(Easy|Appropriate|Hard)/i);
   const weaknessMatch = mission.match(/Main weakness\s*:\s*(.*)/i);
   return {
@@ -905,6 +911,7 @@ function parseTutorReport(raw) {
     weakness: weaknessMatch ? weaknessMatch[1].trim() : field('RECURRING ERROR TO REVIEW NEXT TIME'),
     corrections,
     phrases,
+    words,
     pronunciation: reportSection(text, 'PRONUNCIATION OR SHADOWING NOTE', ['RECURRING ERROR TO REVIEW NEXT TIME']),
     recurring: reportSection(text, 'RECURRING ERROR TO REVIEW NEXT TIME', ['HOMEWORK']),
     homework: reportSection(text, 'HOMEWORK', ['APP LOG']),
@@ -916,13 +923,13 @@ function parseTutorReport(raw) {
 async function importLanguageTutorReport(wd) {
   const pasted = await modal({
     icon:'↳', title:'Import AI session result',
-    text:'After finishing with your AI tutor, paste its complete LANGUAGE HUNTER SESSION REPORT here. The app previews it, then saves minutes, difficulty, corrections, phrases and homework for future missions.',
+    text:'After finishing with your AI tutor, paste its complete LANGUAGE HUNTER SESSION REPORT here. The app previews it, then saves corrections, useful phrases, isolated new words and homework. New isolated words go directly to Word Hunter.',
     fields:[{type:'textarea',label:'Tutor report',rows:14,placeholder:'LANGUAGE HUNTER SESSION REPORT\n\nDate: ...'}],
     okText:'Analyze report', lockClose:true, draftKey:'language_tutor_report'
   });
   if (!pasted || !String(pasted[0] || '').trim()) return false;
   const parsed = parseTutorReport(pasted[0]);
-  if (!parsed.log && !parsed.minutes && !parsed.corrections.length && !parsed.phrases.length) {
+  if (!parsed.log && !parsed.minutes && !parsed.corrections.length && !parsed.phrases.length && !parsed.words.length) {
     toast('The report format could not be recognized. Paste the full report.', 'warn');
     return false;
   }
@@ -931,7 +938,7 @@ async function importLanguageTutorReport(wd) {
   const preview = `<div class="language-import-preview">
     <div><small>SESSION</small><b>${esc(parsed.skill || pasosInglesDelDia(wd).titulo)}</b><span>${parsed.minutes || 0} min · ${esc(parsed.difficulty)}</span></div>
     <div><small>MAIN ISSUE</small><b>${esc(parsed.weakness || parsed.recurring || 'Not detected')}</b></div>
-    <div><small>DETECTED</small><b>${validErrors.length} corrections · ${parsed.phrases.length} phrases</b><span>${parsed.homework ? 'Homework included' : 'No homework detected'}</span></div>
+    <div><small>DETECTED</small><b>${validErrors.length} corrections · ${parsed.phrases.length} phrases · ${parsed.words.length} words</b><span>${parsed.homework ? 'Homework included' : 'No homework detected'}</span></div>
   </div>`;
   const reviewed = await modal({
     icon:'✓', title:'Review imported session', text:preview,
@@ -955,8 +962,8 @@ async function importLanguageTutorReport(wd) {
     imported:true
   });
   await persistLanguageSessions(rows);
-  if (validErrors.length || parsed.phrases.length) {
-    const addNotes = await confirmModal('Update learning notebook', `Add <b>${validErrors.length}</b> detected corrections and <b>${parsed.phrases.length}</b> useful phrases to the Language Hunter notebook?<br><br>You can review or delete them later.`, false);
+  if (validErrors.length || parsed.phrases.length || parsed.words.length) {
+    const addNotes = await confirmModal('Update learning notebook', `Add <b>${validErrors.length}</b> corrections, <b>${parsed.phrases.length}</b> useful phrases and <b>${parsed.words.length}</b> isolated words?<br><br>Words go to Word Hunter; sentences remain in Errors or Phrases.`, false);
     if (addNotes) {
       const errors = languageErrors();
       for (const item of validErrors) {
@@ -972,9 +979,12 @@ async function importLanguageTutorReport(wd) {
         phrases.push({id:`phr-${Date.now()}-${phrases.length}`,phrase,meaning:'',example:'',source:'AI conversation',topic:cfg.topic||'',confidence:'Learning',updated_at:hoyLocal()});
       }
       await saveLanguageProfileArray('language_phrases_v1', phrases);
+      for (const item of parsed.words) {
+        await addWordHunterCard({word:item.word,meaning:item.meaning,example:item.example,source:'Language Hunter',priority:5});
+      }
     }
   }
-  toast('↳ Tutor report imported. The next prompt can use this evidence.');
+  toast(parsed.words.length ? `↳ Tutor report imported · ${parsed.words.length} Word Hunter word${parsed.words.length===1?'':'s'} added or reactivated.` : '↳ Tutor report imported. The next prompt can use this evidence.');
   return true;
 }
 
