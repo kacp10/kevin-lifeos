@@ -71,5 +71,4 @@ La primera vez se crea `lifeos.db` con todos tus datos reales ya cargados
    de Apple (USD 99/año), con Swift/SwiftUI — o empaquetar esta misma web
    con Capacitor. Ese es el paso final, cuando domines lo básico.
 
----
-Hecho por Kevin con Claude · Junio 2026
+
