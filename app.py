@@ -19,6 +19,8 @@ from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 from flask import Flask, jsonify, render_template, request, g, Response
 import db_layer
+from flask import jsonify
+
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
@@ -3756,6 +3758,16 @@ try:
 except Exception as _e:
     print('init_db diferido:', _e)
 
+from flask import jsonify
+
+
+@app.get("/api/health")
+def health_check():
+    """Endpoint liviano para mantener activa la sesión mientras la app está abierta."""
+    return jsonify({
+        "ok": True,
+        "service": "Kevin LifeOS"
+    }), 200
 
 if __name__ == '__main__':
     init_db()

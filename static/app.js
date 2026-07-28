@@ -8425,6 +8425,83 @@ function credentialModalList(){
     };
     const close=()=>{back.classList.remove('show');setTimeout(()=>back.remove(),180);resolve();};document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));
   });
+  
+  // ======================================================
+// RENDER KEEP-ALIVE
+// Mantiene el servidor activo mientras Kevin LifeOS
+// permanezca abierto en una pestaña visible.
+// ======================================================
+
+const RENDER_KEEP_ALIVE_INTERVAL = 8 * 60 * 1000; // 8 minutos
+
+let renderKeepAliveTimer = null;
+let renderKeepAliveRunning = false;
+
+async function pingRenderServer() {
+  // Evita solicitudes cuando la pestaña está oculta.
+  if (document.visibilityState !== "visible") return;
+
+  // Evita enviar dos solicitudes al mismo tiempo.
+  if (renderKeepAliveRunning) return;
+
+  renderKeepAliveRunning = true;
+
+  try {
+    const response = await fetch(`/api/health?t=${Date.now()}`, {
+      method: "GET",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      console.warn(
+        `[Kevin LifeOS] Keep-alive returned status ${response.status}`
+      );
+    }
+  } catch (error) {
+    console.warn("[Kevin LifeOS] Keep-alive failed:", error);
+  } finally {
+    renderKeepAliveRunning = false;
+  }
+}
+
+function startRenderKeepAlive() {
+  if (renderKeepAliveTimer) {
+    clearInterval(renderKeepAliveTimer);
+  }
+
+  // Primer ping al abrir la aplicación.
+  pingRenderServer();
+
+  // Después, un ping cada 8 minutos.
+  renderKeepAliveTimer = window.setInterval(
+    pingRenderServer,
+    RENDER_KEEP_ALIVE_INTERVAL
+  );
+}
+
+// Al volver a la pestaña, envía un ping inmediato.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    pingRenderServer();
+  }
+});
+
+// Al recuperar conexión, comprueba el servidor.
+window.addEventListener("online", pingRenderServer);
+
+// Inicia cuando la página ya está cargada.
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", startRenderKeepAlive, {
+    once: true,
+  });
+} else {
+  startRenderKeepAlive();
+}
+
 }
 document.addEventListener('click',async e=>{
   const planned=e.target.closest('[data-planned-courses]');if(planned){const career=(S.careers||[]).find(x=>String(x.id)===String(planned.dataset.plannedCourses));if(career)await openPlannedCourses(career);return;}
