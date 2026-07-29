@@ -641,6 +641,59 @@ function wordHunterDetails(word) {
   return row ? {meaning:row[0],part:row[1],example:row[2],exampleEs:row[3]} : null;
 }
 
+const WORD_HUNTER_PRONUNCIATION_CACHE_KEY = 'kevin_word_hunter_pronunciation_v1';
+function wordHunterPronunciationCache() {
+  try {
+    const value=JSON.parse(localStorage.getItem(WORD_HUNTER_PRONUNCIATION_CACHE_KEY)||'{}');
+    return value&&typeof value==='object'?value:{};
+  } catch(_) { return {}; }
+}
+function wordHunterCachedPronunciation(word) {
+  return String(wordHunterPronunciationCache()[wordHunterKey(word)]||'').trim();
+}
+function saveWordHunterPronunciation(word, pronunciation) {
+  const key=wordHunterKey(word), value=String(pronunciation||'').trim();
+  if (!key||!value) return;
+  const cache=wordHunterPronunciationCache();
+  cache[key]=value;
+  try { localStorage.setItem(WORD_HUNTER_PRONUNCIATION_CACHE_KEY,JSON.stringify(cache)); } catch(_) {}
+}
+async function fetchWordHunterPronunciation(word) {
+  const clean=wordHunterKey(word).replace(/[^a-z'-]/g,'');
+  if (!clean) return '';
+  const cached=wordHunterCachedPronunciation(clean);
+  if (cached) return cached;
+  try {
+    const response=await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(clean)}`,{headers:{Accept:'application/json'}});
+    if (!response.ok) return '';
+    const data=await response.json();
+    const entries=Array.isArray(data)?data:[];
+    let pronunciation='';
+    for (const entry of entries) {
+      if (entry&&entry.phonetic) pronunciation=String(entry.phonetic).trim();
+      if (!pronunciation&&Array.isArray(entry&&entry.phonetics)) {
+        const hit=entry.phonetics.find(x=>x&&x.text);
+        if (hit) pronunciation=String(hit.text).trim();
+      }
+      if (pronunciation) break;
+    }
+    if (pronunciation) saveWordHunterPronunciation(clean,pronunciation);
+    return pronunciation;
+  } catch(_) { return ''; }
+}
+function hydrateWordHunterPronunciations(root=document) {
+  root.querySelectorAll('[data-word-pronunciation]').forEach(async node=>{
+    const word=node.getAttribute('data-word-pronunciation')||'';
+    const existing=node.getAttribute('data-pronunciation')||wordHunterCachedPronunciation(word);
+    if (existing) { node.textContent=existing; node.classList.remove('is-loading'); return; }
+    const pronunciation=await fetchWordHunterPronunciation(word);
+    if (!node.isConnected) return;
+    node.textContent=pronunciation||'Pronunciation unavailable';
+    node.classList.remove('is-loading');
+    if (!pronunciation) node.classList.add('is-unavailable');
+  });
+}
+
 function wordHunterRows() { return languageProfileArray('language_word_deck_v1'); }
 async function saveWordHunterRows(rows) { const value=JSON.stringify(rows.slice(-1800)); await api('/api/profile',{body:{key:'language_word_deck_v1',value}}); S.profile=S.profile||{}; S.profile.language_word_deck_v1=value; }
 function wordHunterKey(v) { return String(v||'').trim().toLowerCase(); }
@@ -693,14 +746,15 @@ function openWordHunterReview() {
   let queue=wordHunterDueCards(10), pos=0, revealed=false; const previous=document.activeElement,back=document.createElement('div');back.className='modal-back word-hunter-back modal-back-stacked';
   const close=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();renderEnglish();},240)};
   const draw=()=>{if(pos>=queue.length){back.innerHTML=`<div class="modal-card word-review-card"><div class="language-mission-top"><div><span>WORD HUNTER</span><h3>Review complete</h3></div><button class="language-mission-close">✕</button></div><div class="word-review-finish">◆ ${queue.length} cards reviewed today.</div><div class="language-notebook-footer"><button class="btn-ghost" data-word-close>Finish</button></div></div>`;back.querySelectorAll('.language-mission-close,[data-word-close]').forEach(x=>x.onclick=close);return;}
-    const c=queue[pos], details=c.core?wordHunterDetails(c.word):null, meaning=c.meaning||details?.meaning||'Add a Spanish meaning from the library.', part=c.part||details?.part||'', example=c.example||details?.example||'', exampleEs=c.exampleEs||details?.exampleEs||''; back.innerHTML=`<div class="modal-card word-review-card"><div class="language-mission-top"><div><span>WORD HUNTER · ${pos+1}/${queue.length}</span><h3>${c.source==='Personal error'?'Spelling recovery':'Vocabulary review'}</h3></div><button class="language-mission-close">✕</button></div><div class="word-card-face"><small>${c.core?'DAILY VOCABULARY':'PERSONAL ERROR'}</small><strong>${esc(c.word||c.correct)}</strong>${!revealed&&c.wrong?`<span>Your error: ${esc(c.wrong)}</span>`:''}${revealed?`<div class="word-card-answer">${c.wrong?`<p><b>Your error:</b> ${esc(c.wrong)}</p>`:''}<p><b>Correct:</b> ${esc(c.word||c.correct)}</p><p><b>Significado:</b> ${esc(meaning)}</p>${part?`<p><b>Tipo:</b> ${esc(part)}</p>`:''}${example?`<div class="word-example-pair"><em>${esc(example)}</em>${exampleEs?`<span>${esc(exampleEs)}</span>`:''}</div>`:''}<p class="word-card-task">Say or write one new sentence using <b>${esc(c.word||c.correct)}</b>.</p></div>`:''}</div><div class="word-review-actions">${revealed?'<button data-rate="again">Again</button><button data-rate="hard">Hard</button><button data-rate="good">Good</button><button data-rate="easy">Easy</button>':'<button class="btn-gold" data-reveal>Show answer</button>'}</div></div>`;
+    const c=queue[pos], details=c.core?wordHunterDetails(c.word):null, meaning=c.meaning||details?.meaning||'Add a Spanish meaning from the library.', part=c.part||details?.part||'', example=c.example||details?.example||'', exampleEs=c.exampleEs||details?.exampleEs||''; back.innerHTML=`<div class="modal-card word-review-card"><div class="language-mission-top"><div><span>WORD HUNTER · ${pos+1}/${queue.length}</span><h3>${c.source==='Personal error'?'Spelling recovery':'Vocabulary review'}</h3></div><button class="language-mission-close">✕</button></div><div class="word-card-face"><small>${c.core?'DAILY VOCABULARY':'PERSONAL ERROR'}</small><strong>${esc(c.word||c.correct)}</strong><span class="word-card-pronunciation is-loading" data-word-pronunciation="${esc(c.word||c.correct)}" data-pronunciation="${esc(c.pronunciation||wordHunterCachedPronunciation(c.word||c.correct))}">Loading pronunciation…</span>${!revealed&&c.wrong?`<span>Your error: ${esc(c.wrong)}</span>`:''}${revealed?`<div class="word-card-answer">${c.wrong?`<p><b>Your error:</b> ${esc(c.wrong)}</p>`:''}<p><b>Correct:</b> ${esc(c.word||c.correct)}</p><p><b>Significado:</b> ${esc(meaning)}</p>${part?`<p><b>Tipo:</b> ${esc(part)}</p>`:''}${example?`<div class="word-example-pair"><em>${esc(example)}</em>${exampleEs?`<span>${esc(exampleEs)}</span>`:''}</div>`:''}<p class="word-card-task">Say or write one new sentence using <b>${esc(c.word||c.correct)}</b>.</p></div>`:''}</div><div class="word-review-actions">${revealed?'<button data-rate="again">Again</button><button data-rate="hard">Hard</button><button data-rate="good">Good</button><button data-rate="easy">Easy</button>':'<button class="btn-gold" data-reveal>Show answer</button>'}</div></div>`;
+    hydrateWordHunterPronunciations(back);
     back.querySelector('.language-mission-close').onclick=close; const rev=back.querySelector('[data-reveal]');if(rev)rev.onclick=()=>{revealed=true;draw();};back.querySelectorAll('[data-rate]').forEach(b=>b.onclick=async()=>{b.disabled=true;await rateWordHunterCard(c,b.dataset.rate);pos++;revealed=false;draw();});
   };
   document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));
 }
 function openWordHunterLibrary() {
   const previous=document.activeElement,back=document.createElement('div');back.className='modal-back word-hunter-back modal-back-stacked';
-  const draw=()=>{const rows=wordHunterRows().slice().sort((a,b)=>(a.status==='Mastered')-(b.status==='Mastered')||String(b.updated_at).localeCompare(String(a.updated_at)));const items=rows.length?rows.map(x=>`<article class="language-note-card ${x.status==='Mastered'?'mastered':''}" data-word-id="${esc(x.id)}"><div><small>${esc(x.source||'Personal')} · ${esc(x.status||'Learning')}</small><b>${esc(x.word||x.correct)}</b>${x.wrong?`<span>${esc(x.wrong)} → ${esc(x.word||x.correct)}</span>`:''}${x.meaning?`<em>${esc(x.meaning)}</em>`:''}</div><div class="language-note-actions"><button data-word-master>${x.status==='Mastered'?'Reopen':'Learned'}</button><button data-word-delete>✕</button></div></article>`).join(''):'<div class="language-notebook-empty">No personal words yet. Core vocabulary appears gradually in daily reviews.</div>';back.innerHTML=`<div class="modal-card language-notebook-card"><div class="language-mission-top"><div><span>WORD HUNTER ARCHIVE</span><h3>Personal vocabulary</h3></div><button class="language-mission-close">✕</button></div><div class="language-notebook-list">${items}</div><div class="language-notebook-footer"><button class="btn-ghost" data-word-add>＋ Add word</button></div></div>`;bind();};
+  const draw=()=>{const rows=wordHunterRows().slice().sort((a,b)=>(a.status==='Mastered')-(b.status==='Mastered')||String(b.updated_at).localeCompare(String(a.updated_at)));const items=rows.length?rows.map(x=>`<article class="language-note-card ${x.status==='Mastered'?'mastered':''}" data-word-id="${esc(x.id)}"><div><small>${esc(x.source||'Personal')} · ${esc(x.status||'Learning')}</small><b>${esc(x.word||x.correct)}</b><span class="word-card-pronunciation is-loading" data-word-pronunciation="${esc(x.word||x.correct)}" data-pronunciation="${esc(x.pronunciation||wordHunterCachedPronunciation(x.word||x.correct))}">Loading pronunciation…</span>${x.wrong?`<span>${esc(x.wrong)} → ${esc(x.word||x.correct)}</span>`:''}${x.meaning?`<em>${esc(x.meaning)}</em>`:''}</div><div class="language-note-actions"><button data-word-master>${x.status==='Mastered'?'Reopen':'Learned'}</button><button data-word-delete>✕</button></div></article>`).join(''):'<div class="language-notebook-empty">No personal words yet. Core vocabulary appears gradually in daily reviews.</div>';back.innerHTML=`<div class="modal-card language-notebook-card"><div class="language-mission-top"><div><span>WORD HUNTER ARCHIVE</span><h3>Personal vocabulary</h3></div><button class="language-mission-close">✕</button></div><div class="language-notebook-list">${items}</div><div class="language-notebook-footer"><button class="btn-ghost" data-word-add>＋ Add word</button></div></div>`;hydrateWordHunterPronunciations(back);bind();};
   const close=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();renderEnglish();},240)};
   const bind=()=>{back.querySelector('.language-mission-close').onclick=close;back.querySelector('[data-word-add]').onclick=async()=>{if(await addWordHunterManual())draw();};back.querySelectorAll('[data-word-master]').forEach(btn=>btn.onclick=async()=>{const rows=wordHunterRows(),row=rows.find(x=>x.id===btn.closest('[data-word-id]').dataset.wordId);if(!row)return;row.status=row.status==='Mastered'?'Learning':'Mastered';row.due=row.status==='Mastered'?'9999-12-31':hoyLocal();await saveWordHunterRows(rows);draw();});back.querySelectorAll('[data-word-delete]').forEach(btn=>btn.onclick=async()=>{if(!await confirmModal('Delete word','Remove this personal card permanently?',true))return;let rows=wordHunterRows().filter(x=>x.id!==btn.closest('[data-word-id]').dataset.wordId);await saveWordHunterRows(rows);draw();});};
   document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));
@@ -8425,83 +8479,6 @@ function credentialModalList(){
     };
     const close=()=>{back.classList.remove('show');setTimeout(()=>back.remove(),180);resolve();};document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));
   });
-  
-  // ======================================================
-// RENDER KEEP-ALIVE
-// Mantiene el servidor activo mientras Kevin LifeOS
-// permanezca abierto en una pestaña visible.
-// ======================================================
-
-const RENDER_KEEP_ALIVE_INTERVAL = 8 * 60 * 1000; // 8 minutos
-
-let renderKeepAliveTimer = null;
-let renderKeepAliveRunning = false;
-
-async function pingRenderServer() {
-  // Evita solicitudes cuando la pestaña está oculta.
-  if (document.visibilityState !== "visible") return;
-
-  // Evita enviar dos solicitudes al mismo tiempo.
-  if (renderKeepAliveRunning) return;
-
-  renderKeepAliveRunning = true;
-
-  try {
-    const response = await fetch(`/api/health?t=${Date.now()}`, {
-      method: "GET",
-      cache: "no-store",
-      credentials: "same-origin",
-      headers: {
-        Accept: "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      console.warn(
-        `[Kevin LifeOS] Keep-alive returned status ${response.status}`
-      );
-    }
-  } catch (error) {
-    console.warn("[Kevin LifeOS] Keep-alive failed:", error);
-  } finally {
-    renderKeepAliveRunning = false;
-  }
-}
-
-function startRenderKeepAlive() {
-  if (renderKeepAliveTimer) {
-    clearInterval(renderKeepAliveTimer);
-  }
-
-  // Primer ping al abrir la aplicación.
-  pingRenderServer();
-
-  // Después, un ping cada 8 minutos.
-  renderKeepAliveTimer = window.setInterval(
-    pingRenderServer,
-    RENDER_KEEP_ALIVE_INTERVAL
-  );
-}
-
-// Al volver a la pestaña, envía un ping inmediato.
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") {
-    pingRenderServer();
-  }
-});
-
-// Al recuperar conexión, comprueba el servidor.
-window.addEventListener("online", pingRenderServer);
-
-// Inicia cuando la página ya está cargada.
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", startRenderKeepAlive, {
-    once: true,
-  });
-} else {
-  startRenderKeepAlive();
-}
-
 }
 document.addEventListener('click',async e=>{
   const planned=e.target.closest('[data-planned-courses]');if(planned){const career=(S.careers||[]).find(x=>String(x.id)===String(planned.dataset.plannedCourses));if(career)await openPlannedCourses(career);return;}

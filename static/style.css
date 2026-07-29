@@ -4583,3 +4583,27 @@ body.hunter-profile-open {
   .planned-course-item{display:grid}
   .planned-course-item>div:last-child{justify-content:flex-end}
 }
+
+/* V154 · Word Hunter written pronunciation */
+.word-card-pronunciation {
+  display: block;
+  margin-top: 6px;
+  color: var(--mint, #71e7c4);
+  font-size: .88rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  line-height: 1.25;
+}
+.word-card-pronunciation.is-loading {
+  opacity: .55;
+  font-weight: 500;
+}
+.word-card-pronunciation.is-unavailable {
+  color: rgba(235, 232, 255, .52);
+  font-size: .76rem;
+  font-weight: 500;
+}
+.language-note-card .word-card-pronunciation {
+  margin: 3px 0 1px;
+  font-size: .8rem;
+}
