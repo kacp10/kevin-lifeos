@@ -19,12 +19,10 @@ from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 from flask import Flask, jsonify, render_template, request, g, Response
 import db_layer
-from flask import jsonify
-
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 154  # V154 Career Route Tutor and Credentials
+VERSION = 155  # V155 Pending Debt Payments
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -901,6 +899,24 @@ def init_db():
             print('  (aviso) no se pudo consolidar Estiven:', e)
         con.execute("INSERT OR IGNORE INTO config VALUES ('consolidar_estiven_v1','1')")
         con.commit()
+    if not con.execute("SELECT 1 FROM config WHERE key='payment_checks_v2'").fetchone():
+        # V155: distinguish the installment due month from the month actually paid.
+        for sql in (
+            "ALTER TABLE payment_checks ADD COLUMN paid_month TEXT DEFAULT ''",
+            "ALTER TABLE payment_checks ADD COLUMN paid_date TEXT DEFAULT ''",
+            "ALTER TABLE payment_checks ADD COLUMN valor INTEGER DEFAULT 0",
+            "ALTER TABLE payment_checks ADD COLUMN debt_id INTEGER DEFAULT NULL",
+            "ALTER TABLE payment_checks ADD COLUMN extra_id INTEGER DEFAULT NULL",
+        ):
+            try:
+                con.execute(sql)
+            except Exception:
+                pass
+        con.execute("UPDATE payment_checks SET paid_month=month WHERE paid_month IS NULL OR paid_month=''")
+        con.execute("UPDATE payment_checks SET paid_date=? WHERE paid_date IS NULL OR paid_date=''", (date.today().isoformat(),))
+        con.execute("INSERT OR IGNORE INTO config VALUES ('payment_checks_v2','1')")
+        con.commit()
+
     if not con.execute("SELECT 1 FROM config WHERE key='extra_due_v1'").fetchone():
         try:
             con.execute("ALTER TABLE extra_debts ADD COLUMN due_date TEXT DEFAULT ''")
@@ -1644,6 +1660,10 @@ def state():
                         servicios=services, fund=fund, piggy=piggy, piggy_moves=piggy_moves, shopping=shopping, todos=todos, detalle=_detalle_actual(d),
                         checks=[f"{r['item']}|{r['month']}" for r in d.execute(
                             'SELECT item, month FROM payment_checks')],
+                        payment_check_records=[dict(r) for r in d.execute(
+                            "SELECT item, month, COALESCE(paid_month, month) AS paid_month, "
+                            "COALESCE(paid_date, '') AS paid_date, COALESCE(valor,0) AS valor, "
+                            "debt_id, extra_id FROM payment_checks ORDER BY paid_date, item")],
                         today=date.today().isoformat()))
 
 
@@ -1912,48 +1932,66 @@ def ping():
 
 @app.post('/api/check')
 def check():
-    j = request.json
-    item, month = j['item'], j['month']
-    debt_id = j.get('debt_id')          # si viene, es un pago de deuda principal -> abono real
-    extra_id = j.get('extra_id')        # si viene, es un pago a deuda registrada prometida
-    valor = int(j.get('valor') or 0)
-    con = db()
-    cur = con.execute('SELECT 1 FROM payment_checks WHERE item=? AND month=?',
-                       (item, month)).fetchone()
-    if cur:
-        # desmarcar: quitar el check y revertir el abono que creó este check
-        con.execute('DELETE FROM payment_checks WHERE item=? AND month=?', (item, month))
-        if debt_id:
-            con.execute('DELETE FROM abonos WHERE debt_id=? AND nota=?',
-                         (int(debt_id), f'check:{item}:{month}'))
-        if extra_id:
-            # borrar el registro de abono que creó este check (revierte historial, boss y desglose)
-            con.execute('DELETE FROM abonos WHERE nota=?',
-                         (f'extracheck:{extra_id}:{item}:{month}',))
-    else:
-        # marcar: registrar el check y crear un abono real (baja el Debt Boss)
-        con.execute('INSERT INTO payment_checks VALUES (?,?)', (item, month))
+    j = request.json or {}
+    item = str(j.get('item') or '').strip()
+    due_month = str(j.get('month') or '').strip()
+    paid_month = str(j.get('paid_month') or due_month).strip() or due_month
+    debt_id = j.get('debt_id')
+    extra_id = j.get('extra_id')
+    valor = max(0, int(j.get('valor') or 0))
+    if not item or not due_month:
+        return jsonify(error='Payment item and due month are required'), 400
+
+    with transaction() as con:
+        cur = con.execute(
+            'SELECT 1 FROM payment_checks WHERE item=? AND month=?',
+            (item, due_month)
+        ).fetchone()
+        if cur:
+            con.execute('DELETE FROM payment_checks WHERE item=? AND month=?', (item, due_month))
+            if debt_id:
+                con.execute(
+                    'DELETE FROM abonos WHERE debt_id=? AND nota=?',
+                    (int(debt_id), f'check:{item}:{due_month}')
+                )
+            if extra_id:
+                con.execute(
+                    'DELETE FROM abonos WHERE nota=?',
+                    (f'extracheck:{extra_id}:{item}:{due_month}',)
+                )
+            return jsonify(ok=True, checked=False, due_month=due_month, paid_month=paid_month)
+
+        con.execute(
+            "INSERT INTO payment_checks (item, month, paid_month, paid_date, valor, debt_id, extra_id) VALUES (?,?,?,?,?,?,?)",
+            (item, due_month, paid_month, date.today().isoformat(), valor,
+             int(debt_id) if debt_id else None,
+             int(extra_id) if extra_id else None)
+        )
         if debt_id and valor > 0:
-            con.execute('INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
-                         (int(debt_id), date.today().isoformat(), valor, f'check:{item}:{month}'))
+            con.execute(
+                'INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
+                (int(debt_id), date.today().isoformat(), valor, f'check:{item}:{due_month}')
+            )
         if extra_id and valor > 0:
-            # registra el abono a la deuda registrada en la tabla 'abonos' (nota extracheck):
-            # UNA sola fuente de verdad -> aparece en el HISTORIAL, baja el boss y el desglose.
-            con.execute('INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
-                         (None, date.today().isoformat(), valor, f'extracheck:{extra_id}:{item}:{month}'))
-            # si con este pago se salda del todo, borrar la deuda registrada (desaparece de todos lados)
+            con.execute(
+                'INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
+                (None, date.today().isoformat(), valor,
+                 f'extracheck:{extra_id}:{item}:{due_month}')
+            )
             ed = con.execute('SELECT * FROM extra_debts WHERE id=?', (int(extra_id),)).fetchone()
             if ed:
                 ed = dict(ed)
-                pagado_total = con.execute(
+                paid = con.execute(
                     "SELECT COALESCE(SUM(valor),0) AS s FROM abonos WHERE nota=? OR nota LIKE ?",
-                    (f"extra:{ed['id']}", f"extracheck:{ed['id']}:%")).fetchone()
-                pagado_total = dict(pagado_total)['s'] + (ed.get('abonado') or 0)
-                if pagado_total >= (ed['total'] or 0):
-                    con.execute('DELETE FROM abonos WHERE nota LIKE ?', (f'extracheck:{ed["id"]}:%',))
+                    (f"extra:{ed['id']}", f"extracheck:{ed['id']}:%")
+                ).fetchone()
+                paid_total = dict(paid)['s'] + (ed.get('abonado') or 0)
+                if paid_total >= (ed['total'] or 0):
+                    con.execute('DELETE FROM abonos WHERE nota LIKE ?',
+                                (f'extracheck:{ed["id"]}:%',))
                     con.execute('DELETE FROM extra_debts WHERE id=?', (int(extra_id),))
-    con.commit()
-    return jsonify(ok=True)
+
+    return jsonify(ok=True, checked=True, due_month=due_month, paid_month=paid_month)
 
 
 @app.post('/api/debt/consolidate')
@@ -3758,16 +3796,6 @@ try:
 except Exception as _e:
     print('init_db diferido:', _e)
 
-from flask import jsonify
-
-
-@app.get("/api/health")
-def health_check():
-    """Endpoint liviano para mantener activa la sesión mientras la app está abierta."""
-    return jsonify({
-        "ok": True,
-        "service": "Kevin LifeOS"
-    }), 200
 
 if __name__ == '__main__':
     init_db()
