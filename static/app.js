@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 154;
+const FRONT_V = 155;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -2974,6 +2974,41 @@ function syncDebtGoal(pct) {
 }
 
 
+function debtRowsForMonth(i) {
+  const rows = Object.entries(S.plan.creditors || {})
+    .map(([n]) => [n, cuotaPlanMes(n, i) + extraCuota(n, i), extraCuota(n, i)])
+    .filter(d => d[1] > 0);
+  (S.extra_debts || []).filter(d => d.cuotas >= 1 && i >= d.start && i < d.start + d.cuotas)
+    .forEach(d => rows.push([d.name + ' (registrada)', d.cuota, 0, 'extra:' + d.id]));
+  (S.extra_debts || []).filter(d => !(d.cuotas >= 1) && d.due_date).forEach(d => {
+    if (mesDeFecha(d.due_date) !== i) return;
+    const restante = Math.max((d.total || 0) - (d.abonado || 0), 0);
+    if (restante > 0) rows.push([d.name + ' (promised)', restante, 0, 'extra:' + d.id]);
+  });
+  return rows;
+}
+
+function paymentRecords() {
+  return Array.isArray(S.payment_check_records) ? S.payment_check_records : [];
+}
+
+function latePaymentsPaidIn(month) {
+  return paymentRecords().filter(r => r.paid_month === month && r.month !== month);
+}
+
+function pendingDebtRowsBefore(i) {
+  const checks = new Set(S.checks || []);
+  const pending = [];
+  for (let dueIndex = 0; dueIndex < i; dueIndex += 1) {
+    const dueMonth = monthKey(dueIndex);
+    for (const row of debtRowsForMonth(dueIndex)) {
+      if (checks.has(`${row[0]}|${dueMonth}`)) continue;
+      pending.push({ row, dueMonth });
+    }
+  }
+  return pending;
+}
+
 function renderInicio() {
   const sel = $('#monthSel');
   if (!sel.options.length) {
@@ -2985,23 +3020,12 @@ function renderInicio() {
   MES = i;
   const p = S.plan;
   const ingreso = ingresoDelMes(i);
-  const deudas = Object.entries(p.creditors)
-    .map(([n, arr]) => [n, cuotaPlanMes(n, i) + extraCuota(n, i), extraCuota(n, i)])
-    .filter(d => d[1] > 0);
-  (S.extra_debts || []).filter(d => d.cuotas >= 1 && i >= d.start && i < d.start + d.cuotas)
-    .forEach(d => deudas.push([d.name + ' (registrada)', d.cuota, 0, 'extra:' + d.id]));
-  // deudas libres con fecha de pago prometida que caen en el mes seleccionado
-  const mesSel = p.months[i];
-  (S.extra_debts || []).filter(d => !(d.cuotas >= 1) && d.due_date)
-    .forEach(d => {
-      // due_date guardado como 'YYYY-MM-DD' o como índice de mes; comparar por mes
-      const mesDue = mesDeFecha(d.due_date);
-      if (mesDue === i) {
-        const restante = Math.max(d.total - (d.abonado || 0), 0);
-        if (restante > 0) deudas.push([d.name + ' (promised)', restante, 0, 'extra:' + d.id]);
-      }
-    });
-  const totalDeudas = deudas.reduce((s, d) => s + d[1], 0);
+  const deudas = debtRowsForMonth(i);
+  const currentMonthKey = monthKey(i);
+  const latePaidRows = latePaymentsPaidIn(currentMonthKey);
+  const latePaidTotal = latePaidRows.reduce((sum, r) => sum + (+r.valor || 0), 0);
+  const currentDebtTotal = deudas.reduce((sum, d) => sum + d[1], 0);
+  const totalDeudas = currentDebtTotal + latePaidTotal;
   // NEEDS = suma de "Life & services" (todo lo que agregues va aquí),
   //         EXCEPTO el aporte al fondo de empresa (método 'Fondo'), que cuenta como Savings.
   const needs = (S.servicios || [])
@@ -3038,6 +3062,7 @@ function renderInicio() {
 
   $('#pagosTable').innerHTML =
     deudas.map(d => `<tr><td>${d[0]}${d[2] > 0 ? ` <small class="grew" title="incluye compra a cuotas">📈 +${fmt(d[2])}</small>` : ''}</td><td class="num">${fmt(d[1])}</td></tr>`).join('') +
+    latePaidRows.map(r => `<tr class="late-payment-row"><td>↳ ${esc(r.item)} <small>overdue from ${esc(r.month)}</small></td><td class="num">${fmt(+r.valor || 0)}</td></tr>`).join('') +
     `<tr><th>Total debt</th><th class="num">${fmt(totalDeudas)}</th></tr>`;
 
   const dPct = totalDeudas / ingreso;
@@ -3429,22 +3454,25 @@ function renderChecklist(i, deudas) {
       <span class="cval">${fmt(s.amount)}</span></div>`;
   };
   // fila de deuda: lleva debt_id y valor para abonar de verdad
-  const debtRow = (d) => {
+  const debtRow = (d, meta = {}) => {
     const [item, val, , extraTag] = d;
+    const dueMonth = meta.dueMonth || mk;
+    const paidMonth = meta.paidMonth || mk;
+    const overdue = dueMonth !== paidMonth;
     const debtName = CRED_TO_DEBT[item] || item;
     const debt = S.debts.find(x => x.name === debtName);
-    const paid = checks.has(`${item}|${mk}`);
+    const paid = checks.has(`${item}|${dueMonth}`);
     // extraTag tipo 'extra:ID' -> deuda registrada prometida (abona a esa deuda)
     const extraAttr = extraTag ? ` data-extra="${extraTag.split(':')[1]}"` : '';
     const hits = (debt || extraTag) ? ' · hits the boss' : '';
     // abono real al jefe = pago del mes − cargos fijos (seguro/manejo NO bajan la deuda)
     const abono = Math.max(val - (extraTag ? 0 : costoFijoMes(item, MES)), 0);
-    return `<div class="check-item debt ${paid ? 'paid' : ''}" data-item="${item}" data-mk="${mk}"
+    return `<div class="check-item debt ${paid ? 'paid' : ''} ${overdue ? 'overdue-debt' : ''}" data-item="${item}" data-mk="${dueMonth}" data-paid-month="${paidMonth}"
             data-debt="${debt ? debt.id : ''}"${extraAttr} data-val="${val}" data-abono="${abono}">
       <div class="box">${paid ? '✓' : ''}</div>
       <div class="cmid">
         <span class="cname">${esc(item)}</span>
-        <small>⚔ ${extraTag ? 'promised payment' : "this month's installment"}${hits}</small>
+        <small>⚔ ${overdue ? `pending from ${esc(dueMonth)}` : (extraTag ? 'promised payment' : "this month's installment")}${hits}</small>
       </div>
       <span class="cval">${fmt(val)}</span></div>`;
   };
@@ -3453,8 +3481,18 @@ function renderChecklist(i, deudas) {
   const serviciosVisibles = (S.servicios || []).filter(s => s.method !== 'Fondo');
   $('#checkServicios').innerHTML = serviciosVisibles.map(svcRow).join('')
     + `<button class="btn-add-svc" id="addServiceBtn">+ Add service</button>`;
-  $('#checkDeudas').innerHTML = deudas.map(debtRow).join('');
-  const total = serviciosVisibles.length + deudas.length;
+  const pending = pendingDebtRowsBefore(i);
+  const pendingHtml = pending.length ? `
+    <div class="pending-debt-header">
+      <span><b>⚠ Pending debt payments</b><small>Unpaid installments from previous months</small></span>
+      <strong>${pending.length}</strong>
+    </div>
+    <div class="pending-debt-list">${pending.map(x => debtRow(x.row, {
+      dueMonth: x.dueMonth,
+      paidMonth: mk
+    })).join('')}</div>` : '';
+  $('#checkDeudas').innerHTML = deudas.map(d => debtRow(d)).join('') + pendingHtml;
+  const total = serviciosVisibles.length + deudas.length + pending.length;
   // "pagados" = marcados con check + servicios en tarjeta (que cuentan como cubiertos solos)
   const marcados = [...checks].filter(c => c.endsWith('|' + mk)).length;
   const enTarjeta = serviciosVisibles.filter(s => payMethod(s.method).card && !checks.has(`${s.name}|${mk}`)).length;
@@ -3479,6 +3517,7 @@ function renderIncomeBar(i, mk, deudas) {
     if (checks.has(`${s.name}|${mk}`)) pagado += s.amount;
   }
   for (const d of deudas) if (checks.has(`${d[0]}|${mk}`)) pagado += d[1];
+  for (const r of latePaymentsPaidIn(mk)) pagado += (+r.valor || 0);
   // + gastos sueltos del mes que no son a crédito
   const mesKey = S.plan.months[i];
   for (const x of (S.expenses || []))
@@ -3572,7 +3611,11 @@ document.addEventListener('click', async (e) => {
     return;
   }
   const estabaMarcado = c.classList.contains('paid');
-  const body = { item: c.dataset.item, month: c.dataset.mk };
+  const body = {
+    item: c.dataset.item,
+    month: c.dataset.mk,
+    paid_month: c.dataset.paidMonth || c.dataset.mk
+  };
   // el jefe baja por el abono real (data-abono), no por el pago total con seguro/manejo
   const abonoReal = c.dataset.abono != null ? +c.dataset.abono : +c.dataset.val;
   if (c.dataset.debt) { body.debt_id = +c.dataset.debt; body.valor = abonoReal || 0; }
@@ -3582,7 +3625,10 @@ document.addEventListener('click', async (e) => {
   await load();
   // feedback claro cuando el check de una deuda (jefe o registrada) abona de verdad
   if (!estabaMarcado && (c.dataset.debt || c.dataset.extra) && (body.valor > 0)) {
-    toast(`💥 ${fmt(body.valor)} paid — debt reduced.`);
+    const late = body.paid_month !== body.month;
+    toast(late
+      ? `✓ Overdue payment from ${body.month} paid in ${body.paid_month} — ${fmt(body.valor)} reduced from debt.`
+      : `💥 ${fmt(body.valor)} paid — debt reduced.`);
   }
   // si marcó una deuda (principal o prometida) y la derrotó, animar
   if ((c.dataset.debt || c.dataset.extra) && !estabaMarcado) {

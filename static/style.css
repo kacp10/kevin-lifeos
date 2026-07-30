@@ -4607,3 +4607,18 @@ body.hunter-profile-open {
   margin: 3px 0 1px;
   font-size: .8rem;
 }
+
+
+/* ===== V155 · Pending debt payments ===== */
+.pending-debt-header{margin:14px 0 8px;padding:10px 12px;border:1px solid rgba(245,185,66,.28);border-radius:12px;background:rgba(245,185,66,.055);display:flex;align-items:center;justify-content:space-between;gap:12px}
+.pending-debt-header span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pending-debt-header b{color:#f5c45d;font-size:.88rem;letter-spacing:.01em}
+.pending-debt-header small{color:var(--muted,#9892ad);font-size:.72rem}
+.pending-debt-header strong{min-width:27px;height:27px;border-radius:999px;display:grid;place-items:center;background:rgba(245,185,66,.14);border:1px solid rgba(245,185,66,.32);color:#f7ce79;font-size:.78rem}
+.pending-debt-list{display:grid;gap:7px}
+.check-item.overdue-debt{border-color:rgba(245,185,66,.22);background:rgba(245,185,66,.035)}
+.check-item.overdue-debt .box{border-color:rgba(245,185,66,.55)}
+.check-item.overdue-debt .cmid small{color:#d5ad60}
+.late-payment-row td{color:#d9c17f}
+.late-payment-row small{color:var(--muted,#9892ad);font-size:.68rem}
+@media(max-width:640px){.pending-debt-header{padding:9px 10px}.pending-debt-header small{font-size:.68rem}}
