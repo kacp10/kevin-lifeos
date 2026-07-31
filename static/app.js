@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 156;
+const FRONT_V = 157;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1587,7 +1587,7 @@ const EXERCISE_DB = {
   rower:         { n:'Rowing Machine', m:'Cardio / Back', img:'Rowing_Stationary', grp:'cardio', eq:'Rower', mode:'duration', step:60 }
 };
 // list item = [exerciseId, sets, repsRange, restSeconds]
-const WORKOUT_PLAN = {
+const CLASSIC_WORKOUT_PLAN = {
   1: { title: '💪 Chest + Triceps', list: [['bench',4,'8-12',90],['incline_db',3,'10-12',75],['flyes',3,'12-15',60],['tri_pushdown',3,'10-12',60],['tri_ext',3,'12-15',60]] },
   2: { title: '🦾 Back + Biceps',   list: [['lat_pull',4,'8-12',90],['bb_row',4,'8-10',90],['cable_row',3,'10-12',75],['bb_curl',3,'8-12',60],['hammer',3,'10-12',60]] },
   3: { title: '🦵 Legs',            list: [['squat',4,'8-12',120],['leg_press',3,'10-12',90],['rdl',3,'10-12',90],['leg_curl',3,'12-15',60],['calf',4,'15-20',45]] },
@@ -1596,7 +1596,17 @@ const WORKOUT_PLAN = {
   0: { rest: true, title: '🌿 Rest day' },
   6: { rest: true, title: '🌿 Rest day' }
 };
+const PPL5_WORKOUT_PLAN = {
+  1: { title: '🔥 Push A · Chest focus', list: [['bench',4,'6-10',120],['incline_db',3,'8-12',90],['db_press',3,'8-12',90],['lateral',3,'12-20',60],['tri_pushdown',3,'10-15',60]] },
+  2: { title: '🦾 Pull A · Back width', list: [['pullups',3,'6-10',120],['lat_pull',3,'8-12',90],['cable_row',3,'8-12',90],['face_pull',3,'12-20',60],['bb_curl',3,'8-12',60],['hammer',2,'10-15',60]] },
+  3: { title: '🦵 Legs + Abs', list: [['squat',4,'6-10',120],['leg_press',3,'10-15',90],['rdl',3,'8-12',90],['leg_curl',3,'10-15',75],['calf',4,'12-20',60],['hanging',3,'8-15',60],['plank',3,'30-60s',45]] },
+  4: { title: '⚡ Push B · Shoulders focus', list: [['incline_db',4,'8-12',90],['machine_bench',3,'8-12',90],['db_press',4,'6-10',120],['lateral',4,'12-20',60],['rope_overhead',3,'10-15',60]] },
+  5: { title: '🏴 Pull B · Back thickness', list: [['bb_row',4,'6-10',120],['chest_row',3,'8-12',90],['straight_pull',3,'10-15',75],['reverse_fly',3,'12-20',60],['preacher',3,'8-12',60],['reverse_curl',2,'10-15',60]] },
+  0: { rest: true, title: '🌿 Rest day' },
+  6: { rest: true, title: '🌿 Rest day' }
+};
 const DAY_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+function activeWorkoutPlan() { return getGymPrefs().routineMode === 'ppl5' ? PPL5_WORKOUT_PLAN : CLASSIC_WORKOUT_PLAN; }
 let GYM_PLAN_SEL = null;   // null = today's plan
 
 function gymSetsFor(exId, dateStr) {
@@ -1721,7 +1731,7 @@ function gymBlockAnalysis() {
 }
 function suggestedBlockSwaps(analysis) {
   const out=[];
-  Object.entries(WORKOUT_PLAN).forEach(([wd,plan])=>{
+  Object.entries(activeWorkoutPlan()).forEach(([wd,plan])=>{
     if(!plan.list)return;
     plan.list.forEach(([orig])=>{
       const current=effectiveExId(+wd,orig);
@@ -1838,8 +1848,9 @@ function targetLabel(id, reps) { const m=exerciseMode(id); return (m==='duration
 function renderWorkout() {
   const box=document.getElementById('workoutBox'); if(!box)return;
   const sel=document.getElementById('workoutDay'), todayWd=new Date().getDay();
-  if(sel&&!sel.dataset.ready){ let opts=`<option value="today">Today · ${DAY_NAMES[todayWd]}</option>`; [1,2,3,4,5].forEach(w=>opts+=`<option value="${w}">${WORKOUT_PLAN[w].title}</option>`); opts+=`<option value="rest">🌿 Rest day</option>`; sel.innerHTML=opts; sel.dataset.ready='1'; sel.addEventListener('change',()=>{GYM_PLAN_SEL=sel.value;renderWorkout();}); }
-  let wd=(GYM_PLAN_SEL==null||GYM_PLAN_SEL==='today')?todayWd:(GYM_PLAN_SEL==='rest'?0:+GYM_PLAN_SEL), plan=WORKOUT_PLAN[wd]||WORKOUT_PLAN[0];
+  const workoutPlan=activeWorkoutPlan(), planMode=getGymPrefs().routineMode||'classic';
+  if(sel && sel.dataset.planMode!==planMode){ let opts=`<option value="today">Today · ${DAY_NAMES[todayWd]}</option>`; [1,2,3,4,5].forEach(w=>opts+=`<option value="${w}">${workoutPlan[w].title}</option>`); opts+=`<option value="rest">🌿 Rest day</option>`; sel.innerHTML=opts; sel.dataset.ready='1'; sel.dataset.planMode=planMode; sel.value=GYM_PLAN_SEL||'today'; if(!sel.dataset.bound){sel.dataset.bound='1';sel.addEventListener('change',()=>{GYM_PLAN_SEL=sel.value;renderWorkout();});} }
+  let wd=(GYM_PLAN_SEL==null||GYM_PLAN_SEL==='today')?todayWd:(GYM_PLAN_SEL==='rest'?0:+GYM_PLAN_SEL), plan=workoutPlan[wd]||workoutPlan[0];
   const titleEl=document.getElementById('workoutTitle'); if(titleEl) titleEl.textContent=(GYM_PLAN_SEL==null||GYM_PLAN_SEL==='today')?`🔥 Today · ${plan.title.replace(/^\S+\s/,'')}`:plan.title;
   if(plan.rest){ box.innerHTML=`<div class="rest-day"><div class="big">🌿</div><p><b>Rest day.</b> Recovery is part of the training arc.</p><p class="hint">Walk, mobility or gentle stretching only.</p></div>`; return; }
   const prefs=gymTimerPrefs(), block=gymBlockState();
@@ -1863,7 +1874,39 @@ function renderWorkout() {
   if(allDone&&(GYM_PLAN_SEL==null||GYM_PLAN_SEL==='today')&&wd===todayWd&&GYM_CELEBRATED_DATE!==hoyLocal()&&!gymCelebratedToday()){GYM_CELEBRATED_DATE=hoyLocal();markGymCelebratedToday().catch(()=>{});showWorkoutCelebration();}
 }
 
+function gymPplPromotionState() {
+  const p=getGymPrefs(), dates=gymAllTrainingDates();
+  const first=dates[0]||p.blockStart||hoyLocal();
+  const weeks=Math.floor(gymDateDiffDays(first)/7)+1;
+  const sessions=dates.length;
+  const latest=gymTrainerLatestCheckin();
+  const hasPain=!!(latest?.pain && !/^(none|no|ninguno|ninguna|sin dolor)$/i.test(String(latest.pain).trim()));
+  const deferred=!!(p.pplPromotionDeferredUntil && p.pplPromotionDeferredUntil>hoyLocal());
+  const eligible=p.routineMode!=='ppl5' && !p.pplPromotionAccepted && !p.pplPromotionShowing && !hasPain && !deferred && weeks>=6 && sessions>=20;
+  const surpriseGate=sessions>=24 || ((sessions + Number(hoyLocal().replace(/-/g,''))) % 3 === 0);
+  return {eligible:eligible&&surpriseGate,weeks,sessions,hasPain};
+}
+async function activatePplRoutine() {
+  const p=getGymPrefs();
+  p.routineMode='ppl5'; p.pplPromotionAccepted=true; p.pplPromotionAcceptedAt=hoyLocal();
+  p.blockStart=hoyLocal(); p.blockReviewedStart=null; p.blockNumber=(+p.blockNumber||1)+1;
+  p.swaps={}; p.setcount={}; delete p.pplPromotionShowing; delete p.pplPromotionDeferredUntil; delete p.deloadUntil;
+  await saveGymPrefs(p); GYM_PLAN_SEL='today'; renderWorkout();
+}
+function maybeShowPplPromotion() {
+  const state=gymPplPromotionState(); if(!state.eligible)return false;
+  const p=getGymPrefs(); p.pplPromotionShowing=true; saveGymPrefs(p).catch(()=>{});
+  const back=document.createElement('div'); back.className='modal-back ppl-promotion-back';
+  back.innerHTML=`<div class="modal-card ppl-promotion-card"><small>◆ NEW TRAINING ARC</small><div class="ppl-promotion-mark">V</div><h3>Felicidades. Estás en otro nivel.</h3><p>Es hora de entrenar como un hombre de verdad.</p><div class="ppl-promotion-meta"><span>${state.weeks}+ weeks</span><span>${state.sessions} sessions</span><span>5-day PPL</span></div><div class="ppl-promotion-week"><b>MON</b><span>Push A</span><b>TUE</b><span>Pull A</span><b>WED</b><span>Legs + Abs</span><b>THU</b><span>Push B</span><b>FRI</b><span>Pull B</span></div><p class="ppl-promotion-note">Your history, weights and measurements stay intact. The routine changes only if you accept.</p><div class="ppl-promotion-actions"><button data-ppl-later>Not yet</button><button data-ppl-start>Start PPL arc</button></div></div>`;
+  document.body.appendChild(back); requestAnimationFrame(()=>back.classList.add('show'));
+  const close=()=>{back.classList.remove('show');setTimeout(()=>back.remove(),280)};
+  back.querySelector('[data-ppl-later]').onclick=async()=>{const q=getGymPrefs();q.pplPromotionShowing=false;const d=new Date();d.setDate(d.getDate()+14);q.pplPromotionDeferredUntil=d.toISOString().slice(0,10);await saveGymPrefs(q);close();toast('PPL promotion saved for later');};
+  back.querySelector('[data-ppl-start]').onclick=async()=>{const btn=back.querySelector('[data-ppl-start]');btn.disabled=true;btn.textContent='Activating…';await activatePplRoutine();close();toast('🔥 PPL training arc activated');};
+  return true;
+}
+
 function showWorkoutCelebration() {
+  if (maybeShowPplPromotion()) return;
   const back = document.createElement('div');
   back.className = 'modal-back celebrate-back';
   back.innerHTML = `<div class="modal-card celebrate-card">
@@ -1921,7 +1964,7 @@ document.getElementById('workoutBox')?.addEventListener('click', async (e) => {
   const adjBtn=e.target.closest('[data-adj]'); if(adjBtn){const wd=adjBtn.dataset.wd,orig=adjBtn.dataset.orig,base=+adjBtn.dataset.base,delta=+adjBtn.dataset.adj,p=getGymPrefs();p.setcount=p.setcount||{};const key=slotKey(wd,orig),cur=p.setcount[key]!=null?p.setcount[key]:base,today=gymSetsFor(effectiveExId(wd,orig),hoyLocal()),next=Math.max(Math.max(1,today.length),Math.min(10,cur+delta));if(delta<0&&next>=cur){toast('You already logged that many sets today');return;}p.setcount[key]=next;await saveGymPrefs(p);renderWorkout();return;}
   const log=e.target.closest('[data-log]');
   if(log){
-    const todayPlan=WORKOUT_PLAN[new Date().getDay()]; if(todayPlan&&todayPlan.rest){toast('Today is your rest day 🌿');return;}
+    const todayPlan=activeWorkoutPlan()[new Date().getDay()]; if(todayPlan&&todayPlan.rest){toast('Today is your rest day 🌿');return;}
     const card=log.closest('.ex-card'), row=log.closest('.set-row'), mode=exerciseMode(log.dataset.log), wInput=row.querySelector('.set-w'), rInput=row.querySelector('.set-r');
     const w=parseFloat(String(wInput?.value||'0').replace(',','.'))||0, r=parseInt(rInput?.value,10)||0;
     if(r<=0){toast(mode==='duration'||mode==='duration_weight'?'Type the seconds first ⏱':'Type the reps first 💪');return;}
