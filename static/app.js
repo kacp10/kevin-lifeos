@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 155;
+const FRONT_V = 156;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -4592,6 +4592,96 @@ async function memoryCaptureConcept(prefill={}) {
   toast('🧠 Concept saved to Memory Forge.');
   return true;
 }
+
+async function memoryCaptureStudySessionConcepts(prefill={}) {
+  const start = await modal({
+    icon:'🧠',
+    title:'Save concepts from this session?',
+    text:'Optional. Add every concept worth remembering, one by one. Memory Forge will keep each concept as a separate study item.',
+    okText:'＋ Add concepts',
+    cancelText:'No concepts'
+  });
+  if (!start) return { saved:0, skipped:true };
+
+  const pending=[];
+  const folders=['Data Analytics','Programming','Cybersecurity','Hunter Skill Academy','English','Other'];
+  const selected=folders.includes(prefill.folder)?prefill.folder:'Other';
+
+  while (true) {
+    const list = pending.length
+      ? `<div class="memory-session-concepts"><b>${pending.length} concept${pending.length===1?'':'s'} ready</b>${pending.map((x,i)=>`<span>${i+1}. ${esc(x.concept)}</span>`).join('')}</div>`
+      : 'Add the first concept. Keep it short and specific.';
+    const r=await modal({
+      icon:'🧠',
+      title: pending.length ? 'Add another concept' : 'Session concepts',
+      text:list,
+      fields:[
+        {type:'text',label:'Concept',placeholder:'Example: INNER JOIN'},
+        {type:'textarea',rows:3,label:'What I understood · optional',placeholder:'Short explanation in your own words'},
+        {type:'select',label:'Folder',value:selected,options:folders.map(v=>({v,t:v}))},
+        {type:'text',label:'Source · optional',value:prefill.source||'',placeholder:'Course, lesson or topic'},
+        {type:'text',label:'Tags · optional',value:(prefill.tags||[]).join(', '),placeholder:'sql, fundamentals'}
+      ],
+      okText:'＋ Add concept',
+      extraBtn: pending.length ? 'Done · save session' : null,
+      cancelText: pending.length ? 'Cancel session' : 'No concepts',
+      lockClose:true,
+      draftKey:'study_session_concept'
+    });
+
+    if (r === 'EXTRA') break;
+    if (r === null) {
+      if (!pending.length) return { saved:0, skipped:true };
+      const discard=await modal({
+        icon:'⚠',title:'Discard session concepts?',
+        text:`You added ${pending.length} concept${pending.length===1?'':'s'}. They have not been saved yet.`,
+        okText:'Discard',cancelText:'Keep editing',danger:true,lockClose:true
+      });
+      if (discard) return { saved:0, skipped:true };
+      continue;
+    }
+
+    const concept=String(r[0]||'').trim();
+    if (!concept) { toast('Write a concept before adding it.'); continue; }
+    const key=concept.toLowerCase();
+    if (pending.some(x=>x.concept.toLowerCase()===key)) {
+      toast('That concept is already in this session.');
+      continue;
+    }
+    pending.push({
+      concept,
+      explanation:String(r[1]||'').trim(),
+      folder:r[2]==='Other'?(prefill.folder||'General'):r[2],
+      source:String(r[3]||prefill.source||'').trim(),
+      tags:String(r[4]||'').split(',').map(x=>x.trim()).filter(Boolean).slice(0,12)
+    });
+  }
+
+  if (!pending.length) return { saved:0, skipped:true };
+  const state=memoryForgeRead();
+  const existing=new Set((state.concepts||[]).map(x=>[String(x.concept||'').trim().toLowerCase(),String(x.source||'').trim().toLowerCase()].join('|')));
+  let saved=0;
+  for (const item of pending) {
+    const dedupe=[item.concept.toLowerCase(),item.source.toLowerCase()].join('|');
+    if (existing.has(dedupe)) continue;
+    state.concepts.push({
+      id:`concept-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,
+      concept:item.concept,
+      explanation:item.explanation,
+      folder:item.folder,
+      source:item.source,
+      tags:item.tags,
+      created_at:hoyLocal(),
+      status:'raw'
+    });
+    existing.add(dedupe);
+    saved++;
+  }
+  if (saved) await memoryForgeSave(state);
+  toast(saved ? `🧠 ${saved} concept${saved===1?'':'s'} saved to Memory Forge.` : 'Those concepts were already saved.');
+  return { saved, skipped:false };
+}
+
 function memorySourceId(prefix='',...parts){
   const raw=[prefix,...parts].map(x=>String(x??'').trim().toLowerCase()).join('|');
   let hash=2166136261;
@@ -7134,8 +7224,11 @@ document.addEventListener('click', async (e) => {
         const nv=Math.max(0,Math.min(100,parseInt(String(r[0]).replace(/[^0-9]/g,''),10)||0));
         await api('/api/career/course',{body:{id:course.id,field:'pct',value:nv}});
         toast(`📈 ${course.title} updated to ${nv}%. Career stage progress stays unchanged.`);
-        const saveConcept = await modal({icon:'🧠',title:'Save something to remember?',text:'Optional. Capture one concept from this study session for Memory Forge.',okText:'Save concept',cancelText:'Not now'});
-        if(saveConcept) await memoryCaptureConcept({folder:memoryFolderFromCareer(active.name),source:course.title,tags:[active.name,course.title]});
+        await memoryCaptureStudySessionConcepts({
+          folder:memoryFolderFromCareer(active.name),
+          source:course.title,
+          tags:[active.name,course.title]
+        });
       } else if (active) {
         toast('Add an active course to this career before logging study progress.');
         return;
