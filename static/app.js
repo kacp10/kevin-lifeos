@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 157;
+const FRONT_V = 158;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -6764,6 +6764,94 @@ function bloqueEstudio(pf) {
     : 'Advance one active course + take notes.';
 }
 
+// V158 · Smart restoration of deleted default Life activities.
+// A restored item is never recreated as an "extra": its original key returns,
+// so English, Study, Gym, Reading and every linked progress flow remain intact.
+function missingDefaultActivitiesForDay(iso, wd) {
+  const weeklyShiftKey = (S.shifts || {})[wd] || 'libre';
+  const shiftKey = isLifeRestDate(iso) ? 'descanso' : weeklyShiftKey;
+  const plan = actividadesDelDia(wd, shiftKey);
+  const hiddenWeek = new Set(S.routine_hidden || []);
+  const hiddenDay = new Set(S.routine_hidden_day || []);
+  return (plan.acts || []).filter(a =>
+    hiddenWeek.has(`${wd}|${a.key}`) || hiddenDay.has(`${iso}|${a.key}`)
+  ).map(a => {
+    const dayHidden = hiddenDay.has(`${iso}|${a.key}`);
+    const hiddenWeekdays = (S.routine_hidden || [])
+      .map(String)
+      .filter(x => x.endsWith(`|${a.key}`))
+      .map(x => Number(x.split('|')[0]))
+      .filter(Number.isInteger);
+    const recurring = hiddenWeek.has(`${wd}|${a.key}`);
+    const weekdaySet = [...new Set(hiddenWeekdays)];
+    return {
+      ...a,
+      iso,
+      wd,
+      dayHidden,
+      recurring,
+      // Removing the same default across several weekdays normally came from
+      // "Monday to Friday". Restore that original schedule in one action.
+      restoreWeekdays: weekdaySet.length > 1 ? weekdaySet : (recurring ? [wd] : []),
+      scopeLabel: weekdaySet.length > 1
+        ? 'original weekday schedule'
+        : recurring ? `every ${DIAS[wd]}` : 'today only'
+    };
+  });
+}
+
+async function restoreDefaultLifeActivity(item) {
+  if (!item) return false;
+  try {
+    if (item.dayHidden) {
+      await api('/api/routine_hide', { body: {
+        akey: item.key, scope: 'day', weekday: item.wd, day: item.iso
+      }});
+    }
+    for (const weekday of (item.restoreWeekdays || [])) {
+      await api('/api/routine_hide', { body: {
+        akey: item.key, scope: 'week', weekday, day: item.iso
+      }});
+    }
+    await load();
+    toast(`↺ ${item.title} restored with its original Life flow.`);
+    return true;
+  } catch (err) {
+    console.error('Default Life activity restore failed', err);
+    toast('The original activity could not be restored. Try again.', 'err');
+    return false;
+  }
+}
+
+async function openCustomLifeActivityModal({iso, wd, sugerencia}) {
+  const dayName = DIAS[wd];
+  const habitOpts = [{ v: '', t: '— Free (no habit)' }]
+    .concat((S.habits || []).map(h => ({ v: h.name, t: '🔥 ' + h.name })));
+  const r = await modal({ icon: '➕', title: 'Add activity',
+    text: `Add something. ${sugerencia}. Pick which habit it counts for (or Free), and the scope.`,
+    fields: [
+      { type: 'text', placeholder: 'Time (e.g. 20:00)' },
+      { type: 'text', placeholder: 'Activity name' },
+      { type: 'text', placeholder: 'Short note (optional)' },
+      { type: 'select', options: habitOpts },
+      { type: 'select', options: [
+        { v: 'day', t: `Just this ${dayName} (${iso})` },
+        { v: 'week', t: `Every ${dayName} (recurring)` },
+        { v: 'mf', t: 'Monday to Friday (weekdays)' }
+      ] }
+    ], okText: 'Add' });
+  if (!r || !r[1].trim()) return false;
+  const body = { time: r[0], title: r[1], descr: r[2], habit: r[3] || '' };
+  const scopeAdd = r[4] || 'day';
+  if (scopeAdd === 'week') body.weekday = wd;
+  else if (scopeAdd === 'mf') body.weekday = -2;
+  else body.day = iso;
+  await api('/api/routine_extra/new', { body });
+  toast(scopeAdd === 'week' ? `➕ Added every ${dayName}` : scopeAdd === 'mf' ? '➕ Added Monday to Friday' : '➕ Added for this day only');
+  await load();
+  return true;
+}
+
 let CUR_WD = 0;
 let _routineBusy = false;   // seguro: evita procesar dos veces el mismo toque en la rutina
 // Convierte una etiqueta de hora a un número ordenable (minutos desde medianoche).
@@ -7198,35 +7286,45 @@ document.addEventListener('click', async (e) => {
   }
 
   if (e.target.id === 'addRoutineBtn') {
-    const sh = SHIFTS[(S.shifts || {})[CUR_WD] || 'libre'];
+    const rawPick = $('#dayPick').value || '';
+    const [iso, wdRaw] = rawPick.split('|');
+    const wd = Number.isInteger(Number(wdRaw)) ? Number(wdRaw) : CUR_WD;
+    const sh = SHIFTS[(S.shifts || {})[wd] || 'libre'];
     const sugerencia = (!sh || !sh.work) ? 'Free day — any time works'
       : `Free after ${sh.work[1] + 1}:00`;
-    const iso = ($('#dayPick').value || '').split('|')[0];
-    const dayName = DIAS[CUR_WD];
-    const habitOpts = [{ v: '', t: '— Free (no habit)' }]
-      .concat((S.habits || []).map(h => ({ v: h.name, t: '🔥 ' + h.name })));
-    const r = await modal({ icon: '➕', title: 'Add activity',
-      text: `Add something. ${sugerencia}. Pick which habit it counts for (or Free), and the scope.`,
-      fields: [
-        { type: 'text', placeholder: 'Time (e.g. 20:00)' },
-        { type: 'text', placeholder: 'Activity name' },
-        { type: 'text', placeholder: 'Short note (optional)' },
-        { type: 'select', options: habitOpts },
-        { type: 'select', options: [
-          { v: 'day', t: `Just this ${dayName} (${iso})` },
-          { v: 'week', t: `Every ${dayName} (recurring)` },
-          { v: 'mf', t: 'Monday to Friday (weekdays)' }
-        ] }
-      ], okText: 'Add' });
-    if (!r || !r[1].trim()) return;
-    const body = { time: r[0], title: r[1], descr: r[2], habit: r[3] || '' };
-    const scopeAdd = r[4] || 'day';
-    if (scopeAdd === 'week') body.weekday = CUR_WD;
-    else if (scopeAdd === 'mf') body.weekday = -2;
-    else body.day = iso;
-    await api('/api/routine_extra/new', { body });
-    toast(scopeAdd === 'week' ? `➕ Added every ${dayName}` : scopeAdd === 'mf' ? '➕ Added Monday to Friday' : '➕ Added for this day only');
-    load();
+    const missing = missingDefaultActivitiesForDay(iso, wd);
+
+    if (missing.length) {
+      const options = missing.map((item, index) => ({
+        v: `restore:${index}`,
+        t: `↺ Restore ${item.title} · ${item.scopeLabel}`
+      }));
+      options.push({ v: 'custom', t: '＋ Create a new custom activity' });
+      const choice = await modal({
+        icon: '↺',
+        title: 'Add or restore activity',
+        text: `<b>${missing.length} original activit${missing.length === 1 ? 'y is' : 'ies are'} missing from ${esc(DIAS[wd])}.</b><br>Restoring one brings back its real Life behavior: course progress, concept capture, English mission, Gym flow and linked Habits.`,
+        fields: [{ type: 'select', label: 'Choose an action', options }],
+        okText: 'Continue'
+      });
+      if (choice === null) return;
+      const selected = String(choice[0] || '');
+      if (selected.startsWith('restore:')) {
+        const item = missing[Number(selected.split(':')[1])];
+        if (!item) { toast('That original activity is no longer missing.'); return; }
+        const confirmRestore = await modal({
+          icon: '↺',
+          title: `Restore ${item.title}`,
+          text: `This will restore the original activity for <b>${esc(item.scopeLabel)}</b>. It will not create a generic copy.`,
+          okText: 'Restore original'
+        });
+        if (confirmRestore === null) return;
+        await restoreDefaultLifeActivity(item);
+        return;
+      }
+    }
+
+    await openCustomLifeActivityModal({ iso, wd, sugerencia });
     return;
   }
 
