@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 158  # V158 Smart Life activity restoration
+VERSION = 159  # V159 Retroactive Haki month closing
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -1844,11 +1844,21 @@ def habit():
 
 @app.post('/api/close_month')
 def close_month():
-    j = request.json
+    j = request.json or {}
+    label = str(j.get('label') or '').strip()
+    month = str(j.get('month') or '').strip()
+    try:
+        pct_value = max(0.0, min(1.0, float(j.get('pct'))))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid monthly Haki percentage'), 400
+    if not label:
+        return jsonify(error='Month label is required'), 400
+    # A past month may be closed later or recalculated after a recovered mark.
+    # INSERT OR REPLACE keeps one definitive Haki result per month.
     db().execute('INSERT OR REPLACE INTO months_history VALUES (?,?)',
-                 (j['label'], float(j['pct'])))
+                 (label, pct_value))
     db().commit()
-    return jsonify(ok=True)
+    return jsonify(ok=True, label=label, month=month, pct=pct_value)
 
 
 @app.post('/api/dream')
