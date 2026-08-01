@@ -4643,3 +4643,15 @@ body.hunter-profile-open {
 .ppl-promotion-actions [data-ppl-start]{background:linear-gradient(135deg,#7650d7,#976ee9);border-color:#a888ff;color:#fff;box-shadow:0 8px 25px rgba(104,68,194,.28)}
 .ppl-promotion-actions button:disabled{opacity:.6}
 @media(max-width:520px){.ppl-promotion-card{padding:24px 17px 18px}.ppl-promotion-actions{grid-template-columns:1fr}.ppl-promotion-week{padding:12px}}
+
+
+/* V159 · Retroactive Haki month navigation */
+.habit-month-navigation{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:8px 0 14px}
+.habit-month-nav-btn,.habit-month-current,.habit-unclosed-jump{min-height:34px;border:1px solid rgba(157,112,255,.35);background:rgba(18,15,29,.88);color:#e9e2ff;border-radius:10px;padding:6px 11px;font:inherit;cursor:pointer}
+.habit-month-nav-btn{width:36px;padding:4px;font-size:22px;line-height:1}
+.habit-month-current:disabled,.habit-month-nav-btn:disabled{opacity:.38;cursor:default}
+.habit-unclosed-jump{border-color:rgba(255,190,64,.55);color:#ffd782;background:rgba(53,38,12,.58)}
+.habit-month-state{font-size:.76rem;padding:6px 9px;border-radius:999px;border:1px solid rgba(255,255,255,.12)}
+.habit-month-state.closed{color:#9ff0bf;background:rgba(30,105,65,.18)}
+.habit-month-state.pending{color:#ffd782;background:rgba(120,82,20,.18)}
+@media(max-width:640px){.habit-month-navigation{gap:6px}.habit-unclosed-jump{width:100%;text-align:center}.habit-month-current{flex:1}}

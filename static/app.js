@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 158;
+const FRONT_V = 159;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -4481,15 +4481,98 @@ function maxHistoricalDisciplineStreak() {
   return Math.max(0, ...(S.habits || []).map(h => maxHistoricalHabitStreak(h, marks)));
 }
 
-function renderHabitos() {
-  const today = new Date();
-  const ym = hoyLocal().slice(0, 7);
-  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
-  const elapsed = today.getDate();
-  const monthName = today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  $('#habitMonthTitle').textContent = 'Habits · ' + monthName;
+let habitViewMonth = hoyLocal().slice(0, 7);
+let habitRetroNoticeShown = false;
 
-  const marks = new Set(S.marks);
+function habitMonthLabel(ym) {
+  const [y, m] = String(ym || '').split('-').map(Number);
+  if (!y || !m) return '';
+  return new Date(y, m - 1, 1, 12).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function shiftHabitMonth(ym, delta) {
+  const [y, m] = String(ym).split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1, 12);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function closedHakiMonth(label) {
+  return (S.history || []).find(h => String(h.label || '') === String(label || '')) || null;
+}
+
+function ensureHabitMonthNavigation() {
+  const title = $('#habitMonthTitle');
+  if (!title || $('#habitMonthNavigation')) return;
+  const nav = document.createElement('div');
+  nav.id = 'habitMonthNavigation';
+  nav.className = 'habit-month-navigation';
+  title.insertAdjacentElement('afterend', nav);
+}
+
+function latestUnclosedPastHabitMonth() {
+  const current = hoyLocal().slice(0, 7);
+  const firstMark = (S.marks || []).map(k => String(k).split('|')[1]).filter(Boolean).sort()[0];
+  if (!firstMark) return null;
+  const earliest = firstMark.slice(0, 7);
+  let cursor = shiftHabitMonth(current, -1);
+  let guard = 0;
+  while (cursor >= earliest && guard++ < 120) {
+    if (!closedHakiMonth(habitMonthLabel(cursor))) return cursor;
+    cursor = shiftHabitMonth(cursor, -1);
+  }
+  return null;
+}
+
+function monthlyHakiSnapshot(ym) {
+  const todayIso = hoyLocal();
+  const currentYm = todayIso.slice(0, 7);
+  const [year, month] = ym.split('-').map(Number);
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const elapsed = ym === currentYm ? Number(todayIso.slice(8, 10)) : (ym < currentYm ? daysInMonth : 0);
+  const marks = new Set(S.marks || []);
+  const restDates = lifeRestDates();
+  let done = 0;
+  let denominator = 0;
+  const eligibleCalendarDays = new Set();
+
+  for (const h of (S.habits || [])) {
+    const exercise = h.name === 'Exercise';
+    for (let d = 1; d <= elapsed; d++) {
+      const iso = `${ym}-${String(d).padStart(2, '0')}`;
+      const dow = new Date(iso + 'T12:00:00').getDay();
+      const rest = dow === 0 || (exercise && dow === 6) || restDates.has(iso);
+      if (rest) continue;
+      denominator += 1;
+      eligibleCalendarDays.add(iso);
+      if (marks.has(`${h.id}|${iso}`)) done += 1;
+    }
+  }
+  return { done, denominator, elapsed, daysInMonth, eligibleDays: eligibleCalendarDays.size, pct: Math.min(1, done / Math.max(1, denominator)) };
+}
+
+function renderHabitos() {
+  const currentYm = hoyLocal().slice(0, 7);
+  if (!habitViewMonth || habitViewMonth > currentYm) habitViewMonth = currentYm;
+  const ym = habitViewMonth;
+  const [year, month] = ym.split('-').map(Number);
+  const monthName = habitMonthLabel(ym);
+  const snapshot = monthlyHakiSnapshot(ym);
+  const { daysInMonth, elapsed, done, pct: globalPct } = snapshot;
+  const isCurrent = ym === currentYm;
+  const closed = closedHakiMonth(monthName);
+
+  $('#habitMonthTitle').textContent = 'Habits · ' + monthName;
+  ensureHabitMonthNavigation();
+  const nav = $('#habitMonthNavigation');
+  const unclosed = latestUnclosedPastHabitMonth();
+  nav.innerHTML = `
+    <button class="habit-month-nav-btn" data-habit-month-move="-1" aria-label="Previous month">‹</button>
+    <button class="habit-month-current" data-habit-current-month ${isCurrent ? 'disabled' : ''}>${isCurrent ? 'Current month' : 'Return to current'}</button>
+    <button class="habit-month-nav-btn" data-habit-month-move="1" aria-label="Next month" ${isCurrent ? 'disabled' : ''}>›</button>
+    ${closed ? `<span class="habit-month-state closed">✓ Closed at ${pct(Number(closed.pct || 0))}</span>` : (ym < currentYm ? '<span class="habit-month-state pending">Pending close</span>' : '')}
+    ${unclosed && unclosed !== ym ? `<button class="habit-unclosed-jump" data-habit-jump-month="${unclosed}">⚠ Close ${esc(habitMonthLabel(unclosed))}</button>` : ''}`;
+
+  const marks = new Set(S.marks || []);
   let html = '<tr><th></th>';
   for (let d = 1; d <= daysInMonth; d++) html += `<th>${d}</th>`;
   html += '</tr>';
@@ -4502,37 +4585,42 @@ function renderHabitos() {
     for (let d = 1; d <= daysInMonth; d++) {
       const day = `${ym}-${String(d).padStart(2, '0')}`;
       const on = marks.has(`${h.id}|${day}`);
-      const future = d > elapsed;
-      html += `<td class="cell ${on ? 'on' : ''} ${d === elapsed ? 'today' : ''} ${future ? 'future' : ''}"
+      const future = day > hoyLocal();
+      const today = day === hoyLocal();
+      html += `<td class="cell ${on ? 'on' : ''} ${today ? 'today' : ''} ${future ? 'future' : ''}"
                data-h="${h.id}" data-day="${day}" ${future ? 'aria-disabled="true" title="Future days cannot be completed yet"' : ''}>${on ? 'x' : ''}</td>`;
     }
     html += '</tr>';
   });
   $('#habitGrid').innerHTML = html;
 
-  // Monthly score uses only this month's marks, while streaks keep the complete history.
-  const currentMonthMarks = (S.marks || []).filter(key => String(key).split('|')[1]?.startsWith(ym + '-'));
-  const done = currentMonthMarks.length;
-  const restDates = lifeRestDates();
-  let denominator = 0;
-  const eligibleCalendarDays = new Set();
-  for (const h of (S.habits || [])) {
-    const exercise = h.name === 'Exercise';
-    for (let d = 1; d <= elapsed; d++) {
-      const iso = `${ym}-${String(d).padStart(2, '0')}`;
-      const dow = new Date(iso + 'T12:00:00').getDay();
-      const rest = dow === 0 || (exercise && dow === 6) || restDates.has(iso);
-      if (!rest) { denominator++; eligibleCalendarDays.add(iso); }
-    }
-  }
-  const globalPct = Math.min(1, done / Math.max(1, denominator));
   $('#habitStats').innerHTML = `
-    <div class="card green"><label>Marks this month</label><strong>${done}</strong></div>
+    <div class="card green"><label>Marks in ${monthName}</label><strong>${done}</strong></div>
     <div class="card gold"><label>Haki completion</label><strong>${pct(globalPct)}</strong></div>
-    <div class="card"><label>Active days</label><strong>${eligibleCalendarDays.size} / ${elapsed}</strong></div>`;
-  $('#closeMonth').dataset.pct = globalPct;
-  $('#closeMonth').dataset.label = monthName;
+    <div class="card"><label>Active days</label><strong>${snapshot.eligibleDays} / ${elapsed}</strong></div>`;
+  const closeBtn = $('#closeMonth');
+  closeBtn.dataset.pct = globalPct;
+  closeBtn.dataset.label = monthName;
+  closeBtn.dataset.month = ym;
+  closeBtn.textContent = closed ? 'Update month → Haki history' : (ym < currentYm ? 'Close past month → Haki history' : 'Close month → Haki history');
+
+  if (!habitRetroNoticeShown && unclosed && isCurrent) {
+    habitRetroNoticeShown = true;
+    toast(`⚠ ${habitMonthLabel(unclosed)} is not closed. You can return and calculate its Haki from the saved marks.`, 'warn');
+  }
 }
+
+$('#habitMonthTitle')?.parentElement?.addEventListener('click', (e) => {
+  const move = e.target.closest('[data-habit-month-move]');
+  if (move) {
+    const candidate = shiftHabitMonth(habitViewMonth, Number(move.dataset.habitMonthMove || 0));
+    if (candidate <= hoyLocal().slice(0, 7)) { habitViewMonth = candidate; renderHabitos(); }
+    return;
+  }
+  if (e.target.closest('[data-habit-current-month]')) { habitViewMonth = hoyLocal().slice(0, 7); renderHabitos(); return; }
+  const jump = e.target.closest('[data-habit-jump-month]');
+  if (jump) { habitViewMonth = jump.dataset.habitJumpMonth; renderHabitos(); }
+});
 
 $('#habitGrid').addEventListener('click', async (e) => {
   const c = e.target.closest('.cell');
@@ -4542,27 +4630,33 @@ $('#habitGrid').addEventListener('click', async (e) => {
     return;
   }
   await api('/api/habit', { body: { habit_id: +c.dataset.h, day: c.dataset.day } });
-  // parche local: togglear la marca sin re-pedir TODO el estado (acción muy frecuente)
   const key = `${c.dataset.h}|${c.dataset.day}`;
   S.marks = S.marks || [];
   const i = S.marks.indexOf(key);
   if (i >= 0) S.marks.splice(i, 1); else S.marks.push(key);
   renderHabitos();
   renderAchievements();
-  if (typeof renderGym === 'function') renderGym();   // por si el hábito es Exercise: refresca la racha en Gym también
-  // micro-rebote en la celda recién tocada (tras el re-render)
+  if (typeof renderGym === 'function') renderGym();
   const cell = document.querySelector(`#habitGrid .cell[data-h="${c.dataset.h}"][data-day="${c.dataset.day}"]`);
   if (cell) { cell.classList.remove('cell-pop'); void cell.offsetWidth; cell.classList.add('cell-pop'); }
 });
 
 $('#closeMonth').addEventListener('click', async (e) => {
-  const { label, pct: p } = e.target.dataset;
-  if (!await confirmModal('Cerrar el mes', `You're about to save <b>${label}</b> with <b>${(p * 100).toFixed(1)}%</b> in your Haki history. ${p >= 0.7 ? 'Month conquered! 👑' : 'Didn\'t reach 70%, but keep going.'}`, false)) return;
-  await api('/api/close_month', { body: { label, pct: +p } });
+  const { label, pct: p, month } = e.target.dataset;
+  const previous = closedHakiMonth(label);
+  const action = previous ? 'update' : 'save';
+  const extra = previous
+    ? `This month was previously closed at <b>${(Number(previous.pct || 0) * 100).toFixed(1)}%</b>. Recalculating it will include any retroactive or recovered marks.`
+    : (month < hoyLocal().slice(0, 7) ? 'This is a retroactive close. The score is calculated from the marks already saved for that month.' : '');
+  if (!await confirmModal('Close Haki month', `You're about to ${action} <b>${label}</b> with <b>${(Number(p) * 100).toFixed(1)}%</b>. ${extra} ${Number(p) >= 0.7 ? 'Month conquered! 👑' : 'It did not reach 70%, but the real record will be preserved.'}`, false)) return;
+  await api('/api/close_month', { body: { label, month, pct: Number(p) } });
+  const keepMonth = habitViewMonth;
   await load();
-  if (+p >= 0.7) celebrate({ icon: '👑', title: 'MONTH CONQUERED', text: `<b>${label}</b> closed at <b>${(p * 100).toFixed(0)}%</b>. Your Haki grows stronger.` });
+  habitViewMonth = keepMonth;
+  renderHabitos();
+  toast(`${label} was ${previous ? 'updated' : 'closed'} in Haki history.`, 'ok');
+  if (Number(p) >= 0.7) celebrate({ icon: '👑', title: 'MONTH CONQUERED', text: `<b>${label}</b> closed at <b>${(Number(p) * 100).toFixed(0)}%</b>. Your Haki grows stronger.` });
 });
-
 
 
 /* ====== V152 · MEMORY FORGE & AI BRIDGE ====== */
