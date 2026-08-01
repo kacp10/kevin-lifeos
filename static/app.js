@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 159;
+const FRONT_V = 160;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -4654,8 +4654,19 @@ $('#closeMonth').addEventListener('click', async (e) => {
   await load();
   habitViewMonth = keepMonth;
   renderHabitos();
+
+  // V160: synchronize every rank surface immediately after Haki changes.
+  // Previously the backend was correct but the browser still held the old
+  // Pirate Position state until a full page refresh.
+  applyPirateBrandBadge();
+  if (typeof renderHunterProfile === 'function') renderHunterProfile();
+  if (typeof renderAchievements === 'function') renderAchievements();
+
   toast(`${label} was ${previous ? 'updated' : 'closed'} in Haki history.`, 'ok');
-  if (Number(p) >= 0.7) celebrate({ icon: '👑', title: 'MONTH CONQUERED', text: `<b>${label}</b> closed at <b>${(Number(p) * 100).toFixed(0)}%</b>. Your Haki grows stronger.` });
+  const promotionShown = await checkPirateCelebrations();
+  if (!promotionShown && Number(p) >= 0.7) {
+    celebrate({ icon: '👑', title: 'MONTH CONQUERED', text: `<b>${label}</b> closed at <b>${(Number(p) * 100).toFixed(0)}%</b>. Your Haki grows stronger.` });
+  }
 });
 
 
@@ -6806,12 +6817,22 @@ function actividadesDelDia(wd, shiftKey) {
     : 'Advance one active course + take notes.';
 
   if (shiftKey === 'descanso') {
-    return { rest: true, msg: `Rest ${DIAS[wd]} 🌿`, acts: [
+    const restActs = [
       { t: '9:00', title: 'Wake up without an alarm', d: 'Rest for real. The body also trains by resting.', key: 'wake' },
       { t: '10:00', title: 'Skincare + something tasty', d: 'Take care of your skin, no rush.', key: 'skincare' },
       { t: 'Free', title: 'Light reading or anime', d: 'One book chapter or one episode. Enjoy guilt-free.', key: 'leer' },
       { t: 'Night', title: 'Plan the week', d: 'Check your schedule and adjust your shifts in this tab.', key: 'plan' }
-    ]};
+    ];
+    // Saturday study stays available even on Day off, but the rest date remains
+    // neutral: ignoring this optional session never harms Habits or streaks.
+    if (wd === 5) restActs.splice(2, 0, {
+      t: 'Optional',
+      title: `Study: ${focoLabel}`,
+      d: `${studyDesc} Optional on Saturday Day off — skip it guilt-free; your streak stays protected.`,
+      key: 'estudio',
+      optional: true
+    });
+    return { rest: true, msg: `Rest ${DIAS[wd]} 🌿`, acts: restActs };
   }
 
   const acts = [];
@@ -6837,8 +6858,9 @@ function actividadesDelDia(wd, shiftKey) {
     acts.push({ t: 'Sleep', title: 'Off to bed', d: 'Sleeping well is a habit on your list. Protect it like a payment.', key: 'dormir' });
   } else if (shiftKey === 'sabado' || shiftKey === 'sabado11') {
     acts.push({ t: '8:00', title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
-    const [si] = sh.work || [10, 18];
-    acts.push({ t: `${si}:00`, title: '💼 WORK Saturday (locked)', d: 'Saturday shift. Take the rest of the day easy.', work: true, key: 'work' });
+    const [si, sf] = sh.work || [10, 18];
+    acts.push({ t: `${si}:00`, title: '💼 WORK Saturday (locked)', d: 'Saturday shift. Gym and Habit pressure stay disabled, but your professional study route remains available.', work: true, key: 'work' });
+    acts.push({ t: `${sf + 1}:00`, title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' });
     acts.push({ t: 'Night', title: '📖 Read', d: 'Calm close — advance your book.', key: 'leer' });
     acts.push({ t: 'Night', title: '🧴 Skincare PM', d: 'Night routine: cleanse + serum + moisturizer.', key: 'skincare' });
   } else {
@@ -7055,9 +7077,9 @@ function renderRoutineDay() {
       : a.extraId
         ? `<button class="del-x" data-type="routine_extra" data-id="${a.extraId}" title="Remove">✕</button>`
         : `<button class="hide-main" data-wd="${wd}" data-day="${iso}" data-key="${a.key}" title="Remove / replace">✕</button>`;
-    return `<div class="routine-block ${a.work ? 'work' : ''} ${a.recoveryId ? 'recovery-mission' : ''} ${isDone ? 'done' : ''}">
+    return `<div class="routine-block ${a.work ? 'work' : ''} ${a.optional ? 'optional-activity' : ''} ${a.recoveryId ? 'recovery-mission' : ''} ${isDone ? 'done' : ''}">
       <span class="rb-time">${a.t}</span>
-      <div class="rb-body"><div class="rb-title">${a.title} <button class="edit-time" data-key="${a.key}" data-day="${iso}" data-cur="${a.t}" title="Edit time">⏰</button> ${delBtn}</div><div class="rb-desc">${a.d}</div></div>
+      <div class="rb-body"><div class="rb-title">${a.title}${a.optional ? ' <span class="optional-life-badge">OPTIONAL</span>' : ''} <button class="edit-time" data-key="${a.key}" data-day="${iso}" data-cur="${a.t}" title="Edit time">⏰</button> ${delBtn}</div><div class="rb-desc">${a.d}</div></div>
       <button class="rb-check ${isDone ? 'on' : ''}" data-day="${iso}" data-act="${a.recoveryId ? a.sourceAct : a.key}" ${a.recoveryId ? `data-recovery-complete="${a.recoveryId}" data-recovery-original="${a.recoveryOriginal}"` : ''}>${isDone ? '✓' : ''}</button>
     </div>`;
   }).join('');
@@ -7406,13 +7428,14 @@ document.addEventListener('click', async (e) => {
       if (selected.startsWith('restore:')) {
         const item = missing[Number(selected.split(':')[1])];
         if (!item) { toast('That original activity is no longer missing.'); return; }
-        const confirmRestore = await modal({
+        const confirmRestore = await confirmAction({
           icon: '↺',
           title: `Restore ${item.title}`,
           text: `This will restore the original activity for <b>${esc(item.scopeLabel)}</b>. It will not create a generic copy.`,
-          okText: 'Restore original'
+          okText: 'Restore original',
+          cancelText: 'Keep hidden'
         });
-        if (confirmRestore === null) return;
+        if (!confirmRestore) return;
         await restoreDefaultLifeActivity(item);
         return;
       }
