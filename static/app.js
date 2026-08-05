@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 161;
+const FRONT_V = 162;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -5692,12 +5692,13 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 14. Trata este proyecto como un sistema compartido de largo plazo: memoriza sus reglas, comprende cada módulo antes de tocarlo y mantén continuidad entre solicitudes.
 15. El botón PROJECT CONTINUITY PROTOCOL debe actualizarse en cada nueva versión para conservar las decisiones, arquitectura, reglas y módulos añadidos. Nunca entregues una actualización dejando este prompt desactualizado.
 
-ESTADO ACTUAL DEL PROYECTO - V161 WORK FOUNDATION:
+ESTADO ACTUAL DEL PROYECTO - V162 WORK COMMAND CENTER:
 - Life administra vida, hábitos, rutina, turnos, metas y sistemas personales existentes. No traslades módulos de Life a Work.
 - Hunter Skill Academy es un gimnasio mental libre para aprender temas y evitar perder tiempo. No debe aumentar automáticamente carreras, proyectos ni habilidades profesionales.
 - Work Mode es una pantalla independiente abierta desde Life, similar a Hunter Profile. Contiene entrenamiento profesional sin saturar ni reemplazar la aplicación principal.
 - Work Mode tiene cuatro contextos persistentes: Data Analyst, Software Developer, Cyber Defense y Machine Learning. Cambiar de rol no borra el progreso de los demás.
-- V161 incorpora la base persistente de roles, tickets y sesiones profesionales, incluyendo Standby Missions para tiempos cortos y Focus Shifts para bloques profundos.
+- V161 creó la base persistente de roles, tickets y sesiones profesionales. V162 añade un Command Center independiente por rol con empresa ficticia, sprint, objetivo, fechas, meta semanal, métricas y control básico del backlog.
+- Work Mode debe tener un único scroll interno. Al abrirlo, se bloquea el desplazamiento de html y body para evitar doble scroll; al cerrarlo, ambos se restauran.
 - Work puede leer turnos de Life para orientar sesiones, pero los turnos y la rutina permanecen en Life.
 - La progresión laboral futura debe basarse en evidencia demostrada, revisiones y evaluaciones; nunca solo en cantidad de cursos o checks. El usuario conserva la decisión final de ascender de nivel.
 - Cada versión de Work debe incluir un manual PDF en español sencillo con cambios, uso, verificaciones, precauciones y archivos modificados.
@@ -8943,35 +8944,59 @@ document.addEventListener('click',async e=>{
 });
 
 
-/* V161 · WORK FOUNDATION -------------------------------------------------- */
+/* V162 · WORK COMMAND CENTER -------------------------------------------- */
 let WORK=null;
 const workRoleLabel=(code)=>({data:'Data Analyst',dev:'Software Developer',cyber:'Cyber Defense',ml:'Machine Learning'}[code]||code);
+const workStatusLabel=(status)=>({backlog:'Backlog',ready:'Ready',in_progress:'In progress',review:'AI review',done:'Done'}[status]||status);
 function workShiftRecommendation(){
   const day=new Date().getDay(), weekday=(day+6)%7;
   const shift=String((WORK?.shifts||{})[weekday]||'').toLowerCase();
   if(!shift||shift==='libre'||shift==='descanso')return {type:'focus',label:'FOCUS SHIFT',minutes:90,text:'Your schedule leaves room for deep professional work.'};
   return {type:'standby',label:'STANDBY MISSION',minutes:20,text:'Stay interruptible. Real work has priority and this mission can pause instantly.'};
 }
+function workWeekStart(day=hoyLocal()){const d=new Date(`${day}T12:00:00`),delta=(d.getDay()+6)%7;d.setDate(d.getDate()-delta);return d.toISOString().slice(0,10)}
 async function loadWorkState(){WORK=await api('/api/work/state');return WORK;}
+function workTicketAction(ticket){
+  if(ticket.status==='backlog')return `<button class="btn-ghost" data-work-ticket-status="ready" data-work-ticket-id="${ticket.id}">Move to ready</button>`;
+  if(ticket.status==='ready')return `<button class="btn-ghost" data-work-ticket-status="in_progress" data-work-ticket-id="${ticket.id}">Start mission</button><button class="btn-gold" data-work-log="${ticket.id}">Log session</button>`;
+  if(ticket.status==='in_progress')return `<button class="btn-gold" data-work-log="${ticket.id}">Continue mission</button>`;
+  if(ticket.status==='review')return `<button class="btn-ghost" data-work-ticket-status="in_progress" data-work-ticket-id="${ticket.id}">Return to work</button><span class="work-awaiting">Awaiting structured review</span>`;
+  return `<span class="work-done-mark">✓ Evidence preserved</span>`;
+}
 function renderWorkMode(){
   const host=document.getElementById('workModeContent');if(!host||!WORK)return;
   const active=WORK.roles.find(x=>x.active)||WORK.roles[0];
   const tickets=WORK.tickets.filter(x=>x.role_code===active.code);
   const sessions=WORK.sessions.filter(x=>x.role_code===active.code);
-  const total=sessions.reduce((n,x)=>n+Number(x.minutes||0),0);
-  const rec=workShiftRecommendation();
-  host.innerHTML=`<header class="work-command-hero"><div><span>HUNTER ASSOCIATION · PROFESSIONAL OPERATIONS</span><h1>WORK MODE</h1><p>Realistic practice, evidence and focused execution. Life stays intact outside this command room.</p></div><div class="work-active-role"><small>ACTIVE ROLE</small><b>${esc(active.icon)} ${esc(active.name)}</b><span>${esc(active.level)}</span></div></header>
-  <nav class="work-role-switcher" aria-label="Professional role">${WORK.roles.map(r=>`<button class="${r.active?'active':''}" data-work-role="${esc(r.code)}"><span>${esc(r.icon)}</span><b>${esc(r.name)}</b><small>${esc(r.level)}</small></button>`).join('')}</nav>
-  <section class="work-brief-grid"><article class="work-recommendation"><span>TODAY'S OPERATING MODE</span><h2>${rec.label}</h2><p>${esc(rec.text)}</p><b>${rec.minutes} min suggested</b></article><article><span>ROLE TIME</span><h2>${total} min</h2><p>${sessions.length} recorded professional session${sessions.length===1?'':'s'}.</p></article><article><span>OPEN OPERATIONS</span><h2>${tickets.filter(t=>t.status!=='done').length}</h2><p>Starter missions are foundations, not automatic proof of mastery.</p></article></section>
-  <section class="work-panel"><div class="row-between"><div><span class="work-kicker">MISSION CONTROL</span><h2>${esc(active.name)} backlog</h2></div><small>V161 foundation</small></div><div class="work-ticket-list">${tickets.length?tickets.map(t=>`<article><div><span>${esc(t.code)} · ${esc(t.priority).toUpperCase()}</span><h3>${esc(t.title)}</h3><p>${esc(t.description)}</p><small>Acceptance: ${esc(t.acceptance)}</small></div><button class="btn-gold" data-work-log="${t.id}">Log session</button></article>`).join(''):'<div class="profile-empty">No missions registered for this role yet.</div>'}</div></section>
+  const total=sessions.reduce((n,x)=>n+Number(x.minutes||0),0),weekStart=workWeekStart();
+  const weekly=sessions.filter(x=>String(x.day)>=weekStart).reduce((n,x)=>n+Number(x.minutes||0),0);
+  const weeklyTarget=Math.max(30,Number(active.weekly_minutes||180)),weeklyPct=Math.min(100,Math.round(weekly/weeklyTarget*100));
+  const rec=workShiftRecommendation(), open=tickets.filter(t=>t.status!=='done').length, review=tickets.filter(t=>t.status==='review').length;
+  const sprintDates=active.sprint_start||active.sprint_end?`${active.sprint_start||'Open'} → ${active.sprint_end||'Open'}`:'Dates not defined';
+  const statusOrder=['in_progress','ready','review','backlog','done'];
+  const sorted=[...tickets].sort((a,b)=>statusOrder.indexOf(a.status)-statusOrder.indexOf(b.status)||String(a.priority).localeCompare(String(b.priority)));
+  host.innerHTML=`<header class="work-command-hero"><div><span>HUNTER ASSOCIATION · PROFESSIONAL OPERATIONS</span><h1>WORK MODE</h1><p>Realistic practice, evidence and focused execution. Life stays intact outside this command room.</p></div><div class="work-active-role"><small>ACTIVE ASSIGNMENT</small><b>${esc(active.icon)} ${esc(active.name)}</b><span>${esc(active.company||'Fictional company not set')}</span><em>${esc(active.level)}</em></div></header>
+  <nav class="work-role-switcher" aria-label="Professional role">${WORK.roles.map(r=>`<button class="${r.active?'active':''}" data-work-role="${esc(r.code)}"><span>${esc(r.icon)}</span><b>${esc(r.name)}</b><small>${esc(r.company||r.level)}</small></button>`).join('')}</nav>
+  <section class="work-sprint-banner"><div><span class="work-kicker">ACTIVE SPRINT</span><h2>${esc(active.sprint_name||'Sprint not configured')}</h2><p>${esc(active.sprint_goal||'Define a measurable operating objective for this role.')}</p><small>${esc(sprintDates)}</small></div><button class="btn-ghost" data-work-edit-command>Edit command center</button></section>
+  <section class="work-brief-grid"><article class="work-recommendation"><span>TODAY'S OPERATING MODE</span><h2>${rec.label}</h2><p>${esc(rec.text)}</p><b>${rec.minutes} min suggested</b></article><article><span>WEEKLY EXECUTION</span><h2>${weekly} / ${weeklyTarget} min</h2><div class="work-progress"><i style="width:${weeklyPct}%"></i></div><p>${weeklyPct}% of this role's weekly target.</p></article><article><span>MISSION SIGNAL</span><h2>${open} open</h2><p>${review?`${review} awaiting review.`:'No missions waiting for review.'}</p></article></section>
+  <section class="work-panel"><div class="row-between"><div><span class="work-kicker">MISSION CONTROL</span><h2>${esc(active.name)} backlog</h2></div><small>V162 command center</small></div><div class="work-ticket-list">${sorted.length?sorted.map(t=>`<article class="status-${esc(t.status)}"><div class="work-ticket-copy"><span>${esc(t.code)} · ${esc(t.priority).toUpperCase()} · ${esc(workStatusLabel(t.status).toUpperCase())}</span><h3>${esc(t.title)}</h3><p>${esc(t.description)}</p><small>Acceptance: ${esc(t.acceptance)}</small></div><div class="work-ticket-actions">${workTicketAction(t)}</div></article>`).join(''):'<div class="profile-empty">No missions registered for this role yet.</div>'}</div></section>
   <section class="work-panel"><div><span class="work-kicker">FIELD LOG</span><h2>Recent sessions</h2></div>${sessions.length?`<div class="work-session-list">${sessions.slice(0,8).map(x=>`<div><b>${esc(x.day)} · ${Number(x.minutes||0)} min</b><span>${esc(String(x.session_type||'').toUpperCase())} · ${esc(String(x.result||'').replace('_',' '))}</span><p>${esc(x.note||'No note recorded.')}</p></div>`).join('')}</div>`:'<div class="profile-empty">Your first professional session will appear here.</div>'}</section>`;
 }
-async function openWorkMode(){const screen=document.getElementById('workModeScreen');if(!screen)return;try{await loadWorkState();renderWorkMode();screen.classList.add('open');screen.setAttribute('aria-hidden','false');document.body.classList.add('work-mode-open');window.scrollTo({top:0,behavior:'smooth'});}catch(_){toast('Work Mode could not load','err');}}
-function closeWorkMode(){const screen=document.getElementById('workModeScreen');if(!screen)return;screen.classList.remove('open');screen.setAttribute('aria-hidden','true');document.body.classList.remove('work-mode-open');}
-async function switchWorkRole(code){await api('/api/work/role',{body:{code}});await loadWorkState();renderWorkMode();toast(`${workRoleLabel(code)} activated`);}
+async function openWorkMode(){const screen=document.getElementById('workModeScreen');if(!screen)return;try{await loadWorkState();renderWorkMode();screen.scrollTop=0;screen.classList.add('open');screen.setAttribute('aria-hidden','false');document.documentElement.classList.add('work-mode-open');document.body.classList.add('work-mode-open');}catch(_){toast('Work Mode could not load','err');}}
+function closeWorkMode(){const screen=document.getElementById('workModeScreen');if(!screen)return;screen.classList.remove('open');screen.setAttribute('aria-hidden','true');document.documentElement.classList.remove('work-mode-open');document.body.classList.remove('work-mode-open');}
+async function switchWorkRole(code){await api('/api/work/role',{body:{code}});await loadWorkState();renderWorkMode();document.getElementById('workModeScreen')?.scrollTo({top:0,behavior:'smooth'});toast(`${workRoleLabel(code)} activated`);}
+async function editWorkCommand(){
+  const active=WORK.roles.find(x=>x.active)||WORK.roles[0];
+  const r=await modal({icon:'⌘',title:`${active.name} command center`,text:'This context belongs only to the selected role. It does not move or replace anything in Life.',fields:[{type:'text',label:'Fictional company',value:active.company||'',placeholder:'Northstar Commerce'},{type:'text',label:'Sprint name',value:active.sprint_name||'',placeholder:'DATA FOUNDATION SPRINT'},{type:'textarea',label:'Sprint objective',value:active.sprint_goal||'',rows:4,placeholder:'What must this sprint prove or produce?'},{type:'date',label:'Sprint start',value:active.sprint_start||''},{type:'date',label:'Sprint end',value:active.sprint_end||''},{type:'number',label:'Weekly target · minutes',value:Number(active.weekly_minutes||180),min:30,max:2400}],okText:'Save command center'});
+  if(!r)return;await api('/api/work/command',{body:{code:active.code,company:r[0],sprint_name:r[1],sprint_goal:r[2],sprint_start:r[3],sprint_end:r[4],weekly_minutes:Number(r[5]||180)}});await loadWorkState();renderWorkMode();toast('Command center updated');
+}
+async function updateWorkTicketStatus(ticketId,status){
+  const active=WORK.roles.find(x=>x.active)||WORK.roles[0];await api('/api/work/ticket/status',{body:{ticket_id:Number(ticketId),role_code:active.code,status}});await loadWorkState();renderWorkMode();toast(`Mission moved to ${workStatusLabel(status)}`);
+}
 function logWorkSession(ticketId){
   const active=WORK.roles.find(x=>x.active)||WORK.roles[0], ticket=WORK.tickets.find(x=>String(x.id)===String(ticketId));
   const rec=workShiftRecommendation();
   modal({icon:'⌁',title:`Log · ${ticket?.code||active.name}`,text:`<div class="work-log-form"><label>Session type<select id="workSessionType"><option value="standby" ${rec.type==='standby'?'selected':''}>Standby mission</option><option value="focus" ${rec.type==='focus'?'selected':''}>Focus shift</option></select></label><label>Minutes<input id="workSessionMinutes" type="number" min="1" max="720" value="${rec.minutes}"></label><label>Result<select id="workSessionResult"><option value="progress">Progress made</option><option value="blocked">Blocked</option><option value="review">Ready for AI review</option></select></label><label>Field note<textarea id="workSessionNote" rows="4" placeholder="What did you produce, discover or need to correct?"></textarea></label></div>`,okText:'Save session',onOk:async()=>{await api('/api/work/session',{body:{role_code:active.code,ticket_id:ticketId,day:hoyLocal(),minutes:Number(document.getElementById('workSessionMinutes').value||0),session_type:document.getElementById('workSessionType').value,result:document.getElementById('workSessionResult').value,note:document.getElementById('workSessionNote').value}});await loadWorkState();renderWorkMode();toast('Professional session recorded');}});
 }
-document.addEventListener('click',e=>{if(e.target.closest('#openWorkMode'))openWorkMode();if(e.target.closest('#closeWorkMode'))closeWorkMode();const role=e.target.closest('[data-work-role]');if(role)switchWorkRole(role.dataset.workRole);const log=e.target.closest('[data-work-log]');if(log)logWorkSession(log.dataset.workLog);});
+document.addEventListener('click',e=>{if(e.target.closest('#openWorkMode'))openWorkMode();if(e.target.closest('#closeWorkMode'))closeWorkMode();if(e.target.closest('[data-work-edit-command]'))editWorkCommand();const role=e.target.closest('[data-work-role]');if(role)switchWorkRole(role.dataset.workRole);const log=e.target.closest('[data-work-log]');if(log)logWorkSession(log.dataset.workLog);const move=e.target.closest('[data-work-ticket-status]');if(move)updateWorkTicketStatus(move.dataset.workTicketId,move.dataset.workTicketStatus);});
+
