@@ -13,7 +13,7 @@
 
 <header class="topbar">
   <button class="brand brand-profile-entry" id="openHunterProfile" type="button" aria-label="Open Hunter Profile">KEVIN · <span>LIFE OS</span><small>OPEN HUNTER FILE</small></button>
-  <div class="haki-badge" id="hakiBadge">😴 Haki asleep</div>
+  <div class="topbar-actions"><button class="work-mode-entry" id="openWorkMode" type="button"><span>WORK MODE</span><small>ENTER PROFESSIONAL OPERATIONS</small></button><div class="haki-badge" id="hakiBadge">😴 Haki asleep</div></div>
 </header>
 
 <nav class="tabs" id="tabs">
@@ -33,6 +33,13 @@
   <div class="hunter-profile-shell">
     <button class="hunter-profile-back" id="closeHunterProfile" type="button">← Back to Life OS</button>
     <div id="hunterProfileContent"></div>
+  </div>
+</section>
+
+<section id="workModeScreen" class="work-mode-screen" aria-hidden="true">
+  <div class="work-mode-shell">
+    <button class="work-mode-back" id="closeWorkMode" type="button">← Back to Life OS</button>
+    <div id="workModeContent"></div>
   </div>
 </section>
 
