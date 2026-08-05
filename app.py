@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 160  # V160 Instant rank sync, polished promotions and Saturday study
+VERSION = 161  # V161 Work Foundation: isolated professional operations mode
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -474,6 +474,19 @@ def init_db():
     CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT);
     CREATE TABLE IF NOT EXISTS schema_migrations (
         version TEXT PRIMARY KEY, applied_at TEXT NOT NULL, description TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS work_roles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL, icon TEXT DEFAULT '◆', active INTEGER DEFAULT 0,
+        level TEXT DEFAULT 'Foundation', created_at TEXT DEFAULT '', updated_at TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS work_tickets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, role_code TEXT NOT NULL, code TEXT UNIQUE NOT NULL,
+        title TEXT NOT NULL, status TEXT DEFAULT 'backlog', priority TEXT DEFAULT 'medium',
+        mission_type TEXT DEFAULT 'standby', description TEXT DEFAULT '',
+        acceptance TEXT DEFAULT '', created_at TEXT DEFAULT '', updated_at TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS work_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, role_code TEXT NOT NULL, ticket_id INTEGER DEFAULT NULL,
+        day TEXT NOT NULL, minutes INTEGER DEFAULT 0, session_type TEXT DEFAULT 'standby',
+        result TEXT DEFAULT 'progress', note TEXT DEFAULT '', created_at TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS debts (
         id INTEGER PRIMARY KEY, name TEXT, initial INTEGER);
     CREATE TABLE IF NOT EXISTS abonos (
@@ -710,6 +723,46 @@ def init_db():
             ('CREATE INDEX IF NOT EXISTS idx_recovery_added_day ON habit_recoveries(added_to_day, status)', ()),
         ),
     )
+
+    apply_migration(
+        con, 'v161_work_foundation',
+        'Isolated Work Mode foundation with roles, tickets and professional sessions',
+        (
+            ('CREATE INDEX IF NOT EXISTS idx_work_roles_active ON work_roles(active, code)', ()),
+            ('CREATE INDEX IF NOT EXISTS idx_work_tickets_role_status ON work_tickets(role_code, status, priority)', ()),
+            ('CREATE INDEX IF NOT EXISTS idx_work_sessions_day_role ON work_sessions(day, role_code)', ()),
+        ),
+    )
+    now_iso = datetime.now().isoformat(timespec='seconds')
+    for code, name, icon in (
+        ('data', 'Data Analyst', '◫'),
+        ('dev', 'Software Developer', '⌘'),
+        ('cyber', 'Cyber Defense', '⌁'),
+        ('ml', 'Machine Learning', '◇'),
+    ):
+        if not con.execute('SELECT 1 FROM work_roles WHERE code=?', (code,)).fetchone():
+            con.execute(
+                'INSERT INTO work_roles (code,name,icon,active,created_at,updated_at) VALUES (?,?,?,?,?,?)',
+                (code, name, icon, 1 if code == 'data' else 0, now_iso, now_iso),
+            )
+    if not con.execute('SELECT 1 FROM work_roles WHERE active=1').fetchone():
+        con.execute("UPDATE work_roles SET active=CASE WHEN code='data' THEN 1 ELSE 0 END")
+    starter_tickets = (
+        ('data', 'DATA-001', 'Inspect a real business dataset', 'standby', 'Review its structure, fields and data-quality risks before writing analysis.'),
+        ('dev', 'DEV-001', 'Read an unfamiliar codebase safely', 'standby', 'Map architecture, dependencies and risk areas without modifying existing logic.'),
+        ('cyber', 'CYBER-001', 'Build a defensive asset inventory', 'standby', 'Identify systems, accounts, data and likely attack surfaces in a fictional company.'),
+        ('ml', 'ML-001', 'Define an ML problem before modeling', 'standby', 'Translate a business need into target, features, metric, constraints and failure risks.'),
+    )
+    for role_code, code, title, mission_type, description in starter_tickets:
+        if not con.execute('SELECT 1 FROM work_tickets WHERE code=?', (code,)).fetchone():
+            con.execute(
+                '''INSERT INTO work_tickets
+                   (role_code,code,title,status,priority,mission_type,description,acceptance,created_at,updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                (role_code, code, title, 'ready', 'medium', mission_type, description,
+                 'Produce a concise written result and preserve it for AI review.', now_iso, now_iso),
+            )
+    con.commit()
     if first_time:
         with open(os.path.join(BASE, 'seed_data.json'), encoding='utf-8') as f:
             seed = json.load(f)
@@ -1665,6 +1718,74 @@ def state():
                             "COALESCE(paid_date, '') AS paid_date, COALESCE(valor,0) AS valor, "
                             "debt_id, extra_id FROM payment_checks ORDER BY paid_date, item")],
                         today=date.today().isoformat()))
+
+
+
+@app.get('/api/work/state')
+def work_state():
+    d = db()
+    roles = [dict(r) for r in d.execute('SELECT * FROM work_roles ORDER BY id')]
+    tickets = [dict(r) for r in d.execute('SELECT * FROM work_tickets ORDER BY id DESC')]
+    sessions = [dict(r) for r in d.execute('SELECT * FROM work_sessions ORDER BY day DESC, id DESC LIMIT 100')]
+    shifts = {r['weekday']: r['shift'] for r in d.execute('SELECT * FROM week_shifts')}
+    return jsonify(dict(roles=roles, tickets=tickets, sessions=sessions, shifts=shifts, today=date.today().isoformat()))
+
+
+@app.post('/api/work/role')
+def work_role():
+    code = str((request.json or {}).get('code') or '').strip().lower()
+    with transaction() as con:
+        if not con.execute('SELECT 1 FROM work_roles WHERE code=?', (code,)).fetchone():
+            return jsonify(error='Professional role not found'), 404
+        con.execute('UPDATE work_roles SET active=0')
+        con.execute('UPDATE work_roles SET active=1, updated_at=? WHERE code=?',
+                    (datetime.now().isoformat(timespec='seconds'), code))
+    return jsonify(ok=True, active=code)
+
+
+@app.post('/api/work/session')
+def work_session():
+    j = request.json or {}
+    role_code = str(j.get('role_code') or '').strip().lower()
+    try:
+        minutes = max(1, min(720, int(j.get('minutes') or 0)))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid session duration'), 400
+    session_type = str(j.get('session_type') or 'standby').strip().lower()
+    result = str(j.get('result') or 'progress').strip().lower()
+    if session_type not in ('standby', 'focus'):
+        return jsonify(error='Invalid session type'), 400
+    if result not in ('progress', 'blocked', 'review'):
+        return jsonify(error='Invalid session result'), 400
+    with transaction() as con:
+        if not con.execute('SELECT 1 FROM work_roles WHERE code=?', (role_code,)).fetchone():
+            return jsonify(error='Professional role not found'), 404
+        ticket_id = j.get('ticket_id')
+        if ticket_id in ('', None):
+            ticket_id = None
+        else:
+            try:
+                ticket_id = int(ticket_id)
+            except (TypeError, ValueError):
+                return jsonify(error='Invalid ticket'), 400
+            ticket = con.execute('SELECT role_code FROM work_tickets WHERE id=?', (ticket_id,)).fetchone()
+            if not ticket or dict(ticket)['role_code'] != role_code:
+                return jsonify(error='Ticket does not belong to the active role'), 400
+        con.execute(
+            '''INSERT INTO work_sessions
+               (role_code,ticket_id,day,minutes,session_type,result,note,created_at)
+               VALUES (?,?,?,?,?,?,?,?)''',
+            (role_code, ticket_id, str(j.get('day') or date.today().isoformat()), minutes,
+             session_type, result, str(j.get('note') or '').strip()[:500],
+             datetime.now().isoformat(timespec='seconds')),
+        )
+        if ticket_id and result == 'review':
+            con.execute("UPDATE work_tickets SET status='review', updated_at=? WHERE id=?",
+                        (datetime.now().isoformat(timespec='seconds'), ticket_id))
+        elif ticket_id:
+            con.execute("UPDATE work_tickets SET status='in_progress', updated_at=? WHERE id=? AND status='ready'",
+                        (datetime.now().isoformat(timespec='seconds'), ticket_id))
+    return jsonify(ok=True)
 
 
 @app.post('/api/abono')
