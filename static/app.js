@@ -5670,6 +5670,50 @@ function hunterProfileSkillStats() {
   const academySkills=academyAllSkills();
   return [...bySkill.values()].map(item=>{const evidence=item.courses.size;const academyMatch=academySkills.find(x=>x.name.toLowerCase()===String(item.name).toLowerCase());const practiced=academyMatch&&academy.mastered.includes(academyMatch.id);const level=practiced&&evidence>=2?'Reliable':evidence>=5?'Reliable':evidence>=3?'Practiced':evidence>=2?'Developing':'Introduced';return {...item,evidence,practiced,level};}).sort((a,b)=>b.evidence-a.evidence||a.name.localeCompare(b.name));
 }
+function hunterProjectContinuityPrompt() {
+  return `Actúa como programador senior responsable de mi proyecto personal Kevin Life OS. Te entregaré el archivo ZIP del proyecto junto con este mensaje.
+
+Tu primera tarea es dominar el proyecto antes de modificarlo: descomprime el ZIP, examina la estructura completa, identifica tecnologías, versiones, dependencias, rutas, base de datos, frontend, backend, pruebas, despliegue y relaciones entre módulos. Lee los archivos relevantes completos y construye un mapa técnico interno. No te quedes esperando instrucciones innecesarias ni empieces desde cero sin revisar el proyecto.
+
+REGLAS PERMANENTES E INNEGOCIABLES:
+1. No cambies la lógica existente, el diseño, la estructura, las versiones ni las dependencias salvo que yo lo autorice expresamente.
+2. Cuando solicite una modificación, realiza únicamente ese cambio. No agregues refactorizaciones, correcciones, mejoras ni ajustes adicionales por iniciativa propia.
+3. Antes de editar, localiza todas las dependencias del área afectada y protege el resto de la aplicación para no romper nada.
+4. Conserva nombres de archivos, funciones, rutas, endpoints, tablas, formatos de datos y comportamiento existente.
+5. Verifica sintaxis y ejecuta las pruebas disponibles después de cada modificación. Explica con precisión qué cambió, qué archivos fueron afectados y qué comprobaste.
+6. Entrégame cada archivo modificado COMPLETO y listo para descargar; nunca me des solamente fragmentos o diffs.
+7. Entrega los archivos modificados por separado. Ejemplos: styles.css como archivo individual completo y app.py como archivo individual completo.
+8. Si un archivo individual es pesado, especialmente static/app.js, comprime únicamente ese archivo en un ZIP. El ZIP debe contener solo el archivo modificado.
+9. JAMÁS comprimas ni me envíes el proyecto completo en ZIP, salvo que yo lo solicite explícitamente. Yo ya conservo el proyecto original.
+10. No incluyas archivos que no hayan sido modificados.
+11. Respeta exactamente la capitalización y la ruta real de cada archivo del proyecto.
+12. Si detectas una mejora futura o un problema no relacionado con mi petición, solo infórmalo; no lo modifiques sin autorización.
+13. Si existe una decisión ambigua, elige la opción que preserve al máximo el comportamiento actual y explícame la suposición realizada.
+14. Trata este proyecto como un sistema compartido de largo plazo: memoriza sus reglas, comprende cada módulo antes de tocarlo y mantén continuidad entre solicitudes.
+
+FORMA DE TRABAJO:
+- Primero confirma brevemente que abriste y comprendiste el proyecto, indicando arquitectura, versión y zonas delicadas encontradas.
+- No modifiques nada durante esa revisión inicial.
+- Después espera mi solicitud concreta.
+- Para cada solicitud, inspecciona el código relacionado, aplica solo el cambio autorizado, valida que no dañaste otras funciones y entrega únicamente los archivos completos modificados con el formato indicado.
+
+Este prompt tiene prioridad como protocolo de trabajo para Kevin Life OS durante toda la conversación.`;
+}
+async function copyHunterProjectContinuityPrompt() {
+  const text=hunterProjectContinuityPrompt();
+  try {
+    if(navigator.clipboard?.writeText) await navigator.clipboard.writeText(text);
+    else throw new Error('Clipboard unavailable');
+    toast('Project continuity prompt copied');
+  } catch(_) {
+    const ta=document.createElement('textarea');
+    ta.value=text; ta.setAttribute('readonly',''); ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); toast('Project continuity prompt copied'); }
+    catch(__) { prompt('Copy this project prompt:',text); }
+    ta.remove();
+  }
+}
 function renderHunterProfile() {
   const host=document.getElementById('hunterProfileContent'); if(!host)return;
   const rank=hunterGlobalRankState(), license=hunterLicenseState(), skills=hunterProfileSkillStats();
@@ -5697,13 +5741,17 @@ function renderHunterProfile() {
   <section class="hunter-profile-haki haki-panel">
     <div id="hakiShowcase" class="haki-showcase" aria-live="polite"></div>
     <div class="hunter-profile-haki-history"><h3>Haki history · conquered months (≥70%)</h3><div id="hakiHistory" class="haki-history"></div><canvas id="hakiChart" height="150"></canvas></div>
+  </section>
+  <section class="hunter-project-continuity">
+    <div><span class="profile-kicker">PROJECT CONTINUITY PROTOCOL</span><h2>Restore your AI programmer</h2><p>Attach your Kevin Life OS ZIP to a new AI chat and paste this master prompt so it understands the project, protects its logic and delivers files correctly.</p></div>
+    <button type="button" data-copy-project-continuity><span>⌘</span><b>Copy master prompt</b><small>ZIP + prompt · ready for a new chat</small></button>
   </section>`;
   renderHunterLicense('hunterProfileLicense');
   renderHaki();
 }
 function openHunterProfile(){const screen=document.getElementById('hunterProfileScreen');if(!screen)return;if(!S){toast('Hunter Profile is still loading…','warn');return;}renderHunterProfile();screen.classList.add('open');screen.setAttribute('aria-hidden','false');document.body.classList.add('hunter-profile-open');window.scrollTo({top:0,behavior:'smooth'});}
 function closeHunterProfile(){const screen=document.getElementById('hunterProfileScreen');if(!screen)return;screen.classList.remove('open');screen.setAttribute('aria-hidden','true');document.body.classList.remove('hunter-profile-open');}
-document.addEventListener('click',e=>{if(e.target.closest('#openHunterProfile'))openHunterProfile();if(e.target.closest('#closeHunterProfile'))closeHunterProfile();if(e.target.closest('[data-open-pirate-route]'))pirateRouteModal();});
+document.addEventListener('click',e=>{if(e.target.closest('#openHunterProfile'))openHunterProfile();if(e.target.closest('#closeHunterProfile'))closeHunterProfile();if(e.target.closest('[data-open-pirate-route]'))pirateRouteModal();if(e.target.closest('[data-copy-project-continuity]'))copyHunterProjectContinuityPrompt();});
 
 function hunterLicenseState() {
   const months = (S.history || []).filter(h => h.pct >= 0.7).length;
