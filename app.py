@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 161  # V161 Work Foundation: isolated professional operations mode
+VERSION = 162  # V162 Work Command Center: role dashboards, sprint context and backlog control
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -733,6 +733,18 @@ def init_db():
             ('CREATE INDEX IF NOT EXISTS idx_work_sessions_day_role ON work_sessions(day, role_code)', ()),
         ),
     )
+    apply_migration(
+        con, 'v162_work_command_center',
+        'Per-role company and sprint context for Work Command Center',
+        (
+            ("ALTER TABLE work_roles ADD COLUMN company TEXT DEFAULT ''", ()),
+            ("ALTER TABLE work_roles ADD COLUMN sprint_name TEXT DEFAULT ''", ()),
+            ("ALTER TABLE work_roles ADD COLUMN sprint_goal TEXT DEFAULT ''", ()),
+            ("ALTER TABLE work_roles ADD COLUMN sprint_start TEXT DEFAULT ''", ()),
+            ("ALTER TABLE work_roles ADD COLUMN sprint_end TEXT DEFAULT ''", ()),
+            ("ALTER TABLE work_roles ADD COLUMN weekly_minutes INTEGER DEFAULT 180", ()),
+        ),
+    )
     now_iso = datetime.now().isoformat(timespec='seconds')
     for code, name, icon in (
         ('data', 'Data Analyst', '◫'),
@@ -747,6 +759,22 @@ def init_db():
             )
     if not con.execute('SELECT 1 FROM work_roles WHERE active=1').fetchone():
         con.execute("UPDATE work_roles SET active=CASE WHEN code='data' THEN 1 ELSE 0 END")
+    work_context_defaults = {
+        'data': ('Northstar Commerce', 'DATA FOUNDATION SPRINT', 'Inspect, validate and explain business data before building dashboards.'),
+        'dev': ('Arc Systems Lab', 'SAFE DELIVERY SPRINT', 'Understand the codebase, ship small changes and protect existing behavior.'),
+        'cyber': ('Aegis Defense Unit', 'DEFENSIVE BASELINE SPRINT', 'Map assets, risks and evidence before proposing controls.'),
+        'ml': ('Vector Research Lab', 'PROBLEM FRAMING SPRINT', 'Define measurable ML problems before training or deploying models.'),
+    }
+    for role_code, (company, sprint_name, sprint_goal) in work_context_defaults.items():
+        con.execute(
+            """UPDATE work_roles SET
+               company=CASE WHEN COALESCE(company,'')='' THEN ? ELSE company END,
+               sprint_name=CASE WHEN COALESCE(sprint_name,'')='' THEN ? ELSE sprint_name END,
+               sprint_goal=CASE WHEN COALESCE(sprint_goal,'')='' THEN ? ELSE sprint_goal END,
+               weekly_minutes=CASE WHEN COALESCE(weekly_minutes,0)<=0 THEN 180 ELSE weekly_minutes END
+               WHERE code=?""",
+            (company, sprint_name, sprint_goal, role_code),
+        )
     starter_tickets = (
         ('data', 'DATA-001', 'Inspect a real business dataset', 'standby', 'Review its structure, fields and data-quality risks before writing analysis.'),
         ('dev', 'DEV-001', 'Read an unfamiliar codebase safely', 'standby', 'Map architecture, dependencies and risk areas without modifying existing logic.'),
@@ -1741,6 +1769,57 @@ def work_role():
         con.execute('UPDATE work_roles SET active=1, updated_at=? WHERE code=?',
                     (datetime.now().isoformat(timespec='seconds'), code))
     return jsonify(ok=True, active=code)
+
+
+@app.post('/api/work/command')
+def work_command():
+    j = request.json or {}
+    code = str(j.get('code') or '').strip().lower()
+    company = str(j.get('company') or '').strip()[:100]
+    sprint_name = str(j.get('sprint_name') or '').strip()[:100]
+    sprint_goal = str(j.get('sprint_goal') or '').strip()[:500]
+    sprint_start = str(j.get('sprint_start') or '').strip()[:10]
+    sprint_end = str(j.get('sprint_end') or '').strip()[:10]
+    try:
+        weekly_minutes = max(30, min(2400, int(j.get('weekly_minutes') or 180)))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid weekly target'), 400
+    if not company or not sprint_name or not sprint_goal:
+        return jsonify(error='Company, sprint name and sprint goal are required'), 400
+    if sprint_start and sprint_end and sprint_end < sprint_start:
+        return jsonify(error='Sprint end cannot be before sprint start'), 400
+    with transaction() as con:
+        if not con.execute('SELECT 1 FROM work_roles WHERE code=?', (code,)).fetchone():
+            return jsonify(error='Professional role not found'), 404
+        con.execute(
+            '''UPDATE work_roles SET company=?, sprint_name=?, sprint_goal=?, sprint_start=?,
+               sprint_end=?, weekly_minutes=?, updated_at=? WHERE code=?''',
+            (company, sprint_name, sprint_goal, sprint_start, sprint_end, weekly_minutes,
+             datetime.now().isoformat(timespec='seconds'), code),
+        )
+    return jsonify(ok=True)
+
+
+@app.post('/api/work/ticket/status')
+def work_ticket_status():
+    j = request.json or {}
+    try:
+        ticket_id = int(j.get('ticket_id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid ticket'), 400
+    role_code = str(j.get('role_code') or '').strip().lower()
+    status = str(j.get('status') or '').strip().lower()
+    if status not in ('backlog', 'ready', 'in_progress', 'review', 'done'):
+        return jsonify(error='Invalid ticket status'), 400
+    with transaction() as con:
+        ticket = con.execute('SELECT role_code FROM work_tickets WHERE id=?', (ticket_id,)).fetchone()
+        if not ticket:
+            return jsonify(error='Ticket not found'), 404
+        if dict(ticket)['role_code'] != role_code:
+            return jsonify(error='Ticket does not belong to the active role'), 400
+        con.execute('UPDATE work_tickets SET status=?, updated_at=? WHERE id=?',
+                    (status, datetime.now().isoformat(timespec='seconds'), ticket_id))
+    return jsonify(ok=True)
 
 
 @app.post('/api/work/session')
