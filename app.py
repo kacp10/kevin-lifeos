@@ -901,8 +901,8 @@ def init_db():
             generic_acceptance=str(current.get('acceptance') or '').strip() in ('', 'Produce a concise written result and preserve it for AI review.')
             con.execute('''UPDATE work_tickets SET
                 description=CASE WHEN COALESCE(description,'')='' OR description=? THEN ? ELSE description END,
-                stakeholder=CASE WHEN COALESCE(stakeholder,'')='' THEN ? ELSE stakeholder END,
-                due_date=CASE WHEN COALESCE(due_date,'')='' THEN ? ELSE due_date END,
+                stakeholder=CASE WHEN LOWER(TRIM(COALESCE(stakeholder,''))) IN ('', 'not assigned') THEN ? ELSE stakeholder END,
+                due_date=CASE WHEN LOWER(TRIM(COALESCE(due_date,''))) IN ('', 'open') THEN ? ELSE due_date END,
                 acceptance=CASE WHEN ? THEN ? ELSE acceptance END,
                 deliverables=CASE WHEN COALESCE(deliverables,'')='' THEN ? ELSE deliverables END,
                 updated_at=? WHERE code=?''',
