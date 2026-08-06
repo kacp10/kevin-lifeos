@@ -15,7 +15,7 @@ def test_v168_starter_missions_are_complete_and_upgraded():
     assert 'data_quality_report.md' in APP
     assert "UPDATE work_roles SET sprint_start=?" in APP
     assert "UPDATE work_roles SET sprint_end=?" in APP
-    assert "due_date=CASE WHEN COALESCE(due_date,'')=''" in APP
+    assert "due_date=CASE WHEN LOWER(TRIM(COALESCE(due_date,''))) IN ('', 'open')" in APP
 
 
 def test_v168_market_missions_are_automatically_defined():
