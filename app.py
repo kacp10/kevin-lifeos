@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 165  # V165 Skills & Level Coach: evidence-based readiness, assessments and manual promotion
+VERSION = 166  # V166 Market Intelligence: sourced vacancies, demand signals and evidence gaps
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -502,6 +502,11 @@ def init_db():
         prompt_snapshot TEXT DEFAULT '', result_payload TEXT DEFAULT '', summary TEXT DEFAULT '',
         score INTEGER DEFAULT NULL, created_at TEXT DEFAULT '', reviewed_at TEXT DEFAULT '',
         promoted_at TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS work_market_jobs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, role_code TEXT NOT NULL, title TEXT NOT NULL,
+        company TEXT NOT NULL, location TEXT DEFAULT '', source_name TEXT DEFAULT 'LinkedIn',
+        source_url TEXT UNIQUE NOT NULL, posted_date TEXT DEFAULT '', captured_at TEXT DEFAULT '',
+        skills_json TEXT DEFAULT '[]', notes TEXT DEFAULT '', active INTEGER DEFAULT 1);
     CREATE TABLE IF NOT EXISTS debts (
         id INTEGER PRIMARY KEY, name TEXT, initial INTEGER);
     CREATE TABLE IF NOT EXISTS abonos (
@@ -796,6 +801,14 @@ def init_db():
             ("CREATE INDEX IF NOT EXISTS idx_work_assessment_role ON work_level_assessments(role_code, id)", ()),
         ),
     )
+    apply_migration(
+        con, 'v166_work_market_intelligence',
+        'Sourced vacancy intelligence, demand signals and market-to-evidence gaps',
+        (
+            ("CREATE TABLE IF NOT EXISTS work_market_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, role_code TEXT NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL, location TEXT DEFAULT '', source_name TEXT DEFAULT 'LinkedIn', source_url TEXT UNIQUE NOT NULL, posted_date TEXT DEFAULT '', captured_at TEXT DEFAULT '', skills_json TEXT DEFAULT '[]', notes TEXT DEFAULT '', active INTEGER DEFAULT 1)", ()),
+            ("CREATE INDEX IF NOT EXISTS idx_work_market_role_active ON work_market_jobs(role_code, active, captured_at)", ()),
+        ),
+    )
     now_iso = datetime.now().isoformat(timespec='seconds')
     for code, name, icon in (
         ('data', 'Data Analyst', '◫'),
@@ -841,6 +854,23 @@ def init_db():
                 (role_code, code, title, 'ready', 'medium', mission_type, description,
                  'Produce a concise written result and preserve it for AI review.', now_iso, now_iso),
             )
+
+    market_seed = (
+        ('data','Data Analytics','Accenture Colombia','Bogotá, Colombia','LinkedIn','https://co.linkedin.com/jobs/view/data-analytics-at-accenture-colombia-4405948925','2026-08-06',['SQL','Python','Excel','Dashboards','Data Cleaning','Data Visualization']),
+        ('data','Power BI & Data Analytics Engineer','Pavago','Colombia / Remote','LinkedIn','https://co.linkedin.com/jobs/view/power-bi-data-analytics-engineer-at-pavago-4444623185','2026-08-06',['Power BI','SQL','Python','Data Modeling','APIs','Azure']),
+        ('dev','Python Developer','Market baseline','Colombia','Market sample','https://www.linkedin.com/jobs/search/?keywords=python%20developer&location=Colombia','2026-08-06',['Python','APIs','PostgreSQL','Git','Testing','CI/CD']),
+        ('dev','Full Stack Agentic AI Developer','Bounteous','Remote / Hybrid','LinkedIn','https://www.linkedin.com/jobs/view/full-stack-agentic-ai-developer-local-to-bethesda-maryland-at-bounteous-4418576593','2026-07-23',['Python','REST APIs','OpenAPI','JSON Schema','Testing','Security']),
+        ('cyber','Cyber Security Analyst','Market baseline','Colombia','Market sample','https://www.linkedin.com/jobs/search/?keywords=cyber%20security%20analyst&location=Colombia','2026-08-06',['SIEM','EDR','Incident Response','MITRE ATT&CK','Networking','Threat Hunting']),
+        ('cyber','AI & HPC Infrastructure Engineer','Accenture','Remote / Americas','LinkedIn','https://www.linkedin.com/jobs/view/ai-hpc-infrastructure-engineer-at-accenture-4436895649','2026-07-29',['DevSecOps','Python','APIs','Automation','Governance','Cloud Security']),
+        ('ml','Machine Learning Engineer / MLOps','Market baseline','Colombia','Market sample','https://www.linkedin.com/jobs/search/?keywords=machine%20learning%20engineer&location=Colombia','2026-08-06',['Python','SQL','MLOps','Model Deployment','Monitoring','CI/CD']),
+        ('ml','Data Engineer - AI & RAG','Scale Up Recruiting Partners','Colombia','LinkedIn','https://co.linkedin.com/jobs/view/data-engineer-%E2%80%93-ai-rag-at-scale-up-recruiting-partners-4443116032','2026-08-05',['Python','SQL','Cloud','Data Pipelines','Vector Databases','RAG']),
+    )
+    import json as _market_json
+    for role_code,title,company,location,source_name,source_url,posted_date,skills in market_seed:
+        if not con.execute('SELECT 1 FROM work_market_jobs WHERE source_url=?', (source_url,)).fetchone():
+            con.execute('''INSERT INTO work_market_jobs(role_code,title,company,location,source_name,source_url,posted_date,captured_at,skills_json,notes,active)
+                           VALUES(?,?,?,?,?,?,?,?,?,'Seeded from a current public vacancy or market search; verify source before relying on availability.',1)''',
+                        (role_code,title,company,location,source_name,source_url,posted_date,now_iso,_market_json.dumps(skills,ensure_ascii=False)))
     con.commit()
     if first_time:
         with open(os.path.join(BASE, 'seed_data.json'), encoding='utf-8') as f:
@@ -1853,8 +1883,9 @@ def work_state():
     history = [dict(r) for r in d.execute('SELECT * FROM work_ticket_history ORDER BY id DESC LIMIT 250')]
     skills = [dict(r) for r in d.execute('SELECT * FROM work_skill_evidence ORDER BY role_code, approved_tickets DESC, evidence_count DESC, skill_name')]
     assessments = [dict(r) for r in d.execute('SELECT * FROM work_level_assessments ORDER BY id DESC LIMIT 50')]
+    market_jobs = [dict(r) for r in d.execute('SELECT * FROM work_market_jobs WHERE active=1 ORDER BY captured_at DESC, id DESC LIMIT 200')]
     shifts = {r['weekday']: r['shift'] for r in d.execute('SELECT * FROM week_shifts')}
-    return jsonify(dict(roles=roles, tickets=tickets, sessions=sessions, history=history, skills=skills, assessments=assessments, shifts=shifts, today=date.today().isoformat()))
+    return jsonify(dict(roles=roles, tickets=tickets, sessions=sessions, history=history, skills=skills, assessments=assessments, market_jobs=market_jobs, shifts=shifts, today=date.today().isoformat()))
 
 
 @app.post('/api/work/role')
@@ -2186,6 +2217,70 @@ def work_level_promote():
                     (next_level, next_idx, now, role_code))
         con.execute("UPDATE work_level_assessments SET status='promoted',promoted_at=? WHERE id=(SELECT id FROM work_level_assessments WHERE role_code=? AND status='ready' ORDER BY id DESC LIMIT 1)", (now, role_code))
     return jsonify(ok=True, level=next_level)
+
+
+@app.post('/api/work/market/job')
+def work_market_job_save():
+    import json as _json
+    j = request.json or {}
+    role_code = str(j.get('role_code') or '').strip().lower()
+    title = str(j.get('title') or '').strip()[:180]
+    company = str(j.get('company') or '').strip()[:140]
+    source_url = str(j.get('source_url') or '').strip()[:900]
+    if role_code not in ('data','dev','cyber','ml') or not title or not company or not source_url.startswith(('http://','https://')):
+        return jsonify(error='Role, title, company and a valid source URL are required'), 400
+    skills = j.get('skills') if isinstance(j.get('skills'), list) else [x.strip() for x in str(j.get('skills') or '').split(',') if x.strip()]
+    skills = list(dict.fromkeys(str(x).strip()[:80] for x in skills if str(x).strip()))[:30]
+    now = datetime.now().isoformat(timespec='seconds')
+    with transaction() as con:
+        existing = con.execute('SELECT id FROM work_market_jobs WHERE source_url=?', (source_url,)).fetchone()
+        values=(role_code,title,company,str(j.get('location') or '').strip()[:140],str(j.get('source_name') or 'Manual source').strip()[:80],
+                str(j.get('posted_date') or '').strip()[:20],now,_json.dumps(skills,ensure_ascii=False),str(j.get('notes') or '').strip()[:1500])
+        if existing:
+            con.execute('''UPDATE work_market_jobs SET role_code=?,title=?,company=?,location=?,source_name=?,posted_date=?,captured_at=?,skills_json=?,notes=?,active=1 WHERE id=?''', values+(dict(existing)['id'],))
+            job_id=dict(existing)['id']
+        else:
+            cur=con.execute('''INSERT INTO work_market_jobs(role_code,title,company,location,source_name,source_url,posted_date,captured_at,skills_json,notes,active)
+                               VALUES(?,?,?,?,?,?,?,?,?,?,1)''', values[:5]+(source_url,)+values[5:])
+            job_id=cur.lastrowid
+    return jsonify(ok=True, job_id=job_id, skills=skills)
+
+
+@app.post('/api/work/market/job/archive')
+def work_market_job_archive():
+    j=request.json or {}
+    try: job_id=int(j.get('job_id'))
+    except (TypeError,ValueError): return jsonify(error='Invalid market source'),400
+    role_code=str(j.get('role_code') or '').strip().lower()
+    with transaction() as con:
+        row=con.execute('SELECT role_code FROM work_market_jobs WHERE id=?',(job_id,)).fetchone()
+        if not row or dict(row)['role_code']!=role_code: return jsonify(error='Market source not found for active role'),404
+        con.execute('UPDATE work_market_jobs SET active=0 WHERE id=?',(job_id,))
+    return jsonify(ok=True)
+
+
+@app.post('/api/work/market/mission')
+def work_market_mission():
+    j=request.json or {}
+    role_code=str(j.get('role_code') or '').strip().lower()
+    skill_name=str(j.get('skill_name') or '').strip()[:80]
+    if role_code not in ('data','dev','cyber','ml') or not skill_name:
+        return jsonify(error='Role and market skill are required'),400
+    now=datetime.now().isoformat(timespec='seconds')
+    with transaction() as con:
+        rows=con.execute('SELECT code FROM work_tickets WHERE role_code=?',(role_code,)).fetchall()
+        numbers=[]
+        for row in rows:
+            m=re.search(r'(\d+)$',str(dict(row).get('code') or ''))
+            if m: numbers.append(int(m.group(1)))
+        prefix={'data':'DATA','dev':'DEV','cyber':'CYBER','ml':'ML'}[role_code]
+        code=f'{prefix}-{max(numbers+[0])+1:03d}'
+        title=f'Demonstrate {skill_name} in a realistic deliverable'
+        cur=con.execute('''INSERT INTO work_tickets(role_code,code,title,status,priority,mission_type,description,acceptance,stakeholder,due_date,deliverables,created_at,updated_at)
+                           VALUES(?,?,?,'backlog','high','focus',?,?,?,?,?,?,?)''',
+                        (role_code,code,title,'Build a portfolio-grade task based on a repeated market requirement.','The deliverable must prove the skill with reproducible evidence, validation and clear explanation.','Hiring Manager / Technical Lead','',f'Working artifact, tests or validation, README and short defense notes.',now,now))
+        con.execute('INSERT INTO work_ticket_history(ticket_id,role_code,event_type,note,created_at) VALUES(?,?,?,?,?)',(cur.lastrowid,role_code,'market_mission_created',f'Created from market demand: {skill_name}',now))
+    return jsonify(ok=True,ticket_id=cur.lastrowid,code=code)
 
 
 @app.post('/api/work/session')
