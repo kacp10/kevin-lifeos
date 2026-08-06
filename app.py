@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 164  # V164 AI Review Bridge: generated review prompts, structured imports and correction plans
+VERSION = 165  # V165 Skills & Level Coach: evidence-based readiness, assessments and manual promotion
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -491,6 +491,17 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id INTEGER NOT NULL, role_code TEXT NOT NULL,
         event_type TEXT NOT NULL, from_status TEXT DEFAULT '', to_status TEXT DEFAULT '',
         note TEXT DEFAULT '', score INTEGER DEFAULT NULL, created_at TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS work_skill_evidence (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, role_code TEXT NOT NULL, skill_key TEXT NOT NULL,
+        skill_name TEXT NOT NULL, evidence_count INTEGER DEFAULT 0, approved_tickets INTEGER DEFAULT 0,
+        score_total INTEGER DEFAULT 0, last_ticket_id INTEGER DEFAULT NULL,
+        last_evidence_at TEXT DEFAULT '', UNIQUE(role_code, skill_key));
+    CREATE TABLE IF NOT EXISTS work_level_assessments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, role_code TEXT NOT NULL, from_level TEXT NOT NULL,
+        target_level TEXT NOT NULL, status TEXT DEFAULT 'pending', readiness INTEGER DEFAULT 0,
+        prompt_snapshot TEXT DEFAULT '', result_payload TEXT DEFAULT '', summary TEXT DEFAULT '',
+        score INTEGER DEFAULT NULL, created_at TEXT DEFAULT '', reviewed_at TEXT DEFAULT '',
+        promoted_at TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS debts (
         id INTEGER PRIMARY KEY, name TEXT, initial INTEGER);
     CREATE TABLE IF NOT EXISTS abonos (
@@ -771,6 +782,18 @@ def init_db():
             ("ALTER TABLE work_tickets ADD COLUMN review_payload TEXT DEFAULT ''", ()),
             ("ALTER TABLE work_tickets ADD COLUMN correction_plan TEXT DEFAULT ''", ()),
             ("ALTER TABLE work_tickets ADD COLUMN reviewed_at TEXT DEFAULT ''", ()),
+        ),
+    )
+    apply_migration(
+        con, 'v165_work_skills_level_coach',
+        'Evidence-based professional skills, readiness assessments and manual level promotion',
+        (
+            ("ALTER TABLE work_roles ADD COLUMN level_index INTEGER DEFAULT 0", ()),
+            ("ALTER TABLE work_roles ADD COLUMN promotion_ready INTEGER DEFAULT 0", ()),
+            ("CREATE TABLE IF NOT EXISTS work_skill_evidence (id INTEGER PRIMARY KEY AUTOINCREMENT, role_code TEXT NOT NULL, skill_key TEXT NOT NULL, skill_name TEXT NOT NULL, evidence_count INTEGER DEFAULT 0, approved_tickets INTEGER DEFAULT 0, score_total INTEGER DEFAULT 0, last_ticket_id INTEGER DEFAULT NULL, last_evidence_at TEXT DEFAULT '', UNIQUE(role_code, skill_key))", ()),
+            ("CREATE TABLE IF NOT EXISTS work_level_assessments (id INTEGER PRIMARY KEY AUTOINCREMENT, role_code TEXT NOT NULL, from_level TEXT NOT NULL, target_level TEXT NOT NULL, status TEXT DEFAULT 'pending', readiness INTEGER DEFAULT 0, prompt_snapshot TEXT DEFAULT '', result_payload TEXT DEFAULT '', summary TEXT DEFAULT '', score INTEGER DEFAULT NULL, created_at TEXT DEFAULT '', reviewed_at TEXT DEFAULT '', promoted_at TEXT DEFAULT '')", ()),
+            ("CREATE INDEX IF NOT EXISTS idx_work_skill_role ON work_skill_evidence(role_code, evidence_count)", ()),
+            ("CREATE INDEX IF NOT EXISTS idx_work_assessment_role ON work_level_assessments(role_code, id)", ()),
         ),
     )
     now_iso = datetime.now().isoformat(timespec='seconds')
@@ -1777,15 +1800,61 @@ def state():
 
 
 
+WORK_LEVELS = ('Foundation', 'Junior', 'Professional', 'Advanced')
+
+
+def _work_skill_key(name):
+    import re
+    text = str(name or '').strip().lower()
+    aliases = {
+        'postgresql': 'sql', 'advanced sql': 'sql', 'sql avanzado': 'sql',
+        'python programming': 'python', 'pandas python': 'python',
+        'powerbi': 'power-bi', 'power bi': 'power-bi',
+        'git/github': 'git', 'github': 'git',
+        'cyber security': 'cybersecurity', 'security': 'cybersecurity',
+        'machine learning': 'machine-learning', 'ml': 'machine-learning',
+    }
+    if text in aliases:
+        return aliases[text]
+    return re.sub(r'[^a-z0-9]+', '-', text).strip('-')[:80] or 'general'
+
+
+def _work_readiness(con, role_code):
+    approved = con.execute(
+        "SELECT COUNT(*) AS n, COALESCE(AVG(review_score),0) AS avg_score FROM work_tickets WHERE role_code=? AND status='done' AND review_status='approved'",
+        (role_code,),
+    ).fetchone()
+    approved_n = int(dict(approved).get('n') or 0)
+    avg_score = float(dict(approved).get('avg_score') or 0)
+    skill_n = int(con.execute(
+        'SELECT COUNT(*) AS n FROM work_skill_evidence WHERE role_code=? AND approved_tickets>0',
+        (role_code,),
+    ).fetchone()['n'] or 0)
+    mission_points = min(50, approved_n * 10)
+    breadth_points = min(30, skill_n * 5)
+    quality_points = min(20, round(avg_score * .2)) if approved_n else 0
+    return min(100, mission_points + breadth_points + quality_points)
+
+
+def _work_next_level(level_index):
+    idx = max(0, min(len(WORK_LEVELS)-1, int(level_index or 0)))
+    return WORK_LEVELS[min(len(WORK_LEVELS)-1, idx + 1)]
+
+
 @app.get('/api/work/state')
 def work_state():
     d = db()
     roles = [dict(r) for r in d.execute('SELECT * FROM work_roles ORDER BY id')]
+    for role in roles:
+        role['readiness'] = _work_readiness(d, role['code'])
+        role['next_level'] = _work_next_level(role.get('level_index', 0))
     tickets = [dict(r) for r in d.execute('SELECT * FROM work_tickets ORDER BY id DESC')]
     sessions = [dict(r) for r in d.execute('SELECT * FROM work_sessions ORDER BY day DESC, id DESC LIMIT 100')]
     history = [dict(r) for r in d.execute('SELECT * FROM work_ticket_history ORDER BY id DESC LIMIT 250')]
+    skills = [dict(r) for r in d.execute('SELECT * FROM work_skill_evidence ORDER BY role_code, approved_tickets DESC, evidence_count DESC, skill_name')]
+    assessments = [dict(r) for r in d.execute('SELECT * FROM work_level_assessments ORDER BY id DESC LIMIT 50')]
     shifts = {r['weekday']: r['shift'] for r in d.execute('SELECT * FROM week_shifts')}
-    return jsonify(dict(roles=roles, tickets=tickets, sessions=sessions, history=history, shifts=shifts, today=date.today().isoformat()))
+    return jsonify(dict(roles=roles, tickets=tickets, sessions=sessions, history=history, skills=skills, assessments=assessments, shifts=shifts, today=date.today().isoformat()))
 
 
 @app.post('/api/work/role')
@@ -2016,12 +2085,107 @@ def work_ticket_review_import():
              _json.dumps(payload, ensure_ascii=False),
              _json.dumps(correction_items, ensure_ascii=False), now, now, ticket_id),
         )
+        if decision == 'approved':
+            for skill_name in skills:
+                skill_key = _work_skill_key(skill_name)
+                existing = con.execute('SELECT id FROM work_skill_evidence WHERE role_code=? AND skill_key=?', (role_code, skill_key)).fetchone()
+                if existing:
+                    con.execute('''UPDATE work_skill_evidence SET skill_name=?, evidence_count=evidence_count+1,
+                                   approved_tickets=approved_tickets+1, score_total=score_total+?,
+                                   last_ticket_id=?, last_evidence_at=? WHERE role_code=? AND skill_key=?''',
+                                (skill_name, score, ticket_id, now, role_code, skill_key))
+                else:
+                    con.execute('''INSERT INTO work_skill_evidence
+                                   (role_code,skill_key,skill_name,evidence_count,approved_tickets,score_total,last_ticket_id,last_evidence_at)
+                                   VALUES(?,?,?,?,?,?,?,?)''',
+                                (role_code, skill_key, skill_name, 1, 1, score, ticket_id, now))
         event_note = f'AI review round {review_round}: {summary}'
         con.execute(
             'INSERT INTO work_ticket_history(ticket_id,role_code,event_type,from_status,to_status,note,score,created_at) VALUES(?,?,?,?,?,?,?,?)',
             (ticket_id, role_code, f'ai_{decision}', previous, target, event_note[:1800], score, now),
         )
     return jsonify(ok=True, status=target, review_round=review_round, corrections=correction_items)
+
+
+@app.post('/api/work/level/assessment/request')
+def work_level_assessment_request():
+    j = request.json or {}
+    role_code = str(j.get('role_code') or '').strip().lower()
+    with transaction() as con:
+        role = con.execute('SELECT * FROM work_roles WHERE code=?', (role_code,)).fetchone()
+        if not role:
+            return jsonify(error='Professional role not found'), 404
+        role = dict(role)
+        readiness = _work_readiness(con, role_code)
+        if readiness < 70:
+            return jsonify(error='Readiness must reach 70 before requesting an assessment', readiness=readiness), 400
+        pending = con.execute("SELECT id FROM work_level_assessments WHERE role_code=? AND status IN ('pending','ready') ORDER BY id DESC LIMIT 1", (role_code,)).fetchone()
+        if pending:
+            return jsonify(error='An assessment is already open for this role'), 409
+        target = _work_next_level(role.get('level_index', 0))
+        if target == role.get('level'):
+            return jsonify(error='Highest configured level already reached'), 400
+        skills = [dict(r) for r in con.execute('SELECT skill_name,approved_tickets,score_total FROM work_skill_evidence WHERE role_code=? ORDER BY approved_tickets DESC', (role_code,))]
+        prompt = f"Assess my readiness to move from {role.get('level')} to {target} as {role.get('name')}. Readiness score: {readiness}/100. Verified skills: " + ', '.join(x['skill_name'] for x in skills[:12]) + ". Create a practical assessment with one realistic case, objective acceptance criteria, defense questions and a strict JSON result using decision approved or not_ready, score, summary, strengths, gaps and required_actions. Do not promote me automatically."
+        now = datetime.now().isoformat(timespec='seconds')
+        cur = con.execute('''INSERT INTO work_level_assessments(role_code,from_level,target_level,status,readiness,prompt_snapshot,created_at)
+                             VALUES(?,?,?,'pending',?,?,?)''', (role_code, role.get('level'), target, readiness, prompt, now))
+    return jsonify(ok=True, assessment_id=cur.lastrowid, readiness=readiness, prompt=prompt)
+
+
+@app.post('/api/work/level/assessment/import')
+def work_level_assessment_import():
+    import json as _json
+    j = request.json or {}
+    try:
+        assessment_id = int(j.get('assessment_id'))
+        score = max(0, min(100, int(j.get('score'))))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid assessment or score'), 400
+    role_code = str(j.get('role_code') or '').strip().lower()
+    decision = str(j.get('decision') or '').strip().lower()
+    summary = str(j.get('summary') or '').strip()[:1800]
+    if decision not in ('approved', 'not_ready') or not summary:
+        return jsonify(error='Invalid assessment decision or summary'), 400
+    payload = {
+        'decision': decision, 'score': score, 'summary': summary,
+        'strengths': j.get('strengths') if isinstance(j.get('strengths'), list) else [],
+        'gaps': j.get('gaps') if isinstance(j.get('gaps'), list) else [],
+        'required_actions': j.get('required_actions') if isinstance(j.get('required_actions'), list) else [],
+    }
+    now = datetime.now().isoformat(timespec='seconds')
+    with transaction() as con:
+        row = con.execute('SELECT * FROM work_level_assessments WHERE id=? AND role_code=?', (assessment_id, role_code)).fetchone()
+        if not row:
+            return jsonify(error='Assessment not found for active role'), 404
+        status = 'ready' if decision == 'approved' else 'not_ready'
+        con.execute('UPDATE work_level_assessments SET status=?,result_payload=?,summary=?,score=?,reviewed_at=? WHERE id=?',
+                    (status, _json.dumps(payload, ensure_ascii=False), summary, score, now, assessment_id))
+        con.execute('UPDATE work_roles SET promotion_ready=?,updated_at=? WHERE code=?', (1 if status == 'ready' else 0, now, role_code))
+    return jsonify(ok=True, status=status)
+
+
+@app.post('/api/work/level/promote')
+def work_level_promote():
+    j = request.json or {}
+    role_code = str(j.get('role_code') or '').strip().lower()
+    with transaction() as con:
+        role = con.execute('SELECT * FROM work_roles WHERE code=?', (role_code,)).fetchone()
+        if not role:
+            return jsonify(error='Professional role not found'), 404
+        role = dict(role)
+        if not int(role.get('promotion_ready') or 0):
+            return jsonify(error='No approved assessment is ready for promotion'), 400
+        current_idx = int(role.get('level_index') or 0)
+        next_idx = min(len(WORK_LEVELS)-1, current_idx + 1)
+        if next_idx == current_idx:
+            return jsonify(error='Highest configured level already reached'), 400
+        next_level = WORK_LEVELS[next_idx]
+        now = datetime.now().isoformat(timespec='seconds')
+        con.execute('UPDATE work_roles SET level=?,level_index=?,promotion_ready=0,updated_at=? WHERE code=?',
+                    (next_level, next_idx, now, role_code))
+        con.execute("UPDATE work_level_assessments SET status='promoted',promoted_at=? WHERE id=(SELECT id FROM work_level_assessments WHERE role_code=? AND status='ready' ORDER BY id DESC LIMIT 1)", (now, role_code))
+    return jsonify(ok=True, level=next_level)
 
 
 @app.post('/api/work/session')
