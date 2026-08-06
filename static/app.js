@@ -1443,6 +1443,20 @@ async function confirmModal(title, text, danger = true) {
   return await modal({ icon: danger ? '⚠' : '❓', title, text, okText: 'Yes, do it', danger }) === true;
 }
 
+// Shared configurable confirmation used by Work Mode and other modern panels.
+// Kept as a thin adapter over the existing modal system so every caller gets
+// the same focus handling, mobile layout and cancel semantics.
+async function confirmAction({
+  icon = '❓',
+  title = 'Confirm action',
+  text = '',
+  okText = 'Confirm',
+  cancelText = 'Cancel',
+  danger = false,
+} = {}) {
+  return await modal({ icon, title, text, okText, cancelText, danger }) === true;
+}
+
 function checkVersion() {
   if (S.version === FRONT_V) return;
   document.body.insertAdjacentHTML('afterbegin',
@@ -9118,6 +9132,91 @@ async function toggleWorkPortfolioChecklist(el){await api('/api/work/portfolio/c
 async function updateWorkPortfolioStatus(id,status){try{await api('/api/work/portfolio/status',{body:{project_id:Number(id),status}});await loadWorkState();renderWorkMode();toast(status==='published'?'Project marked as published':'Project is ready for publication')}catch(e){toast(e?.message||'Portfolio status could not change','err')}}
 async function copyWorkPortfolioReadme(id){const active=WORK.roles.find(x=>x.active)||WORK.roles[0],project=workPortfolioProjects(active.code).find(x=>x.id===Number(id));if(project)await copyTextSafe(workPortfolioReadmePrompt(project,active),'README prompt copied')}
 function showWorkTicketDetail(id){const t=WORK.tickets.find(x=>x.id===Number(id));if(!t)return;const events=(WORK.history||[]).filter(h=>h.ticket_id===t.id);modal({icon:'▣',title:`${t.code} · ${t.title}`,text:`<div class="work-detail"><p><b>Stakeholder:</b> ${esc(t.stakeholder||'Not assigned')}</p><p><b>Context:</b> ${esc(t.description)}</p><p><b>Acceptance:</b> ${esc(t.acceptance)}</p><p><b>Deliverables:</b> ${esc(t.deliverables||'Not defined')}</p><p><b>Due:</b> ${esc(t.due_date||'Open')}</p>${t.blocked_reason?`<div class="work-blocker-note">${esc(t.blocked_reason)}</div>`:''}${t.review_note?`<div class="work-review-note"><b>Review ${Number(t.review_round||1)} · ${Number(t.review_score||0)}/100</b><br>${esc(t.review_note)}</div>`:''}${workCorrectionItems(t).length?`<div class="work-correction-plan"><b>Required corrections</b>${workCorrectionItems(t).map((x,i)=>`<span>${i+1}. ${esc(x)}</span>`).join('')}</div>`:''}<h4>History</h4>${events.length?events.map(e=>`<div class="work-detail-event"><b>${esc(e.event_type)}</b><span>${esc(e.created_at)}</span><p>${esc(e.note||'')}</p></div>`).join(''):'<p>No events yet.</p>'}</div>`,okText:'Close'});}
-document.addEventListener('click',e=>{if(e.target.closest('#openWorkMode'))openWorkMode();if(e.target.closest('#closeWorkMode'))closeWorkMode();if(e.target.closest('[data-work-edit-command]'))editWorkCommand();const role=e.target.closest('[data-work-role]');if(role)switchWorkRole(role.dataset.workRole);const log=e.target.closest('[data-work-log]');if(log)logWorkSession(log.dataset.workLog);const move=e.target.closest('[data-work-ticket-status]');if(move)updateWorkTicketStatus(move.dataset.workTicketId,move.dataset.workTicketStatus);if(e.target.closest('[data-work-new-ticket]'))editWorkTicket();const detail=e.target.closest('[data-work-ticket-detail]');if(detail)showWorkTicketDetail(detail.dataset.workTicketDetail);const block=e.target.closest('[data-work-block]');if(block)blockWorkTicket(block.dataset.workBlock);const copyReview=e.target.closest('[data-work-copy-review]');if(copyReview)copyWorkReviewPrompt(copyReview.dataset.workCopyReview);const importReview=e.target.closest('[data-work-import-review]');if(importReview)importWorkReview(importReview.dataset.workImportReview);if(e.target.closest('[data-work-request-assessment]'))requestWorkAssessment();const copyAssessment=e.target.closest('[data-work-copy-assessment]');if(copyAssessment)copyWorkAssessment(copyAssessment.dataset.workCopyAssessment);const importAssessment=e.target.closest('[data-work-import-assessment]');if(importAssessment)importWorkAssessment(importAssessment.dataset.workImportAssessment);if(e.target.closest('[data-work-promote]'))promoteWorkLevel();if(e.target.closest('[data-work-market-add]'))addWorkMarketSource();const marketArchive=e.target.closest('[data-work-market-archive]');if(marketArchive)archiveWorkMarketSource(marketArchive.dataset.workMarketArchive);const marketMission=e.target.closest('[data-work-market-mission]');if(marketMission)createWorkMarketMission(marketMission.dataset.workMarketMission);if(e.target.closest('[data-work-portfolio-new]'))editWorkPortfolio();const pe=e.target.closest('[data-work-portfolio-edit]');if(pe)editWorkPortfolio(pe.dataset.workPortfolioEdit);const pr=e.target.closest('[data-work-portfolio-readme]');if(pr)copyWorkPortfolioReadme(pr.dataset.workPortfolioReadme);const ps=e.target.closest('[data-work-portfolio-status]');if(ps)updateWorkPortfolioStatus(ps.dataset.workPortfolioStatus,ps.dataset.status);});
-document.addEventListener('change',e=>{const pc=e.target.closest('[data-work-portfolio-check]');if(pc)toggleWorkPortfolioChecklist(pc);});
+function runWorkAction(action, fallbackMessage = 'Work Mode action could not be completed') {
+  Promise.resolve()
+    .then(action)
+    .catch((error) => {
+      console.error('[Work Mode]', error);
+      toast(error?.message || fallbackMessage, 'err');
+    });
+}
+
+document.addEventListener('click', (e) => {
+  const open = e.target.closest('#openWorkMode');
+  if (open) return runWorkAction(() => openWorkMode(), 'Work Mode could not open');
+
+  const close = e.target.closest('#closeWorkMode');
+  if (close) return closeWorkMode();
+
+  const editCommand = e.target.closest('[data-work-edit-command]');
+  if (editCommand) return runWorkAction(() => editWorkCommand());
+
+  const role = e.target.closest('[data-work-role]');
+  if (role) return runWorkAction(() => switchWorkRole(role.dataset.workRole));
+
+  const log = e.target.closest('[data-work-log]');
+  if (log) return runWorkAction(() => logWorkSession(log.dataset.workLog));
+
+  const move = e.target.closest('[data-work-ticket-status]');
+  if (move) return runWorkAction(() => updateWorkTicketStatus(move.dataset.workTicketId, move.dataset.workTicketStatus));
+
+  const newTicket = e.target.closest('[data-work-new-ticket]');
+  if (newTicket) return runWorkAction(() => editWorkTicket());
+
+  const detail = e.target.closest('[data-work-ticket-detail]');
+  if (detail) return showWorkTicketDetail(detail.dataset.workTicketDetail);
+
+  const block = e.target.closest('[data-work-block]');
+  if (block) return runWorkAction(() => blockWorkTicket(block.dataset.workBlock));
+
+  const copyReview = e.target.closest('[data-work-copy-review]');
+  if (copyReview) return runWorkAction(() => copyWorkReviewPrompt(copyReview.dataset.workCopyReview));
+
+  const importReview = e.target.closest('[data-work-import-review]');
+  if (importReview) return runWorkAction(() => importWorkReview(importReview.dataset.workImportReview));
+
+  const requestAssessment = e.target.closest('[data-work-request-assessment]');
+  if (requestAssessment) return runWorkAction(() => requestWorkAssessment());
+
+  const copyAssessment = e.target.closest('[data-work-copy-assessment]');
+  if (copyAssessment) return runWorkAction(() => copyWorkAssessment(copyAssessment.dataset.workCopyAssessment));
+
+  const importAssessment = e.target.closest('[data-work-import-assessment]');
+  if (importAssessment) return runWorkAction(() => importWorkAssessment(importAssessment.dataset.workImportAssessment));
+
+  const promote = e.target.closest('[data-work-promote]');
+  if (promote) return runWorkAction(() => promoteWorkLevel());
+
+  const marketAdd = e.target.closest('[data-work-market-add]');
+  if (marketAdd) return runWorkAction(() => addWorkMarketSource());
+
+  const marketArchive = e.target.closest('[data-work-market-archive]');
+  if (marketArchive) return runWorkAction(() => archiveWorkMarketSource(marketArchive.dataset.workMarketArchive));
+
+  const marketMission = e.target.closest('[data-work-market-mission]');
+  if (marketMission) return runWorkAction(
+    () => createWorkMarketMission(marketMission.dataset.workMarketMission),
+    'Market mission could not be created',
+  );
+
+  const portfolioNew = e.target.closest('[data-work-portfolio-new]');
+  if (portfolioNew) return runWorkAction(() => editWorkPortfolio());
+
+  const portfolioEdit = e.target.closest('[data-work-portfolio-edit]');
+  if (portfolioEdit) return runWorkAction(() => editWorkPortfolio(portfolioEdit.dataset.workPortfolioEdit));
+
+  const portfolioReadme = e.target.closest('[data-work-portfolio-readme]');
+  if (portfolioReadme) return runWorkAction(() => copyWorkPortfolioReadme(portfolioReadme.dataset.workPortfolioReadme));
+
+  const portfolioStatus = e.target.closest('[data-work-portfolio-status]');
+  if (portfolioStatus) return runWorkAction(() => updateWorkPortfolioStatus(
+    portfolioStatus.dataset.workPortfolioStatus,
+    portfolioStatus.dataset.status,
+  ));
+});
+
+document.addEventListener('change', (e) => {
+  const portfolioCheck = e.target.closest('[data-work-portfolio-check]');
+  if (portfolioCheck) runWorkAction(() => toggleWorkPortfolioChecklist(portfolioCheck));
+});
 
