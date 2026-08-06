@@ -1,50 +1,50 @@
-import json
-import sqlite3
-import unittest
 from pathlib import Path
+import re
 
-SCHEMA = """
-CREATE TABLE work_tickets(id INTEGER PRIMARY KEY, role_code TEXT, status TEXT, review_status TEXT);
-CREATE TABLE work_portfolio_projects(
- id INTEGER PRIMARY KEY AUTOINCREMENT, role_code TEXT NOT NULL, title TEXT NOT NULL,
- slug TEXT NOT NULL, summary TEXT DEFAULT '', status TEXT DEFAULT 'internal',
- ticket_ids_json TEXT DEFAULT '[]', checklist_json TEXT DEFAULT '{}', repo_url TEXT DEFAULT '',
- linkedin_url TEXT DEFAULT '', readme_text TEXT DEFAULT '', interview_notes TEXT DEFAULT '',
- created_at TEXT DEFAULT '', updated_at TEXT DEFAULT '', published_at TEXT DEFAULT '',
- UNIQUE(role_code, slug));
-"""
+APP_JS = Path(__file__).resolve().parents[1] / "static" / "app.js"
 
-class WorkPortfolioOperationsTests(unittest.TestCase):
-    def setUp(self):
-        self.db=sqlite3.connect(':memory:')
-        self.db.executescript(SCHEMA)
 
-    def test_only_approved_missions_are_valid_portfolio_evidence(self):
-        self.db.execute("INSERT INTO work_tickets VALUES(1,'dev','done','approved')")
-        self.db.execute("INSERT INTO work_tickets VALUES(2,'dev','done','changes_requested')")
-        approved={r[0] for r in self.db.execute("SELECT id FROM work_tickets WHERE role_code='dev' AND status='done' AND review_status='approved'")}
-        self.assertIn(1,approved)
-        self.assertNotIn(2,approved)
+def source():
+    return APP_JS.read_text(encoding="utf-8")
 
-    def test_project_status_starts_internal(self):
-        self.db.execute("INSERT INTO work_portfolio_projects(role_code,title,slug,ticket_ids_json) VALUES('data','Sales Analysis','sales-analysis','[1]')")
-        self.assertEqual(self.db.execute('SELECT status FROM work_portfolio_projects').fetchone()[0],'internal')
 
-    def test_publication_checklist_is_persistent(self):
-        checklist={'approved_evidence':True,'readme':True,'setup':True,'tests':True,'results':True,'limitations':True,'repo_public':False}
-        self.db.execute("INSERT INTO work_portfolio_projects(role_code,title,slug,checklist_json) VALUES('ml','Churn Model','churn-model',?)",(json.dumps(checklist),))
-        loaded=json.loads(self.db.execute('SELECT checklist_json FROM work_portfolio_projects').fetchone()[0])
-        self.assertTrue(loaded['tests'])
-        self.assertFalse(loaded['repo_public'])
+def test_confirm_action_is_defined_before_work_calls():
+    js = source()
+    definition = js.find("async function confirmAction(")
+    market_call = js.find("async function createWorkMarketMission(")
+    assert definition >= 0
+    assert market_call >= 0
+    assert definition < market_call
 
-    def test_frontend_and_backend_versions_are_v167(self):
-        root=Path(__file__).resolve().parent.parent
-        app_py=(root/'app.py').read_text(encoding='utf-8')
-        app_js=(root/'static'/'app.js').read_text(encoding='utf-8')
-        self.assertIn('VERSION = 167',app_py)
-        self.assertIn('const FRONT_V = 167;',app_js)
-        self.assertIn('/api/work/portfolio/project',app_py)
-        self.assertIn('PORTFOLIO OPERATIONS',app_js)
-        self.assertIn('Copy README prompt',app_js)
 
-if __name__=='__main__': unittest.main()
+def test_work_actions_use_central_async_error_boundary():
+    js = source()
+    assert "function runWorkAction(" in js
+    assert "console.error('[Work Mode]', error)" in js
+    assert "Market mission could not be created" in js
+    assert "toggleWorkPortfolioChecklist(portfolioCheck)" in js
+
+
+def test_all_work_click_actions_reference_declared_functions():
+    js = source()
+    declared = set(re.findall(r"\b(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(", js))
+    start = js.index("document.addEventListener('click', (e) => {")
+    end = js.index("document.addEventListener('change', (e) => {", start)
+    block = js[start:end]
+    invoked = set(re.findall(r"=>\s*([A-Za-z_$][\w$]*)\s*\(", block))
+    missing = sorted(name for name in invoked if name not in declared)
+    assert missing == []
+
+
+def test_market_mission_still_requires_confirmation():
+    js = source()
+    fn = re.search(
+        r"async function createWorkMarketMission\(skill\)\{(?P<body>.*?)\nasync function editWorkPortfolio",
+        js,
+        re.S,
+    )
+    assert fn
+    body = fn.group("body")
+    assert "await confirmAction(" in body
+    assert "if(!ok)return" in body
+    assert "/api/work/market/mission" in body
