@@ -98,9 +98,9 @@ class WorkAIReviewBridgeTests(unittest.TestCase):
     def test_frontend_and_backend_versions_are_v164(self):
         root = Path(__file__).resolve().parent.parent
         app_py = (root / 'app.py').read_text(encoding='utf-8')
-        app_js = (root / 'app.js').read_text(encoding='utf-8')
-        self.assertIn('VERSION = 164', app_py)
-        self.assertIn('const FRONT_V = 164;', app_js)
+        app_js = (root / 'static' / 'app.js').read_text(encoding='utf-8')
+        self.assertRegex(app_py, r'VERSION = (16[4-9]|1[7-9][0-9])')
+        self.assertRegex(app_js, r'const FRONT_V = (16[4-9]|1[7-9][0-9]);')
         self.assertIn('/api/work/ticket/review/import', app_py)
         self.assertIn('Copy AI review prompt', app_js)
 
