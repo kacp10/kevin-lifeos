@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 162  # V162 Work Command Center: role dashboards, sprint context and backlog control
+VERSION = 163  # V163 Mission System: complete tickets, deliverables, blockers, reviews and history
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -487,6 +487,10 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT, role_code TEXT NOT NULL, ticket_id INTEGER DEFAULT NULL,
         day TEXT NOT NULL, minutes INTEGER DEFAULT 0, session_type TEXT DEFAULT 'standby',
         result TEXT DEFAULT 'progress', note TEXT DEFAULT '', created_at TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS work_ticket_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id INTEGER NOT NULL, role_code TEXT NOT NULL,
+        event_type TEXT NOT NULL, from_status TEXT DEFAULT '', to_status TEXT DEFAULT '',
+        note TEXT DEFAULT '', score INTEGER DEFAULT NULL, created_at TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS debts (
         id INTEGER PRIMARY KEY, name TEXT, initial INTEGER);
     CREATE TABLE IF NOT EXISTS abonos (
@@ -743,6 +747,19 @@ def init_db():
             ("ALTER TABLE work_roles ADD COLUMN sprint_start TEXT DEFAULT ''", ()),
             ("ALTER TABLE work_roles ADD COLUMN sprint_end TEXT DEFAULT ''", ()),
             ("ALTER TABLE work_roles ADD COLUMN weekly_minutes INTEGER DEFAULT 180", ()),
+        ),
+    )
+    apply_migration(
+        con, 'v163_work_mission_system',
+        'Complete Work missions with stakeholders, deadlines, deliverables, blockers, reviews and history',
+        (
+            ("ALTER TABLE work_tickets ADD COLUMN stakeholder TEXT DEFAULT ''", ()),
+            ("ALTER TABLE work_tickets ADD COLUMN due_date TEXT DEFAULT ''", ()),
+            ("ALTER TABLE work_tickets ADD COLUMN deliverables TEXT DEFAULT ''", ()),
+            ("ALTER TABLE work_tickets ADD COLUMN blocked_reason TEXT DEFAULT ''", ()),
+            ("ALTER TABLE work_tickets ADD COLUMN review_note TEXT DEFAULT ''", ()),
+            ("ALTER TABLE work_tickets ADD COLUMN review_score INTEGER DEFAULT NULL", ()),
+            ("CREATE INDEX IF NOT EXISTS idx_work_history_ticket ON work_ticket_history(ticket_id, created_at)", ()),
         ),
     )
     now_iso = datetime.now().isoformat(timespec='seconds')
@@ -1755,8 +1772,9 @@ def work_state():
     roles = [dict(r) for r in d.execute('SELECT * FROM work_roles ORDER BY id')]
     tickets = [dict(r) for r in d.execute('SELECT * FROM work_tickets ORDER BY id DESC')]
     sessions = [dict(r) for r in d.execute('SELECT * FROM work_sessions ORDER BY day DESC, id DESC LIMIT 100')]
+    history = [dict(r) for r in d.execute('SELECT * FROM work_ticket_history ORDER BY id DESC LIMIT 250')]
     shifts = {r['weekday']: r['shift'] for r in d.execute('SELECT * FROM week_shifts')}
-    return jsonify(dict(roles=roles, tickets=tickets, sessions=sessions, shifts=shifts, today=date.today().isoformat()))
+    return jsonify(dict(roles=roles, tickets=tickets, sessions=sessions, history=history, shifts=shifts, today=date.today().isoformat()))
 
 
 @app.post('/api/work/role')
@@ -1812,14 +1830,105 @@ def work_ticket_status():
     if status not in ('backlog', 'ready', 'in_progress', 'review', 'done'):
         return jsonify(error='Invalid ticket status'), 400
     with transaction() as con:
-        ticket = con.execute('SELECT role_code FROM work_tickets WHERE id=?', (ticket_id,)).fetchone()
+        ticket = con.execute('SELECT role_code,status FROM work_tickets WHERE id=?', (ticket_id,)).fetchone()
         if not ticket:
             return jsonify(error='Ticket not found'), 404
         if dict(ticket)['role_code'] != role_code:
             return jsonify(error='Ticket does not belong to the active role'), 400
-        con.execute('UPDATE work_tickets SET status=?, updated_at=? WHERE id=?',
-                    (status, datetime.now().isoformat(timespec='seconds'), ticket_id))
+        previous = dict(ticket).get('status', '') if 'status' in dict(ticket) else con.execute('SELECT status FROM work_tickets WHERE id=?', (ticket_id,)).fetchone()[0]
+        now = datetime.now().isoformat(timespec='seconds')
+        con.execute("UPDATE work_tickets SET status=?, blocked_reason=CASE WHEN ?='blocked' THEN blocked_reason ELSE '' END, updated_at=? WHERE id=?",
+                    (status, status, now, ticket_id))
+        con.execute('INSERT INTO work_ticket_history(ticket_id,role_code,event_type,from_status,to_status,note,created_at) VALUES(?,?,?,?,?,?,?)',
+                    (ticket_id, role_code, 'status', previous, status, '', now))
     return jsonify(ok=True)
+
+
+@app.post('/api/work/ticket')
+def work_ticket_save():
+    j = request.json or {}
+    role_code = str(j.get('role_code') or '').strip().lower()
+    title = str(j.get('title') or '').strip()[:140]
+    description = str(j.get('description') or '').strip()[:1200]
+    acceptance = str(j.get('acceptance') or '').strip()[:1200]
+    deliverables = str(j.get('deliverables') or '').strip()[:1200]
+    stakeholder = str(j.get('stakeholder') or '').strip()[:120]
+    due_date = str(j.get('due_date') or '').strip()[:10]
+    priority = str(j.get('priority') or 'medium').strip().lower()
+    mission_type = str(j.get('mission_type') or 'standby').strip().lower()
+    if not title or not description or not acceptance or not deliverables:
+        return jsonify(error='Title, context, acceptance criteria and deliverables are required'), 400
+    if priority not in ('low','medium','high','critical') or mission_type not in ('standby','focus'):
+        return jsonify(error='Invalid mission configuration'), 400
+    now = datetime.now().isoformat(timespec='seconds')
+    with transaction() as con:
+        if not con.execute('SELECT 1 FROM work_roles WHERE code=?', (role_code,)).fetchone():
+            return jsonify(error='Professional role not found'), 404
+        ticket_id = j.get('ticket_id')
+        if ticket_id:
+            try: ticket_id = int(ticket_id)
+            except (TypeError, ValueError): return jsonify(error='Invalid ticket'), 400
+            row = con.execute('SELECT role_code FROM work_tickets WHERE id=?', (ticket_id,)).fetchone()
+            if not row or dict(row)['role_code'] != role_code:
+                return jsonify(error='Ticket does not belong to the active role'), 400
+            con.execute('''UPDATE work_tickets SET title=?,priority=?,mission_type=?,description=?,acceptance=?,stakeholder=?,due_date=?,deliverables=?,updated_at=? WHERE id=?''',
+                        (title,priority,mission_type,description,acceptance,stakeholder,due_date,deliverables,now,ticket_id))
+            event='edited'
+        else:
+            prefix={'data':'DATA','dev':'DEV','cyber':'CYBER','ml':'ML'}.get(role_code, role_code.upper())
+            rows=con.execute('SELECT code FROM work_tickets WHERE role_code=?', (role_code,)).fetchall()
+            nums=[]
+            for row in rows:
+                try: nums.append(int(dict(row)['code'].split('-')[-1]))
+                except Exception: pass
+            code=f'{prefix}-{max(nums or [0])+1:03d}'
+            cur=con.execute('''INSERT INTO work_tickets(role_code,code,title,status,priority,mission_type,description,acceptance,stakeholder,due_date,deliverables,created_at,updated_at) VALUES(?,?,?,'backlog',?,?,?,?,?,?,?,?,?)''',
+                            (role_code,code,title,priority,mission_type,description,acceptance,stakeholder,due_date,deliverables,now,now))
+            ticket_id=cur.lastrowid
+            event='created'
+        con.execute('INSERT INTO work_ticket_history(ticket_id,role_code,event_type,note,created_at) VALUES(?,?,?,?,?)',
+                    (ticket_id,role_code,event,'Mission definition saved',now))
+    return jsonify(ok=True,ticket_id=ticket_id)
+
+
+@app.post('/api/work/ticket/block')
+def work_ticket_block():
+    j=request.json or {}
+    try: ticket_id=int(j.get('ticket_id'))
+    except (TypeError,ValueError): return jsonify(error='Invalid ticket'),400
+    role_code=str(j.get('role_code') or '').strip().lower()
+    reason=str(j.get('reason') or '').strip()[:700]
+    if not reason: return jsonify(error='A blocker reason is required'),400
+    now=datetime.now().isoformat(timespec='seconds')
+    with transaction() as con:
+        row=con.execute('SELECT role_code,status FROM work_tickets WHERE id=?',(ticket_id,)).fetchone()
+        if not row or dict(row)['role_code']!=role_code: return jsonify(error='Ticket not found for active role'),404
+        previous=dict(row)['status']
+        con.execute("UPDATE work_tickets SET status='blocked',blocked_reason=?,updated_at=? WHERE id=?",(reason,now,ticket_id))
+        con.execute('INSERT INTO work_ticket_history(ticket_id,role_code,event_type,from_status,to_status,note,created_at) VALUES(?,?,?,?,?,?,?)',(ticket_id,role_code,'blocked',previous,'blocked',reason,now))
+    return jsonify(ok=True)
+
+
+@app.post('/api/work/ticket/review')
+def work_ticket_review():
+    j=request.json or {}
+    try:
+        ticket_id=int(j.get('ticket_id')); score=max(0,min(100,int(j.get('score'))))
+    except (TypeError,ValueError): return jsonify(error='Invalid ticket or score'),400
+    role_code=str(j.get('role_code') or '').strip().lower()
+    decision=str(j.get('decision') or '').strip().lower()
+    note=str(j.get('note') or '').strip()[:1500]
+    if decision not in ('changes_requested','approved') or not note:
+        return jsonify(error='Decision and review note are required'),400
+    target='done' if decision=='approved' else 'in_progress'
+    now=datetime.now().isoformat(timespec='seconds')
+    with transaction() as con:
+        row=con.execute('SELECT role_code,status FROM work_tickets WHERE id=?',(ticket_id,)).fetchone()
+        if not row or dict(row)['role_code']!=role_code: return jsonify(error='Ticket not found for active role'),404
+        previous=dict(row)['status']
+        con.execute('UPDATE work_tickets SET status=?,review_note=?,review_score=?,blocked_reason=\'\',updated_at=? WHERE id=?',(target,note,score,now,ticket_id))
+        con.execute('INSERT INTO work_ticket_history(ticket_id,role_code,event_type,from_status,to_status,note,score,created_at) VALUES(?,?,?,?,?,?,?,?)',(ticket_id,role_code,decision,previous,target,note,score,now))
+    return jsonify(ok=True,status=target)
 
 
 @app.post('/api/work/session')
