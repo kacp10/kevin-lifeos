@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 166  # V166 Market Intelligence: sourced vacancies, demand signals and evidence gaps
+VERSION = 167  # V167 Portfolio Operations: publishable projects, GitHub readiness and interview evidence
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -507,6 +507,13 @@ def init_db():
         company TEXT NOT NULL, location TEXT DEFAULT '', source_name TEXT DEFAULT 'LinkedIn',
         source_url TEXT UNIQUE NOT NULL, posted_date TEXT DEFAULT '', captured_at TEXT DEFAULT '',
         skills_json TEXT DEFAULT '[]', notes TEXT DEFAULT '', active INTEGER DEFAULT 1);
+    CREATE TABLE IF NOT EXISTS work_portfolio_projects (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, role_code TEXT NOT NULL, title TEXT NOT NULL,
+        slug TEXT NOT NULL, summary TEXT DEFAULT '', status TEXT DEFAULT 'internal',
+        ticket_ids_json TEXT DEFAULT '[]', checklist_json TEXT DEFAULT '{}', repo_url TEXT DEFAULT '',
+        linkedin_url TEXT DEFAULT '', readme_text TEXT DEFAULT '', interview_notes TEXT DEFAULT '',
+        created_at TEXT DEFAULT '', updated_at TEXT DEFAULT '', published_at TEXT DEFAULT '',
+        UNIQUE(role_code, slug));
     CREATE TABLE IF NOT EXISTS debts (
         id INTEGER PRIMARY KEY, name TEXT, initial INTEGER);
     CREATE TABLE IF NOT EXISTS abonos (
@@ -807,6 +814,14 @@ def init_db():
         (
             ("CREATE TABLE IF NOT EXISTS work_market_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, role_code TEXT NOT NULL, title TEXT NOT NULL, company TEXT NOT NULL, location TEXT DEFAULT '', source_name TEXT DEFAULT 'LinkedIn', source_url TEXT UNIQUE NOT NULL, posted_date TEXT DEFAULT '', captured_at TEXT DEFAULT '', skills_json TEXT DEFAULT '[]', notes TEXT DEFAULT '', active INTEGER DEFAULT 1)", ()),
             ("CREATE INDEX IF NOT EXISTS idx_work_market_role_active ON work_market_jobs(role_code, active, captured_at)", ()),
+        ),
+    )
+    apply_migration(
+        con, 'v167_work_portfolio_operations',
+        'Publishable portfolio projects, GitHub readiness, LinkedIn evidence and interview defense notes',
+        (
+            ("CREATE TABLE IF NOT EXISTS work_portfolio_projects (id INTEGER PRIMARY KEY AUTOINCREMENT, role_code TEXT NOT NULL, title TEXT NOT NULL, slug TEXT NOT NULL, summary TEXT DEFAULT '', status TEXT DEFAULT 'internal', ticket_ids_json TEXT DEFAULT '[]', checklist_json TEXT DEFAULT '{}', repo_url TEXT DEFAULT '', linkedin_url TEXT DEFAULT '', readme_text TEXT DEFAULT '', interview_notes TEXT DEFAULT '', created_at TEXT DEFAULT '', updated_at TEXT DEFAULT '', published_at TEXT DEFAULT '', UNIQUE(role_code, slug))", ()),
+            ("CREATE INDEX IF NOT EXISTS idx_work_portfolio_role_status ON work_portfolio_projects(role_code, status, updated_at)", ()),
         ),
     )
     now_iso = datetime.now().isoformat(timespec='seconds')
@@ -1884,8 +1899,9 @@ def work_state():
     skills = [dict(r) for r in d.execute('SELECT * FROM work_skill_evidence ORDER BY role_code, approved_tickets DESC, evidence_count DESC, skill_name')]
     assessments = [dict(r) for r in d.execute('SELECT * FROM work_level_assessments ORDER BY id DESC LIMIT 50')]
     market_jobs = [dict(r) for r in d.execute('SELECT * FROM work_market_jobs WHERE active=1 ORDER BY captured_at DESC, id DESC LIMIT 200')]
+    portfolio_projects = [dict(r) for r in d.execute('SELECT * FROM work_portfolio_projects ORDER BY updated_at DESC, id DESC LIMIT 100')]
     shifts = {r['weekday']: r['shift'] for r in d.execute('SELECT * FROM week_shifts')}
-    return jsonify(dict(roles=roles, tickets=tickets, sessions=sessions, history=history, skills=skills, assessments=assessments, market_jobs=market_jobs, shifts=shifts, today=date.today().isoformat()))
+    return jsonify(dict(roles=roles, tickets=tickets, sessions=sessions, history=history, skills=skills, assessments=assessments, market_jobs=market_jobs, portfolio_projects=portfolio_projects, shifts=shifts, today=date.today().isoformat()))
 
 
 @app.post('/api/work/role')
@@ -2281,6 +2297,95 @@ def work_market_mission():
                         (role_code,code,title,'Build a portfolio-grade task based on a repeated market requirement.','The deliverable must prove the skill with reproducible evidence, validation and clear explanation.','Hiring Manager / Technical Lead','',f'Working artifact, tests or validation, README and short defense notes.',now,now))
         con.execute('INSERT INTO work_ticket_history(ticket_id,role_code,event_type,note,created_at) VALUES(?,?,?,?,?)',(cur.lastrowid,role_code,'market_mission_created',f'Created from market demand: {skill_name}',now))
     return jsonify(ok=True,ticket_id=cur.lastrowid,code=code)
+
+
+@app.post('/api/work/portfolio/project')
+def work_portfolio_project_save():
+    import re
+    j = request.json or {}
+    role_code = str(j.get('role_code') or '').strip().lower()
+    title = str(j.get('title') or '').strip()[:140]
+    summary = str(j.get('summary') or '').strip()[:1200]
+    repo_url = str(j.get('repo_url') or '').strip()[:500]
+    linkedin_url = str(j.get('linkedin_url') or '').strip()[:500]
+    interview_notes = str(j.get('interview_notes') or '').strip()[:3000]
+    ticket_ids = []
+    for value in (j.get('ticket_ids') or []):
+        try:
+            ticket_ids.append(int(value))
+        except (TypeError, ValueError):
+            pass
+    ticket_ids = sorted(set(ticket_ids))[:50]
+    if not role_code or not title:
+        return jsonify(error='Role and project title are required'), 400
+    slug = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')[:100] or 'portfolio-project'
+    now = datetime.now().isoformat(timespec='seconds')
+    checklist = {'approved_evidence': False, 'readme': False, 'setup': False, 'screenshots': False, 'tests': False, 'results': False, 'limitations': False, 'license': False, 'repo_public': False, 'linkedin_post': False}
+    with transaction() as con:
+        if not con.execute('SELECT 1 FROM work_roles WHERE code=?', (role_code,)).fetchone():
+            return jsonify(error='Professional role not found'), 404
+        approved_ids = {int(r['id']) for r in con.execute("SELECT id FROM work_tickets WHERE role_code=? AND status='done' AND review_status='approved'", (role_code,)).fetchall()}
+        if any(tid not in approved_ids for tid in ticket_ids):
+            return jsonify(error='Portfolio projects can only use approved missions from the same role'), 400
+        checklist['approved_evidence'] = bool(ticket_ids)
+        existing = con.execute('SELECT id,checklist_json FROM work_portfolio_projects WHERE role_code=? AND slug=?', (role_code, slug)).fetchone()
+        if existing:
+            old = json.loads(dict(existing).get('checklist_json') or '{}')
+            old.update(checklist)
+            con.execute('UPDATE work_portfolio_projects SET title=?,summary=?,ticket_ids_json=?,checklist_json=?,repo_url=?,linkedin_url=?,interview_notes=?,updated_at=? WHERE id=?', (title, summary, json.dumps(ticket_ids), json.dumps(old), repo_url, linkedin_url, interview_notes, now, dict(existing)['id']))
+            project_id = dict(existing)['id']
+        else:
+            cur = con.execute('INSERT INTO work_portfolio_projects(role_code,title,slug,summary,status,ticket_ids_json,checklist_json,repo_url,linkedin_url,interview_notes,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)', (role_code, title, slug, summary, 'internal', json.dumps(ticket_ids), json.dumps(checklist), repo_url, linkedin_url, interview_notes, now, now))
+            project_id = cur.lastrowid
+    return jsonify(ok=True, id=project_id)
+
+
+@app.post('/api/work/portfolio/checklist')
+def work_portfolio_checklist():
+    j = request.json or {}
+    try:
+        project_id = int(j.get('project_id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid project id'), 400
+    key = str(j.get('key') or '').strip()
+    allowed = {'approved_evidence','readme','setup','screenshots','tests','results','limitations','license','repo_public','linkedin_post'}
+    if key not in allowed:
+        return jsonify(error='Invalid checklist item'), 400
+    value = bool(j.get('value'))
+    with transaction() as con:
+        row = con.execute('SELECT checklist_json FROM work_portfolio_projects WHERE id=?', (project_id,)).fetchone()
+        if not row:
+            return jsonify(error='Portfolio project not found'), 404
+        checklist = json.loads(dict(row).get('checklist_json') or '{}')
+        checklist[key] = value
+        con.execute('UPDATE work_portfolio_projects SET checklist_json=?,updated_at=? WHERE id=?', (json.dumps(checklist), datetime.now().isoformat(timespec='seconds'), project_id))
+    return jsonify(ok=True)
+
+
+@app.post('/api/work/portfolio/status')
+def work_portfolio_status():
+    j = request.json or {}
+    try:
+        project_id = int(j.get('project_id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid project id'), 400
+    status = str(j.get('status') or '').strip().lower()
+    if status not in {'internal','ready','published'}:
+        return jsonify(error='Invalid portfolio status'), 400
+    with transaction() as con:
+        row = con.execute('SELECT checklist_json,repo_url FROM work_portfolio_projects WHERE id=?', (project_id,)).fetchone()
+        if not row:
+            return jsonify(error='Portfolio project not found'), 404
+        data = dict(row)
+        checklist = json.loads(data.get('checklist_json') or '{}')
+        core = ('approved_evidence','readme','setup','tests','results','limitations')
+        if status in {'ready','published'} and not all(checklist.get(k) for k in core):
+            return jsonify(error='Complete the core publication checklist first'), 400
+        if status == 'published' and (not data.get('repo_url') or not checklist.get('repo_public')):
+            return jsonify(error='A public repository URL and repo checklist confirmation are required'), 400
+        now = datetime.now().isoformat(timespec='seconds')
+        con.execute('UPDATE work_portfolio_projects SET status=?,published_at=?,updated_at=? WHERE id=?', (status, now if status=='published' else '', now, project_id))
+    return jsonify(ok=True, status=status)
 
 
 @app.post('/api/work/session')
