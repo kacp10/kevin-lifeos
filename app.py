@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 167  # V167 Portfolio Operations: publishable projects, GitHub readiness and interview evidence
+VERSION = 168  # V168 Work Guidance: automatic mission context, dates and clear next-step guidance
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -824,6 +824,11 @@ def init_db():
             ("CREATE INDEX IF NOT EXISTS idx_work_portfolio_role_status ON work_portfolio_projects(role_code, status, updated_at)", ()),
         ),
     )
+    apply_migration(
+        con, 'v168_work_guided_operations',
+        'Automatic sprint dates, complete starter missions and guided Work Mode actions',
+        (),
+    )
     now_iso = datetime.now().isoformat(timespec='seconds')
     for code, name, icon in (
         ('data', 'Data Analyst', '◫'),
@@ -854,21 +859,54 @@ def init_db():
                WHERE code=?""",
             (company, sprint_name, sprint_goal, role_code),
         )
+    sprint_start = date.today() - timedelta(days=date.today().weekday())
+    sprint_end = sprint_start + timedelta(days=6)
+    default_due = (date.today() + timedelta(days=7)).isoformat()
+    con.execute("UPDATE work_roles SET sprint_start=? WHERE COALESCE(sprint_start,'')=''", (sprint_start.isoformat(),))
+    con.execute("UPDATE work_roles SET sprint_end=? WHERE COALESCE(sprint_end,'')=''", (sprint_end.isoformat(),))
     starter_tickets = (
-        ('data', 'DATA-001', 'Inspect a real business dataset', 'standby', 'Review its structure, fields and data-quality risks before writing analysis.'),
-        ('dev', 'DEV-001', 'Read an unfamiliar codebase safely', 'standby', 'Map architecture, dependencies and risk areas without modifying existing logic.'),
-        ('cyber', 'CYBER-001', 'Build a defensive asset inventory', 'standby', 'Identify systems, accounts, data and likely attack surfaces in a fictional company.'),
-        ('ml', 'ML-001', 'Define an ML problem before modeling', 'standby', 'Translate a business need into target, features, metric, constraints and failure risks.'),
+        ('data', 'DATA-001', 'Inspect a real business dataset', 'standby',
+         'Northstar Commerce received a sales dataset before a dashboard project. Inspect its structure, fields and data-quality risks before any analysis is trusted.',
+         'Laura Gómez · Commercial Analytics Manager',
+         'Document dataset size and fields; identify nulls, duplicates, invalid types and suspicious values; list at least five risks; propose three stakeholder questions; preserve reproducible evidence for AI review.',
+         'data_quality_report.md; SQL, Python or spreadsheet validation evidence; concise executive summary.'),
+        ('dev', 'DEV-001', 'Read an unfamiliar codebase safely', 'standby',
+         'Arc Systems Lab needs a safe technical map before approving changes to an unfamiliar application. Inspect architecture, dependencies and risk areas without modifying existing logic.',
+         'Mateo Ruiz · Engineering Lead',
+         'Map entry points, modules, data flow and dependencies; identify at least five risk areas; document safe verification steps; preserve findings for AI review.',
+         'architecture_map.md; dependency inventory; risk register; verification checklist.'),
+        ('cyber', 'CYBER-001', 'Build a defensive asset inventory', 'standby',
+         'Aegis Defense Unit must understand a fictional company environment before proposing controls. Identify systems, accounts, data and likely attack surfaces.',
+         'Sofía Torres · Security Operations Manager',
+         'Inventory critical assets, owners, data sensitivity and exposure; identify likely attack surfaces; prioritize at least five risks; document assumptions.',
+         'asset_inventory.csv or .md; prioritized risk list; assumptions and recommended next questions.'),
+        ('ml', 'ML-001', 'Define an ML problem before modeling', 'standby',
+         'Vector Research Lab received a business request that may or may not require machine learning. Frame the problem before selecting data or training a model.',
+         'Daniel Vega · Applied ML Lead',
+         'Define target, unit of prediction, features, baseline, success metric, constraints, leakage risks and failure costs; explain whether ML is justified.',
+         'problem_framing.md; metric proposal; risk and leakage checklist; go/no-go recommendation.'),
     )
-    for role_code, code, title, mission_type, description in starter_tickets:
-        if not con.execute('SELECT 1 FROM work_tickets WHERE code=?', (code,)).fetchone():
+    for role_code, code, title, mission_type, description, stakeholder, acceptance, deliverables in starter_tickets:
+        row = con.execute('SELECT id,stakeholder,due_date,acceptance,deliverables,description FROM work_tickets WHERE code=?', (code,)).fetchone()
+        if not row:
             con.execute(
                 '''INSERT INTO work_tickets
-                   (role_code,code,title,status,priority,mission_type,description,acceptance,created_at,updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                   (role_code,code,title,status,priority,mission_type,description,acceptance,stakeholder,due_date,deliverables,created_at,updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (role_code, code, title, 'ready', 'medium', mission_type, description,
-                 'Produce a concise written result and preserve it for AI review.', now_iso, now_iso),
+                 acceptance, stakeholder, default_due, deliverables, now_iso, now_iso),
             )
+        else:
+            current=dict(row)
+            generic_acceptance=str(current.get('acceptance') or '').strip() in ('', 'Produce a concise written result and preserve it for AI review.')
+            con.execute('''UPDATE work_tickets SET
+                description=CASE WHEN COALESCE(description,'')='' OR description=? THEN ? ELSE description END,
+                stakeholder=CASE WHEN COALESCE(stakeholder,'')='' THEN ? ELSE stakeholder END,
+                due_date=CASE WHEN COALESCE(due_date,'')='' THEN ? ELSE due_date END,
+                acceptance=CASE WHEN ? THEN ? ELSE acceptance END,
+                deliverables=CASE WHEN COALESCE(deliverables,'')='' THEN ? ELSE deliverables END,
+                updated_at=? WHERE code=?''',
+                ({'data':'Review its structure, fields and data-quality risks before writing analysis.', 'dev':'Map architecture, dependencies and risk areas without modifying existing logic.', 'cyber':'Identify systems, accounts, data and likely attack surfaces in a fictional company.', 'ml':'Translate a business need into target, features, metric, constraints and failure risks.'}[role_code], description, stakeholder, default_due, 1 if generic_acceptance else 0, acceptance, deliverables, now_iso, code))
 
     market_seed = (
         ('data','Data Analytics','Accenture Colombia','Bogotá, Colombia','LinkedIn','https://co.linkedin.com/jobs/view/data-analytics-at-accenture-colombia-4405948925','2026-08-06',['SQL','Python','Excel','Dashboards','Data Cleaning','Data Visualization']),
@@ -2292,9 +2330,19 @@ def work_market_mission():
         prefix={'data':'DATA','dev':'DEV','cyber':'CYBER','ml':'ML'}[role_code]
         code=f'{prefix}-{max(numbers+[0])+1:03d}'
         title=f'Demonstrate {skill_name} in a realistic deliverable'
+        role_context={
+            'data':('Laura Gómez · Commercial Analytics Manager','Northstar Commerce needs evidence that this market skill can solve a measurable data problem.'),
+            'dev':('Mateo Ruiz · Engineering Lead','Arc Systems Lab needs a safe, tested implementation that demonstrates this market skill.'),
+            'cyber':('Sofía Torres · Security Operations Manager','Aegis Defense Unit needs a defensible security artifact that demonstrates this market skill.'),
+            'ml':('Daniel Vega · Applied ML Lead','Vector Research Lab needs reproducible evidence that this market skill supports an ML delivery.'),
+        }
+        stakeholder,context=role_context[role_code]
+        due=(date.today()+timedelta(days=7)).isoformat()
+        acceptance=f'Demonstrate {skill_name} with reproducible evidence, validation, clear explanation, documented assumptions and an AI-review-ready result.'
+        deliverables=f'Working artifact for {skill_name}; tests or validation evidence; concise README; short defense notes.'
         cur=con.execute('''INSERT INTO work_tickets(role_code,code,title,status,priority,mission_type,description,acceptance,stakeholder,due_date,deliverables,created_at,updated_at)
-                           VALUES(?,?,?,'backlog','high','focus',?,?,?,?,?,?,?)''',
-                        (role_code,code,title,'Build a portfolio-grade task based on a repeated market requirement.','The deliverable must prove the skill with reproducible evidence, validation and clear explanation.','Hiring Manager / Technical Lead','',f'Working artifact, tests or validation, README and short defense notes.',now,now))
+                           VALUES(?,?,?,'ready','high','focus',?,?,?,?,?,?,?)''',
+                        (role_code,code,title,context,acceptance,stakeholder,due,deliverables,now,now))
         con.execute('INSERT INTO work_ticket_history(ticket_id,role_code,event_type,note,created_at) VALUES(?,?,?,?,?)',(cur.lastrowid,role_code,'market_mission_created',f'Created from market demand: {skill_name}',now))
     return jsonify(ok=True,ticket_id=cur.lastrowid,code=code)
 
