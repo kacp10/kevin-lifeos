@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 163  # V163 Mission System: complete tickets, deliverables, blockers, reviews and history
+VERSION = 164  # V164 AI Review Bridge: generated review prompts, structured imports and correction plans
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -760,6 +760,17 @@ def init_db():
             ("ALTER TABLE work_tickets ADD COLUMN review_note TEXT DEFAULT ''", ()),
             ("ALTER TABLE work_tickets ADD COLUMN review_score INTEGER DEFAULT NULL", ()),
             ("CREATE INDEX IF NOT EXISTS idx_work_history_ticket ON work_ticket_history(ticket_id, created_at)", ()),
+        ),
+    )
+    apply_migration(
+        con, 'v164_work_ai_review_bridge',
+        'Structured AI review imports, review rounds and correction plans for Work missions',
+        (
+            ("ALTER TABLE work_tickets ADD COLUMN review_round INTEGER DEFAULT 0", ()),
+            ("ALTER TABLE work_tickets ADD COLUMN review_status TEXT DEFAULT ''", ()),
+            ("ALTER TABLE work_tickets ADD COLUMN review_payload TEXT DEFAULT ''", ()),
+            ("ALTER TABLE work_tickets ADD COLUMN correction_plan TEXT DEFAULT ''", ()),
+            ("ALTER TABLE work_tickets ADD COLUMN reviewed_at TEXT DEFAULT ''", ()),
         ),
     )
     now_iso = datetime.now().isoformat(timespec='seconds')
@@ -1929,6 +1940,88 @@ def work_ticket_review():
         con.execute('UPDATE work_tickets SET status=?,review_note=?,review_score=?,blocked_reason=\'\',updated_at=? WHERE id=?',(target,note,score,now,ticket_id))
         con.execute('INSERT INTO work_ticket_history(ticket_id,role_code,event_type,from_status,to_status,note,score,created_at) VALUES(?,?,?,?,?,?,?,?)',(ticket_id,role_code,decision,previous,target,note,score,now))
     return jsonify(ok=True,status=target)
+
+
+@app.post('/api/work/ticket/review/import')
+def work_ticket_review_import():
+    j = request.json or {}
+    try:
+        ticket_id = int(j.get('ticket_id'))
+        score = max(0, min(100, int(j.get('score'))))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid ticket or score'), 400
+    role_code = str(j.get('role_code') or '').strip().lower()
+    decision = str(j.get('decision') or '').strip().lower()
+    summary = str(j.get('summary') or '').strip()[:1800]
+    if decision not in ('changes_requested', 'approved') or not summary:
+        return jsonify(error='Decision and review summary are required'), 400
+
+    def clean_list(value, limit=20, item_limit=500):
+        if not isinstance(value, list):
+            return []
+        out = []
+        for item in value[:limit]:
+            text = str(item or '').strip()[:item_limit]
+            if text:
+                out.append(text)
+        return out
+
+    strengths = clean_list(j.get('strengths'), 12, 400)
+    required_changes = clean_list(j.get('required_changes'), 20, 700)
+    skills = clean_list(j.get('skills_demonstrated'), 20, 180)
+    questions = clean_list(j.get('questions'), 12, 500)
+    issues_raw = j.get('issues') if isinstance(j.get('issues'), list) else []
+    issues = []
+    for item in issues_raw[:20]:
+        if not isinstance(item, dict):
+            continue
+        finding = str(item.get('finding') or '').strip()[:700]
+        required_change = str(item.get('required_change') or '').strip()[:700]
+        if not finding and not required_change:
+            continue
+        issues.append({
+            'severity': str(item.get('severity') or 'medium').strip().lower()[:20],
+            'area': str(item.get('area') or 'general').strip()[:120],
+            'finding': finding,
+            'required_change': required_change,
+        })
+    if decision == 'changes_requested' and not (required_changes or issues):
+        return jsonify(error='Requested changes must include at least one correction'), 400
+
+    payload = {
+        'decision': decision, 'score': score, 'summary': summary,
+        'strengths': strengths, 'issues': issues,
+        'required_changes': required_changes, 'skills_demonstrated': skills,
+        'questions': questions,
+    }
+    correction_items = list(required_changes)
+    for issue in issues:
+        if issue.get('required_change'):
+            correction_items.append(issue['required_change'])
+    correction_items = list(dict.fromkeys(correction_items))[:30]
+    target = 'done' if decision == 'approved' else 'in_progress'
+    now = datetime.now().isoformat(timespec='seconds')
+    import json as _json
+    with transaction() as con:
+        row = con.execute('SELECT role_code,status,COALESCE(review_round,0) AS review_round FROM work_tickets WHERE id=?', (ticket_id,)).fetchone()
+        if not row or dict(row)['role_code'] != role_code:
+            return jsonify(error='Ticket not found for active role'), 404
+        previous = dict(row)['status']
+        review_round = int(dict(row).get('review_round') or 0) + 1
+        con.execute(
+            '''UPDATE work_tickets SET status=?, review_note=?, review_score=?, review_round=?,
+               review_status=?, review_payload=?, correction_plan=?, reviewed_at=?, blocked_reason='', updated_at=?
+               WHERE id=?''',
+            (target, summary, score, review_round, decision,
+             _json.dumps(payload, ensure_ascii=False),
+             _json.dumps(correction_items, ensure_ascii=False), now, now, ticket_id),
+        )
+        event_note = f'AI review round {review_round}: {summary}'
+        con.execute(
+            'INSERT INTO work_ticket_history(ticket_id,role_code,event_type,from_status,to_status,note,score,created_at) VALUES(?,?,?,?,?,?,?,?)',
+            (ticket_id, role_code, f'ai_{decision}', previous, target, event_note[:1800], score, now),
+        )
+    return jsonify(ok=True, status=target, review_round=review_round, corrections=correction_items)
 
 
 @app.post('/api/work/session')
