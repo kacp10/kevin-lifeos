@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 163;
+const FRONT_V = 164;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -5692,15 +5692,15 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 14. Trata este proyecto como un sistema compartido de largo plazo: memoriza sus reglas, comprende cada módulo antes de tocarlo y mantén continuidad entre solicitudes.
 15. El botón PROJECT CONTINUITY PROTOCOL debe actualizarse en cada nueva versión para conservar las decisiones, arquitectura, reglas y módulos añadidos. Nunca entregues una actualización dejando este prompt desactualizado.
 
-ESTADO ACTUAL DEL PROYECTO - V163 MISSION SYSTEM:
+ESTADO ACTUAL DEL PROYECTO - V164 AI REVIEW BRIDGE:
 - Life administra vida, hábitos, rutina, turnos, metas y sistemas personales existentes. No traslades módulos de Life a Work.
 - Hunter Skill Academy es un gimnasio mental libre para aprender temas y evitar perder tiempo. No debe aumentar automáticamente carreras, proyectos ni habilidades profesionales.
 - Work Mode es una pantalla independiente abierta desde Life, similar a Hunter Profile. Contiene entrenamiento profesional sin saturar ni reemplazar la aplicación principal.
 - Work Mode tiene cuatro contextos persistentes: Data Analyst, Software Developer, Cyber Defense y Machine Learning. Cambiar de rol no borra el progreso de los demás.
-- V161 creó la base persistente de roles, tickets y sesiones profesionales. V162 añadió el Command Center independiente por rol. V163 convierte el backlog en un Mission System con contexto, stakeholder, prioridad, fecha límite, criterios de aceptación, entregables, bloqueos, revisiones, puntuación e historial operativo.
+- V161 creó roles, tickets y sesiones persistentes. V162 añadió el Command Center independiente por rol. V163 convirtió el backlog en un Mission System completo. V164 añade AI Review Bridge: genera un prompt estricto desde cada misión, exige una respuesta JSON validable, conserva rondas de revisión y convierte los cambios solicitados en un plan de corrección dentro del ticket.
 - Work Mode debe tener un único scroll interno. Al abrirlo, se bloquea el desplazamiento de html y body para evitar doble scroll; al cerrarlo, ambos se restauran.
 - Work puede leer turnos de Life para orientar sesiones, pero los turnos y la rutina permanecen en Life.
-- Las misiones de Work siguen el flujo Backlog → Ready → In progress → AI review → Changes requested o Done. Una misión aprobada conserva su puntuación y revisión; una revisión con cambios la devuelve a ejecución. La progresión laboral futura debe basarse en esta evidencia demostrada, nunca solo en cantidad de cursos o checks. El usuario conserva la decisión final de ascender de nivel.
+- Las misiones de Work siguen el flujo Backlog → Ready → In progress → AI review → Changes requested o Done. En V164, la IA no puede cerrar una misión con texto libre: la revisión debe importarse en JSON con decisión, puntuación, resumen, fortalezas, problemas, correcciones, habilidades y preguntas. Una aprobación cierra la misión; los cambios solicitados crean un plan de corrección y la devuelven a ejecución. La progresión laboral futura debe basarse en esta evidencia demostrada, nunca solo en cantidad de cursos o checks. El usuario conserva la decisión final de ascender de nivel.
 - Cada versión de Work debe incluir un manual PDF en español sencillo con cambios, uso, verificaciones, precauciones, compatibilidad móvil y archivos modificados. Toda interfaz nueva debe ser responsive y táctil, sin scroll horizontal ni doble scroll.
 
 FORMA DE TRABAJO:
@@ -8944,7 +8944,7 @@ document.addEventListener('click',async e=>{
 });
 
 
-/* V162 · WORK COMMAND CENTER -------------------------------------------- */
+/* V164 · WORK AI REVIEW BRIDGE ------------------------------------------ */
 let WORK=null;
 const workRoleLabel=(code)=>({data:'Data Analyst',dev:'Software Developer',cyber:'Cyber Defense',ml:'Machine Learning'}[code]||code);
 const workStatusLabel=(status)=>({backlog:'Backlog',ready:'Ready',in_progress:'In progress',review:'AI review',blocked:'Blocked',done:'Done'}[status]||status);
@@ -8956,11 +8956,65 @@ function workShiftRecommendation(){
 }
 function workWeekStart(day=hoyLocal()){const d=new Date(`${day}T12:00:00`),delta=(d.getDay()+6)%7;d.setDate(d.getDate()-delta);return d.toISOString().slice(0,10)}
 async function loadWorkState(){WORK=await api('/api/work/state');return WORK;}
+function workJson(value,fallback){try{return JSON.parse(value||'')}catch(_){return fallback}}
+function workCorrectionItems(ticket){const value=workJson(ticket?.correction_plan,[]);return Array.isArray(value)?value:[];}
+function workReviewPrompt(ticket,active){
+  const round=Number(ticket.review_round||0)+1;
+  return `Actúa como Lead Reviewer estricto para una simulación profesional de ${active.name} en ${active.company||'una empresa ficticia'}.
+
+MISIÓN
+Código: ${ticket.code}
+Título: ${ticket.title}
+Stakeholder: ${ticket.stakeholder||'No asignado'}
+Prioridad: ${ticket.priority}
+Contexto: ${ticket.description}
+Criterios de aceptación: ${ticket.acceptance}
+Entregables requeridos: ${ticket.deliverables||'No definidos'}
+Ronda de revisión: ${round}
+
+INSTRUCCIONES
+1. Revisa únicamente la evidencia y archivos que adjunte después de este prompt.
+2. No inventes resultados ni asumas que algo funciona si no hay evidencia.
+3. No reescribas el proyecto completo ni me des la solución final inmediatamente.
+4. Detecta errores técnicos, de negocio, seguridad, pruebas, documentación y comunicación según corresponda al rol.
+5. Si falta evidencia para validar un criterio, solicita cambios.
+6. Solo aprueba cuando todos los criterios de aceptación estén demostrados.
+7. Devuelve exclusivamente un objeto JSON válido, sin markdown, comentarios ni texto antes o después.
+
+FORMATO JSON OBLIGATORIO
+{
+  "decision": "approved" o "changes_requested",
+  "score": número entero de 0 a 100,
+  "summary": "resumen concreto de la revisión",
+  "strengths": ["fortaleza demostrada"],
+  "issues": [
+    {
+      "severity": "critical|high|medium|low",
+      "area": "technical|business|security|testing|documentation|communication",
+      "finding": "problema encontrado y evidencia",
+      "required_change": "corrección verificable"
+    }
+  ],
+  "required_changes": ["lista priorizada de correcciones"],
+  "skills_demonstrated": ["habilidades realmente demostradas"],
+  "questions": ["preguntas que debo responder para defender la entrega"]
+}
+
+REGLAS DE DECISIÓN
+- Usa approved únicamente si la misión está lista para cerrarse y publicarse como evidencia.
+- Usa changes_requested si existe cualquier criterio no demostrado, error relevante o falta de validación.
+- Una puntuación alta no reemplaza la evidencia.
+- No incluyas claves adicionales ni omitas las claves obligatorias.`;
+}
+async function copyTextSafe(text,success='Copied'){
+  try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(text);else throw new Error('clipboard');toast(success);}
+  catch(_){const ta=document.createElement('textarea');ta.value=text;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast(success);}catch(__){prompt('Copy this text:',text);}ta.remove();}
+}
 function workTicketAction(ticket){
   if(ticket.status==='backlog')return `<button class="btn-ghost" data-work-ticket-status="ready" data-work-ticket-id="${ticket.id}">Move to ready</button>`;
   if(ticket.status==='ready')return `<button class="btn-ghost" data-work-ticket-status="in_progress" data-work-ticket-id="${ticket.id}">Start mission</button><button class="btn-gold" data-work-log="${ticket.id}">Log session</button>`;
   if(ticket.status==='in_progress')return `<button class="btn-gold" data-work-log="${ticket.id}">Continue mission</button>`;
-  if(ticket.status==='review')return `<button class="btn-gold" data-work-review="${ticket.id}">Record review</button><button class="btn-ghost" data-work-ticket-status="in_progress" data-work-ticket-id="${ticket.id}">Return to work</button>`;
+  if(ticket.status==='review')return `<button class="btn-gold" data-work-copy-review="${ticket.id}">Copy AI review prompt</button><button class="btn-ghost" data-work-import-review="${ticket.id}">Import AI review</button><button class="btn-ghost" data-work-ticket-status="in_progress" data-work-ticket-id="${ticket.id}">Return to work</button>`;
   if(ticket.status==='blocked')return `<button class="btn-ghost" data-work-ticket-status="in_progress" data-work-ticket-id="${ticket.id}">Resolve blocker</button><span class="work-blocked">Blocked</span>`;
   return `<span class="work-done-mark">✓ Evidence preserved</span>`;
 }
@@ -8980,7 +9034,7 @@ function renderWorkMode(){
   <nav class="work-role-switcher" aria-label="Professional role">${WORK.roles.map(r=>`<button class="${r.active?'active':''}" data-work-role="${esc(r.code)}"><span>${esc(r.icon)}</span><b>${esc(r.name)}</b><small>${esc(r.company||r.level)}</small></button>`).join('')}</nav>
   <section class="work-sprint-banner"><div><span class="work-kicker">ACTIVE SPRINT</span><h2>${esc(active.sprint_name||'Sprint not configured')}</h2><p>${esc(active.sprint_goal||'Define a measurable operating objective for this role.')}</p><small>${esc(sprintDates)}</small></div><button class="btn-ghost" data-work-edit-command>Edit command center</button></section>
   <section class="work-brief-grid"><article class="work-recommendation"><span>TODAY'S OPERATING MODE</span><h2>${rec.label}</h2><p>${esc(rec.text)}</p><b>${rec.minutes} min suggested</b></article><article><span>WEEKLY EXECUTION</span><h2>${weekly} / ${weeklyTarget} min</h2><div class="work-progress"><i style="width:${weeklyPct}%"></i></div><p>${weeklyPct}% of this role's weekly target.</p></article><article><span>MISSION SIGNAL</span><h2>${open} open</h2><p>${review?`${review} awaiting review.`:'No missions waiting for review.'}</p></article></section>
-  <section class="work-panel"><div class="row-between"><div><span class="work-kicker">MISSION CONTROL</span><h2>${esc(active.name)} backlog</h2></div><div class="work-panel-actions"><button class="btn-ghost" data-work-new-ticket>New mission</button><small>V163 mission system</small></div></div><div class="work-ticket-list">${sorted.length?sorted.map(t=>`<article class="status-${esc(t.status)}"><div class="work-ticket-copy"><span>${esc(t.code)} · ${esc(t.priority).toUpperCase()} · ${esc(workStatusLabel(t.status).toUpperCase())}</span><h3>${esc(t.title)}</h3><p>${esc(t.description)}</p><div class="work-ticket-meta"><small>Stakeholder: ${esc(t.stakeholder||'Not assigned')}</small><small>Due: ${esc(t.due_date||'Open')}</small></div><small>Acceptance: ${esc(t.acceptance)}</small>${t.deliverables?`<small>Deliverables: ${esc(t.deliverables)}</small>`:''}${t.blocked_reason?`<div class="work-blocker-note">${esc(t.blocked_reason)}</div>`:''}${t.review_note?`<div class="work-review-note"><b>${Number(t.review_score||0)}/100</b> ${esc(t.review_note)}</div>`:''}</div><div class="work-ticket-actions">${workTicketAction(t)}<button class="btn-ghost" data-work-ticket-detail="${t.id}">Details</button>${!['done','review','blocked'].includes(t.status)?`<button class="btn-ghost" data-work-block="${t.id}">Block</button>`:''}</div></article>`).join(''):'<div class="profile-empty">No missions registered for this role yet.</div>'}</div></section>
+  <section class="work-panel"><div class="row-between"><div><span class="work-kicker">MISSION CONTROL</span><h2>${esc(active.name)} backlog</h2></div><div class="work-panel-actions"><button class="btn-ghost" data-work-new-ticket>New mission</button><small>V164 AI review bridge</small></div></div><div class="work-ticket-list">${sorted.length?sorted.map(t=>`<article class="status-${esc(t.status)}"><div class="work-ticket-copy"><span>${esc(t.code)} · ${esc(t.priority).toUpperCase()} · ${esc(workStatusLabel(t.status).toUpperCase())}</span><h3>${esc(t.title)}</h3><p>${esc(t.description)}</p><div class="work-ticket-meta"><small>Stakeholder: ${esc(t.stakeholder||'Not assigned')}</small><small>Due: ${esc(t.due_date||'Open')}</small></div><small>Acceptance: ${esc(t.acceptance)}</small>${t.deliverables?`<small>Deliverables: ${esc(t.deliverables)}</small>`:''}${t.blocked_reason?`<div class="work-blocker-note">${esc(t.blocked_reason)}</div>`:''}${t.review_note?`<div class="work-review-note"><b>${Number(t.review_score||0)}/100 · ROUND ${Number(t.review_round||1)}</b> ${esc(t.review_note)}</div>`:''}${workCorrectionItems(t).length?`<div class="work-correction-plan"><b>CORRECTION PLAN</b>${workCorrectionItems(t).slice(0,3).map((x,i)=>`<span>${i+1}. ${esc(x)}</span>`).join('')}</div>`:''}</div><div class="work-ticket-actions">${workTicketAction(t)}<button class="btn-ghost" data-work-ticket-detail="${t.id}">Details</button>${!['done','review','blocked'].includes(t.status)?`<button class="btn-ghost" data-work-block="${t.id}">Block</button>`:''}</div></article>`).join(''):'<div class="profile-empty">No missions registered for this role yet.</div>'}</div></section>
   <section class="work-panel"><div><span class="work-kicker">MISSION HISTORY</span><h2>Latest operational events</h2></div>${(WORK.history||[]).filter(h=>tickets.some(t=>t.id===h.ticket_id)).length?`<div class="work-history-list">${(WORK.history||[]).filter(h=>tickets.some(t=>t.id===h.ticket_id)).slice(0,10).map(h=>`<div><b>${esc(String(h.event_type||'event').replaceAll('_',' '))}</b><span>${esc(h.created_at||'')}</span><p>${esc(h.note||`${h.from_status||''} → ${h.to_status||''}`)}</p></div>`).join('')}</div>`:'<div class="profile-empty">No mission events recorded yet.</div>'}</section>
   <section class="work-panel"><div><span class="work-kicker">FIELD LOG</span><h2>Recent sessions</h2></div>${sessions.length?`<div class="work-session-list">${sessions.slice(0,8).map(x=>`<div><b>${esc(x.day)} · ${Number(x.minutes||0)} min</b><span>${esc(String(x.session_type||'').toUpperCase())} · ${esc(String(x.result||'').replace('_',' '))}</span><p>${esc(x.note||'No note recorded.')}</p></div>`).join('')}</div>`:'<div class="profile-empty">Your first professional session will appear here.</div>'}</section>`;
 }
@@ -9005,7 +9059,17 @@ async function editWorkTicket(ticketId=null){
   const r=await modal({icon:'▣',title:t?`Edit ${t.code}`:'Create professional mission',text:'Define a complete assignment. Work will preserve its context and evidence.',fields:[{label:'Title',value:t?.title||''},{label:'Stakeholder',value:t?.stakeholder||''},{label:'Context / business problem',value:t?.description||''},{label:'Acceptance criteria',value:t?.acceptance||''},{label:'Required deliverables',value:t?.deliverables||''},{label:'Due date (YYYY-MM-DD)',value:t?.due_date||''},{label:'Priority: low, medium, high or critical',value:t?.priority||'medium'},{label:'Mode: standby or focus',value:t?.mission_type||'standby'}],okText:'Save mission'});
   if(!r)return;await api('/api/work/ticket',{body:{ticket_id:t?.id||null,role_code:active.code,title:r[0],stakeholder:r[1],description:r[2],acceptance:r[3],deliverables:r[4],due_date:r[5],priority:r[6],mission_type:r[7]}});await loadWorkState();renderWorkMode();toast(t?'Mission updated':'Mission created');}
 async function blockWorkTicket(id){const active=WORK.roles.find(x=>x.active)||WORK.roles[0];const r=await modal({icon:'!',title:'Register blocker',text:'Describe exactly what prevents progress. This can be resolved later without losing the mission.',fields:[{label:'Blocker reason'}],okText:'Block mission'});if(!r)return;await api('/api/work/ticket/block',{body:{ticket_id:Number(id),role_code:active.code,reason:r[0]}});await loadWorkState();renderWorkMode();toast('Blocker registered','warn');}
-async function reviewWorkTicket(id){const active=WORK.roles.find(x=>x.active)||WORK.roles[0];const r=await modal({icon:'✓',title:'Record structured review',text:'Paste the essential AI or human review result. Approval closes the mission; requested changes return it to execution.',fields:[{label:'Decision: approved or changes_requested',value:'changes_requested'},{label:'Score 0-100',value:'70'},{label:'Review findings and required corrections'}],okText:'Save review'});if(!r)return;await api('/api/work/ticket/review',{body:{ticket_id:Number(id),role_code:active.code,decision:r[0],score:Number(r[1]),note:r[2]}});await loadWorkState();renderWorkMode();toast('Review recorded');}
-function showWorkTicketDetail(id){const t=WORK.tickets.find(x=>x.id===Number(id));if(!t)return;const events=(WORK.history||[]).filter(h=>h.ticket_id===t.id);modal({icon:'▣',title:`${t.code} · ${t.title}`,text:`<div class="work-detail"><p><b>Stakeholder:</b> ${esc(t.stakeholder||'Not assigned')}</p><p><b>Context:</b> ${esc(t.description)}</p><p><b>Acceptance:</b> ${esc(t.acceptance)}</p><p><b>Deliverables:</b> ${esc(t.deliverables||'Not defined')}</p><p><b>Due:</b> ${esc(t.due_date||'Open')}</p>${t.blocked_reason?`<div class="work-blocker-note">${esc(t.blocked_reason)}</div>`:''}<h4>History</h4>${events.length?events.map(e=>`<div class="work-detail-event"><b>${esc(e.event_type)}</b><span>${esc(e.created_at)}</span><p>${esc(e.note||'')}</p></div>`).join(''):'<p>No events yet.</p>'}</div>`,okText:'Close'});}
-document.addEventListener('click',e=>{if(e.target.closest('#openWorkMode'))openWorkMode();if(e.target.closest('#closeWorkMode'))closeWorkMode();if(e.target.closest('[data-work-edit-command]'))editWorkCommand();const role=e.target.closest('[data-work-role]');if(role)switchWorkRole(role.dataset.workRole);const log=e.target.closest('[data-work-log]');if(log)logWorkSession(log.dataset.workLog);const move=e.target.closest('[data-work-ticket-status]');if(move)updateWorkTicketStatus(move.dataset.workTicketId,move.dataset.workTicketStatus);if(e.target.closest('[data-work-new-ticket]'))editWorkTicket();const detail=e.target.closest('[data-work-ticket-detail]');if(detail)showWorkTicketDetail(detail.dataset.workTicketDetail);const block=e.target.closest('[data-work-block]');if(block)blockWorkTicket(block.dataset.workBlock);const review=e.target.closest('[data-work-review]');if(review)reviewWorkTicket(review.dataset.workReview);});
+async function copyWorkReviewPrompt(id){const active=WORK.roles.find(x=>x.active)||WORK.roles[0],ticket=WORK.tickets.find(x=>x.id===Number(id));if(!ticket)return;await copyTextSafe(workReviewPrompt(ticket,active),'AI review prompt copied');}
+async function importWorkReview(id){
+  const active=WORK.roles.find(x=>x.active)||WORK.roles[0],ticket=WORK.tickets.find(x=>x.id===Number(id));if(!ticket)return;
+  const r=await modal({icon:'✓',title:`Import AI review · ${ticket.code}`,text:'Paste the exact JSON returned by the reviewer. Work validates its structure before changing the mission.',fields:[{type:'textarea',label:'Structured review JSON',rows:12,placeholder:'{"decision":"changes_requested",...}'}],okText:'Validate and import'});if(!r)return;
+  let data;try{data=JSON.parse(String(r[0]||'').trim());}catch(_){toast('The review is not valid JSON','err');return;}
+  const required=['decision','score','summary','strengths','issues','required_changes','skills_demonstrated','questions'];
+  const missing=required.filter(k=>!(k in data));if(missing.length){toast(`Missing review fields: ${missing.join(', ')}`,'err');return;}
+  if(!['approved','changes_requested'].includes(String(data.decision||''))){toast('Invalid review decision','err');return;}
+  const body={ticket_id:Number(id),role_code:active.code,decision:data.decision,score:Number(data.score),summary:data.summary,strengths:data.strengths,issues:data.issues,required_changes:data.required_changes,skills_demonstrated:data.skills_demonstrated,questions:data.questions};
+  const out=await api('/api/work/ticket/review/import',{body});await loadWorkState();renderWorkMode();toast(out.status==='done'?'Mission approved and evidence preserved':'Corrections imported into the mission',out.status==='done'?'ok':'warn');
+}
+function showWorkTicketDetail(id){const t=WORK.tickets.find(x=>x.id===Number(id));if(!t)return;const events=(WORK.history||[]).filter(h=>h.ticket_id===t.id);modal({icon:'▣',title:`${t.code} · ${t.title}`,text:`<div class="work-detail"><p><b>Stakeholder:</b> ${esc(t.stakeholder||'Not assigned')}</p><p><b>Context:</b> ${esc(t.description)}</p><p><b>Acceptance:</b> ${esc(t.acceptance)}</p><p><b>Deliverables:</b> ${esc(t.deliverables||'Not defined')}</p><p><b>Due:</b> ${esc(t.due_date||'Open')}</p>${t.blocked_reason?`<div class="work-blocker-note">${esc(t.blocked_reason)}</div>`:''}${t.review_note?`<div class="work-review-note"><b>Review ${Number(t.review_round||1)} · ${Number(t.review_score||0)}/100</b><br>${esc(t.review_note)}</div>`:''}${workCorrectionItems(t).length?`<div class="work-correction-plan"><b>Required corrections</b>${workCorrectionItems(t).map((x,i)=>`<span>${i+1}. ${esc(x)}</span>`).join('')}</div>`:''}<h4>History</h4>${events.length?events.map(e=>`<div class="work-detail-event"><b>${esc(e.event_type)}</b><span>${esc(e.created_at)}</span><p>${esc(e.note||'')}</p></div>`).join(''):'<p>No events yet.</p>'}</div>`,okText:'Close'});}
+document.addEventListener('click',e=>{if(e.target.closest('#openWorkMode'))openWorkMode();if(e.target.closest('#closeWorkMode'))closeWorkMode();if(e.target.closest('[data-work-edit-command]'))editWorkCommand();const role=e.target.closest('[data-work-role]');if(role)switchWorkRole(role.dataset.workRole);const log=e.target.closest('[data-work-log]');if(log)logWorkSession(log.dataset.workLog);const move=e.target.closest('[data-work-ticket-status]');if(move)updateWorkTicketStatus(move.dataset.workTicketId,move.dataset.workTicketStatus);if(e.target.closest('[data-work-new-ticket]'))editWorkTicket();const detail=e.target.closest('[data-work-ticket-detail]');if(detail)showWorkTicketDetail(detail.dataset.workTicketDetail);const block=e.target.closest('[data-work-block]');if(block)blockWorkTicket(block.dataset.workBlock);const copyReview=e.target.closest('[data-work-copy-review]');if(copyReview)copyWorkReviewPrompt(copyReview.dataset.workCopyReview);const importReview=e.target.closest('[data-work-import-review]');if(importReview)importWorkReview(importReview.dataset.workImportReview);});
 
