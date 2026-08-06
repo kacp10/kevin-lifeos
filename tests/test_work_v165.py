@@ -64,12 +64,12 @@ class WorkSkillsLevelCoachTests(unittest.TestCase):
         self.db.execute("UPDATE work_roles SET level='Junior',level_index=1,promotion_ready=0 WHERE code='data'")
         self.assertEqual(self.db.execute("SELECT level,level_index,promotion_ready FROM work_roles WHERE code='data'").fetchone(), ('Junior', 1, 0))
 
-    def test_frontend_and_backend_versions_are_v165(self):
+    def test_frontend_and_backend_keep_v165_features(self):
         root = Path(__file__).resolve().parent.parent
         app_py = (root / 'app.py').read_text(encoding='utf-8')
         app_js = (root / 'static' / 'app.js').read_text(encoding='utf-8')
-        self.assertIn('VERSION = 165', app_py)
-        self.assertIn('const FRONT_V = 165;', app_js)
+        self.assertRegex(app_py, r'VERSION = (?:16[5-9]|1[7-9]\d|[2-9]\d\d)')
+        self.assertRegex(app_js, r'const FRONT_V = (?:16[5-9]|1[7-9]\d|[2-9]\d\d);')
         self.assertIn('/api/work/level/assessment/request', app_py)
         self.assertIn('SKILLS & LEVEL COACH', app_js)
         self.assertIn('Promote manually', app_js)
