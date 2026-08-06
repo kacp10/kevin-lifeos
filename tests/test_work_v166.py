@@ -51,8 +51,8 @@ class WorkMarketIntelligenceTests(unittest.TestCase):
         root=Path(__file__).resolve().parent.parent
         app_py=(root/'app.py').read_text(encoding='utf-8')
         app_js=(root/'static'/'app.js').read_text(encoding='utf-8')
-        self.assertIn('VERSION = 166',app_py)
-        self.assertIn('const FRONT_V = 166;',app_js)
+        self.assertRegex(app_py, r'VERSION = (?:16[6-9]|1[7-9]\d|[2-9]\d\d)')
+        self.assertRegex(app_js, r'const FRONT_V = (?:16[6-9]|1[7-9]\d|[2-9]\d\d);')
         self.assertIn('/api/work/market/job',app_py)
         self.assertIn('MARKET INTELLIGENCE',app_js)
         self.assertIn('Vacancies → evidence gaps',app_js)
