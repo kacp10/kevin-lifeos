@@ -4785,3 +4785,27 @@ body.hunter-profile-open {
 .work-market-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin:12px 0 14px}.work-market-summary article{border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:12px;background:rgba(255,255,255,.02)}.work-market-summary b{display:block;color:#f4c96b;font-size:1.25rem}.work-market-summary span{color:#718091;font-size:.68rem}.work-market-skills{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}.work-market-skills article{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:11px;background:rgba(255,255,255,.018);min-width:0}.work-market-skills article.gap{border-color:rgba(244,201,107,.22)}.work-market-skills b,.work-market-skills span{display:block;overflow-wrap:anywhere}.work-market-skills b{color:#e6edf3}.work-market-skills span{color:#718091;font-size:.68rem;margin-top:3px}.work-market-skills i{font-style:normal;color:#76c893;font-size:.68rem;text-transform:uppercase;font-weight:800;letter-spacing:.08em}.work-market-sources{margin-top:14px;border-top:1px solid rgba(255,255,255,.07);padding-top:12px}.work-market-sources summary{cursor:pointer;color:#f4c96b;font-weight:800}.work-market-sources>div{display:grid;gap:8px;margin-top:10px}.work-market-sources article{display:flex;justify-content:space-between;gap:14px;padding:10px;border-left:2px solid rgba(244,201,107,.32);background:rgba(255,255,255,.018)}.work-market-sources b,.work-market-sources span,.work-market-sources small{display:block}.work-market-sources span,.work-market-sources small{color:#718091;font-size:.7rem;margin-top:3px}.work-market-sources article>div:last-child{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}.work-market-sources a{color:#a9cef3;font-size:.75rem}.work-market-disclaimer{color:#718091;font-size:.7rem;margin:12px 0 0}
 @media(max-width:850px){.work-market-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.work-market-skills{grid-template-columns:1fr}.work-market-skills article button{min-height:44px}.work-market-sources article{flex-direction:column}.work-market-sources article>div:last-child{justify-content:flex-start}}
 @media(max-width:520px){.work-market-summary{grid-template-columns:1fr 1fr}.work-market-skills article{align-items:stretch;flex-direction:column}.work-market-skills article button{width:100%}.work-market-sources article>div:last-child{display:grid;grid-template-columns:1fr}.work-market-sources article button,.work-market-sources article a{text-align:center;width:100%;box-sizing:border-box}}
+
+/* V167 · Work Portfolio Operations */
+.work-portfolio-panel>p{margin:.35rem 0 1rem;color:var(--muted,#9ba3af)}
+.work-portfolio-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:14px}
+.work-portfolio-grid>article{border:1px solid rgba(197,164,94,.22);background:rgba(7,11,18,.58);border-radius:16px;padding:16px;min-width:0}
+.work-portfolio-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.work-portfolio-head span{font-size:.68rem;letter-spacing:.14em;color:#c9a65b}
+.work-portfolio-head h3{margin:.25rem 0 .4rem;overflow-wrap:anywhere}
+.work-portfolio-head>b{min-width:44px;text-align:center;border:1px solid rgba(197,164,94,.32);border-radius:999px;padding:6px 8px;color:#e9cf8b}
+.work-portfolio-grid p,.work-portfolio-grid small{overflow-wrap:anywhere}
+.work-portfolio-checklist{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:14px 0}
+.work-portfolio-checklist label{display:flex;align-items:flex-start;gap:8px;padding:8px;border-radius:10px;background:rgba(255,255,255,.025);cursor:pointer}
+.work-portfolio-checklist input{margin-top:2px;accent-color:#c9a65b}
+.work-portfolio-checklist span{font-size:.78rem;line-height:1.25}
+.work-portfolio-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.work-portfolio-actions a{text-decoration:none}
+@media(max-width:680px){
+  .work-portfolio-grid{grid-template-columns:1fr}
+  .work-portfolio-checklist{grid-template-columns:1fr}
+  .work-portfolio-actions{display:grid;grid-template-columns:1fr}
+  .work-portfolio-actions .btn-ghost,.work-portfolio-actions .btn-gold,.work-portfolio-actions a{width:100%;text-align:center;justify-content:center}
+  .work-portfolio-panel .row-between{align-items:stretch}
+  .work-portfolio-panel .row-between>button{width:100%}
+}
