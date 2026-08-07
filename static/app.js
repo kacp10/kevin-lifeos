@@ -1339,6 +1339,17 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
     const back = document.createElement('div');
     back.className = 'modal-back';
 
+    // Work Mode is a fixed full-screen layer (z-index 1200). Any modal opened
+    // while it is active must be mounted above it from the very first click.
+    // Previously the first modal used the base z-index (1000), so it appeared
+    // behind Work and looked as if it had opened on the Life screen. A second
+    // attempt was then treated as a stacked dialog and happened to appear.
+    const workScreen = document.querySelector('.work-mode-screen.open');
+    if (workScreen) {
+      back.classList.add('modal-back-work-context');
+      back.dataset.modalContext = 'work';
+    }
+
     // Nested dialogs must always render above the modal that opened them.
     // This covers Memory Forge import/export previews, Expedition previews,
     // Language Hunter dialogs and any future modal opened from another modal.

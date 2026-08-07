@@ -303,6 +303,9 @@ tr.pending td:first-child { box-shadow: inset 3px 0 0 var(--mut); }
   transition: opacity .25s ease;
 }
 .modal-back.show { opacity: 1; pointer-events: auto; }
+/* V168 hotfix · dialogs opened from Work must appear above the full-screen Work layer on the first click. */
+.modal-back-work-context { z-index: 1300; }
+.modal-back-work-context.modal-back-stacked { z-index: 10080 !important; }
 .modal-card {
   background: linear-gradient(160deg, #221c40, var(--panel));
   border: 1px solid var(--line); border-radius: 18px; padding: 26px;
