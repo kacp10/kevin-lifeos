@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 168  # V168 Work Guidance: automatic mission context, dates and clear next-step guidance
+VERSION = 169  # V169 Smart Shopping: atomic payment routing to cash/Nequi or credit-card installments
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -1253,6 +1253,15 @@ def init_db():
             except Exception:
                 pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('shopping_history_v1','1')")
+        con.commit()
+    # V169: links Shopping purchases with their expense and optional installment purchase.
+    if not con.execute("SELECT 1 FROM config WHERE key='shopping_finance_links_v1'").fetchone():
+        for col, decl in (('expense_id', 'INTEGER DEFAULT NULL'), ('compra_id', 'INTEGER DEFAULT NULL')):
+            try:
+                con.execute(f"ALTER TABLE shopping ADD COLUMN {col} {decl}")
+            except Exception:
+                pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('shopping_finance_links_v1','1')")
         con.commit()
     if not con.execute("SELECT 1 FROM config WHERE key='routine_scheduled_v1'").fetchone():
         try:
@@ -3687,10 +3696,85 @@ def todo_clear_done():
     return jsonify(ok=True, deleted=max(cur.rowcount or 0, 0))
 
 
+SHOPPING_CARD_ROUTES = {
+    'Davivienda': ('Tarjeta DV', 'Tarjeta DV — Jefe Final'),
+    'Tarjeta DV': ('Tarjeta DV', 'Tarjeta DV — Jefe Final'),
+    'ADDI': ('ADDI', 'ADDI'),
+    'Codensa': ('Codensa', 'Codensa'),
+    'Banco de Bogotá': ('Banco de Bogotá', 'Banco de Bogotá'),
+    'Tarjeta Nicole': ('Tarjeta Nicole', 'Tarjeta Nicole'),
+}
+SHOPPING_CASH_METHODS = {'Efectivo', 'Nequi'}
+
+
+@app.post('/api/shopping/complete')
+def shopping_complete():
+    # V169 atomic Shopping flow: either every financial record is saved, or none is.
+    j = request.json or {}
+    try:
+        iid = int(j.get('id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid shopping item'), 400
+    cost = to_int(j.get('cost'))
+    if cost < 0:
+        return jsonify(error='Purchase amount cannot be negative'), 400
+    method = str(j.get('method') or 'Efectivo').strip()
+    month = str(j.get('month') or '').strip()
+    is_card = method in SHOPPING_CARD_ROUTES
+    if method not in SHOPPING_CASH_METHODS and not is_card:
+        return jsonify(error='Unsupported shopping payment method'), 400
+
+    cuotas = 0
+    start_month = -1
+    creditor = ''
+    boss = ''
+    if is_card and cost > 0:
+        try:
+            cuotas = int(j.get('cuotas') or 1)
+            start_month = int(j.get('start'))
+        except (TypeError, ValueError):
+            return jsonify(error='Invalid installment configuration'), 400
+        if cuotas < 1 or cuotas > 60 or not (0 <= start_month <= 11):
+            return jsonify(error='Installments must be 1-60 and start month must be valid'), 400
+        creditor, boss = SHOPPING_CARD_ROUTES[method]
+
+    expense_id = None
+    compra_id = None
+    with transaction() as con:
+        row = con.execute('SELECT * FROM shopping WHERE id=?', (iid,)).fetchone()
+        if not row:
+            return jsonify(error='Shopping item not found'), 404
+        item = dict(row)
+        if str(item.get('bought_at') or '').strip():
+            return jsonify(error='This item is already in purchase history'), 409
+        name = str(item.get('name') or '').strip() or 'Shopping purchase'
+
+        if is_card and cost > 0:
+            if not con.execute('SELECT 1 FROM debts WHERE name=?', (boss,)).fetchone():
+                return jsonify(error=f'Credit card {method} is not configured in My credit cards'), 409
+            con.execute('INSERT INTO compras (creditor, concepto, valor, cuotas, start) VALUES (?,?,?,?,?)',
+                        (creditor, name, cost, cuotas, start_month))
+            r = con.execute('SELECT id FROM compras WHERE creditor=? AND concepto=? AND valor=? AND cuotas=? AND start=? ORDER BY id DESC LIMIT 1',
+                            (creditor, name, cost, cuotas, start_month)).fetchone()
+            compra_id = dict(r)['id'] if r else None
+
+        if cost > 0:
+            con.execute('INSERT INTO expenses (name, amount, method, kind, month, created) VALUES (?,?,?,?,?,?)',
+                        (name, cost, method, 'once', month, date.today().isoformat()))
+            r = con.execute("SELECT id FROM expenses WHERE name=? AND amount=? AND method=? AND kind='once' AND month=? ORDER BY id DESC LIMIT 1",
+                            (name, cost, method, month)).fetchone()
+            expense_id = dict(r)['id'] if r else None
+
+        con.execute('UPDATE shopping SET done=slots, bought_at=?, cost=?, method=?, expense_id=?, compra_id=? WHERE id=?',
+                    (date.today().isoformat(), cost, method, expense_id, compra_id, iid))
+
+    return jsonify(ok=True, payment_type='card' if is_card else 'cash', expense_id=expense_id,
+                   compra_id=compra_id, creditor=creditor, cuotas=cuotas, start=start_month)
+
+
 @app.post('/api/shopping/bought')
 def shopping_bought():
-    """Marca un item como COMPRADO: registra fecha, costo y método. A partir de aquí
-    sale de la lista activa (Shopping & To Buy) y aparece solo en el historial de compras."""
+    # Backward compatibility for older browser bundles; V169 uses /api/shopping/complete.
     j = request.json or {}
     try:
         iid = int(j.get('id'))
@@ -3699,10 +3783,8 @@ def shopping_bought():
     row = db().execute('SELECT * FROM shopping WHERE id=?', (iid,)).fetchone()
     if not row:
         return jsonify(error='Item not found'), 404
-    it = dict(row)
     cost = to_int(j.get('cost'))
     method = j.get('method') or ''
-    # marcar completo + comprado (bought_at es lo que lo mueve al historial)
     db().execute('UPDATE shopping SET done=slots, bought_at=?, cost=?, method=? WHERE id=?',
                  (date.today().isoformat(), cost, method, iid))
     db().commit()
@@ -3711,14 +3793,27 @@ def shopping_bought():
 
 @app.post('/api/shopping/unbuy')
 def shopping_unbuy():
-    """Devuelve un item del historial a la lista activa (por si se marcó por error)."""
+    # Undo only records created and linked by V169 Shopping. Paid card purchases are protected.
     j = request.json or {}
     try:
         iid = int(j.get('id'))
     except (TypeError, ValueError):
         return jsonify(error='Invalid id'), 400
-    db().execute("UPDATE shopping SET bought_at='', done=0 WHERE id=?", (iid,))
-    db().commit()
+    with transaction() as con:
+        row = con.execute('SELECT * FROM shopping WHERE id=?', (iid,)).fetchone()
+        if not row:
+            return jsonify(error='Item not found'), 404
+        item = dict(row)
+        compra_id = item.get('compra_id')
+        expense_id = item.get('expense_id')
+        if compra_id:
+            purchase = con.execute('SELECT abonado FROM compras WHERE id=?', (compra_id,)).fetchone()
+            if purchase and (dict(purchase).get('abonado') or 0) > 0:
+                return jsonify(error='This card purchase already has payments. Do not undo it from Shopping.'), 409
+            con.execute('DELETE FROM compras WHERE id=?', (compra_id,))
+        if expense_id:
+            con.execute('DELETE FROM expenses WHERE id=?', (expense_id,))
+        con.execute("UPDATE shopping SET bought_at='', done=0, cost=0, method='', expense_id=NULL, compra_id=NULL WHERE id=?", (iid,))
     return jsonify(ok=True)
 
 
