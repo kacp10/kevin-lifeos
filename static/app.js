@@ -244,7 +244,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 168;
+const FRONT_V = 169;
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
@@ -1133,11 +1133,11 @@ const PAY_METHODS = [
   { id: 'Daviplata', label: 'Daviplata', logo: '🔴', card: false },
   { id: 'NU', label: 'NU (debit)', logo: '🟪', card: false },
   { id: 'Bancolombia', label: 'Bancolombia (debit)', logo: '🟡', card: false },
-  { id: 'Tarjeta Nicole', label: 'Nicole (credit)', logo: '💳', card: true },
-  { id: 'Davivienda', label: 'Davivienda (credit)', logo: '🔻', card: true },
-  { id: 'Codensa', label: 'Codensa (credit)', logo: '🟠', card: true },
-  { id: 'Banco de Bogotá', label: 'Banco de Bogotá (credit)', logo: '🔵', card: true },
-  { id: 'ADDI', label: 'ADDI (credit)', logo: '🟢', card: true }
+  { id: 'Tarjeta Nicole', label: 'Nicole (credit)', logo: '💳', card: true, creditor: 'Tarjeta Nicole', boss: 'Tarjeta Nicole' },
+  { id: 'Davivienda', label: 'Davivienda (credit)', logo: '🔻', card: true, creditor: 'Tarjeta DV', boss: 'Tarjeta DV — Jefe Final' },
+  { id: 'Codensa', label: 'Codensa (credit)', logo: '🟠', card: true, creditor: 'Codensa', boss: 'Codensa' },
+  { id: 'Banco de Bogotá', label: 'Banco de Bogotá (credit)', logo: '🔵', card: true, creditor: 'Banco de Bogotá', boss: 'Banco de Bogotá' },
+  { id: 'ADDI', label: 'ADDI (credit)', logo: '🟢', card: true, creditor: 'ADDI', boss: 'ADDI' }
 ];
 function getCustomCards() {
   const raw = ((S || {}).profile || {}).custom_credit_cards;
@@ -1148,11 +1148,17 @@ function getCustomCards() {
   } catch (e) { return []; }
 }
 function getPayMethods() {
-  const custom = getCustomCards().map(c => ({ id: c.creditor || c.key, label: `${c.label} (credit)`, logo: '💳', card: true }));
+  const custom = getCustomCards().map(c => ({ id: c.creditor || c.key, label: `${c.label} (credit)`, logo: '💳', card: true, creditor: c.creditor || c.key, boss: c.boss || c.key }));
   const seen = new Set();
   return [...PAY_METHODS, ...custom].filter(m => !seen.has(m.id) && seen.add(m.id));
 }
 const payMethod = (id) => getPayMethods().find(m => m.id === id) || PAY_METHODS[0];
+// Hunter Supply Request deliberately keeps its payment choice focused on the methods
+// requested for real shopping. Other Life/Services payment methods remain untouched.
+function shoppingPayMethods() {
+  const wanted = ['Efectivo', 'Nequi', 'Davivienda', 'Banco de Bogotá', 'Codensa', 'ADDI', 'Tarjeta Nicole'];
+  return wanted.map(id => payMethod(id)).filter((m, i, arr) => m && arr.findIndex(x => x.id === m.id) === i);
+}
 // el ingreso del mes actual (editable) o el del plan por defecto
 function ingresoDelMes(i) {
   const monthKey2 = S.plan.months[i];
@@ -2844,6 +2850,10 @@ document.addEventListener('click', async (e) => {
 document.addEventListener('click', async (e) => {
   const chk = e.target.closest('.shop-check');
   if (chk) {
+    if (chk.dataset.purchaseBusy === '1') return;
+    chk.dataset.purchaseBusy = '1';
+    chk.setAttribute('aria-busy', 'true');
+    try {
     const id = +chk.dataset.id;
     const it = (S.shopping || []).find(s => s.id === id);
     const slots = it ? (it.slots || 1) : 1;
@@ -2854,42 +2864,56 @@ document.addEventListener('click', async (e) => {
       load();
       return;
     }
-    // Se compró: pedir monto + método (idéntico a Life & Services), y registrar la compra.
+    // Se compró: primero se recoge TODO el pago y luego se guarda en una sola transacción.
+    // Si el usuario cancela cualquier modal, el item sigue intacto y no se crea gasto/deuda parcial.
     const r = await modal({ icon: '🛒', title: 'You bought it!',
-      text: `<b>${esc(it.name)}</b> — how much did it cost and how did you pay? This moves it to your purchase history. (Leave amount blank to just mark it bought.)`,
+      text: `<b>${esc(it.name)}</b> — how much did it cost and how did you pay? Cash/Nequi leave your available income now. Credit cards create the same installment flow used by “Used a card? Installment purchase”.`,
       fields: [
         { type: 'money', label: 'Amount', placeholder: 'e.g. 25.000' },
-        { type: 'select', label: 'Paid with', options: getPayMethods().map(m => ({ v: m.id, t: `${m.logo} ${m.label}` })) }
-      ], okText: 'Mark as bought' });
-    if (r === null) return;   // canceló: no lo marca (sigue en la lista)
+        { type: 'select', label: 'Paid with', options: shoppingPayMethods().map(m => ({ v: m.id, t: `${m.logo} ${m.label}` })) }
+      ], okText: 'Continue' });
+    if (r === null) return;
     const amount = +String(r[0] || '').replace(/[^0-9]/g, '') || 0;
     const method = r[1] || 'Efectivo';
     const m = payMethod(method);
-    // 1) marcar como comprado -> sale de la lista, entra al historial
-    await api('/api/shopping/bought', { body: { id, cost: amount, method } });
-    // 2) si pagó con tarjeta de crédito: MISMO flujo financiero que Services/Used a Card
+    let cuotas = 0, startM = -1;
+
     if (amount > 0 && m.card) {
-      const rc = await modal({ icon: m.logo, title: 'Paid with ' + m.id,
-        text: `<b>${esc(it.name)}</b> will be charged to <b>${m.id}</b>. How many installments, and which month does the FIRST one start? (Card purchases usually bill next month.)`,
+      const rc = await modal({ icon: m.logo, title: 'Paid with ' + m.label,
+        text: `<b>${esc(it.name)}</b> becomes a real purchase on <b>${esc(m.label)}</b>. Choose the number of installments and the month when the FIRST installment is due.`,
         fields: [
-          { type: 'number', placeholder: '# installments (1 = single)', min: 1, value: '1' },
+          { type: 'number', label: 'Installments', placeholder: '# installments (1 = single)', min: 1, max: 60, value: '1' },
           { type: 'select', label: 'First installment', options: mesInicioOpts() }
         ],
-        okText: 'Add to card' });
-      const cuotas = rc ? Math.max(1, +rc[0] || 1) : 1;
-      const startM = rc && rc[1] != null && rc[1] !== '' ? +rc[1] : MES;
-      await api('/api/compra', { body: { creditor: method, concepto: it.name, valor: amount, cuotas, start: startM } });
-      await api('/api/expense/new', { body: { name: it.name, amount, method, kind: 'once', month: S.plan.months[MES] } });
-      toast(`💳 ${esc(it.name)} → ${m.id} (${cuotas} ${cuotas === 1 ? 'installment' : 'installments'} from ${S.plan.months[startM]})`);
+        okText: 'Register card purchase' });
+      if (rc === null) return;
+      cuotas = Math.max(1, Math.min(60, +rc[0] || 1));
+      startM = rc[1] != null && rc[1] !== '' ? +rc[1] : MES;
+      if (!await confirmarTopeDeuda(startM, Math.round(amount / cuotas))) return;
+    }
+
+    await api('/api/shopping/complete', { body: {
+      id, cost: amount, method, cuotas, start: startM,
+      month: S.plan.months[MES]
+    } });
+
+    if (amount > 0 && m.card) {
+      toast(`💳 ${esc(it.name)} → ${m.label} · ${cuotas} ${cuotas === 1 ? 'installment' : 'installments'} from ${S.plan.months[startM]}`);
     } else if (amount > 0) {
-      // efectivo/débito: solo gasto del mes, sin cuotas (igual que hoy)
-      await api('/api/expense/new', { body: { name: it.name, amount, method, kind: 'once', month: S.plan.months[MES] } });
-      toast(`🧾 ${fmt(amount)} logged in expenses`);
+      toast(`${m.logo} ${fmt(amount)} spent this month · available income updated`);
     } else {
-      toast('✓ Marked as bought — moved to history.');
+      toast('✓ Marked as bought — no financial amount was recorded.');
     }
     load();
     return;
+    } catch (err) {
+      // api() already shows the friendly server error; this prevents an unhandled promise.
+      console.error('[Shopping purchase]', err);
+      return;
+    } finally {
+      delete chk.dataset.purchaseBusy;
+      chk.removeAttribute('aria-busy');
+    }
   }
   if (e.target.id === 'clearDoneBtn') {
     await api('/api/shopping/clear_done', {});
@@ -2898,8 +2922,13 @@ document.addEventListener('click', async (e) => {
   }
   const unbuy = e.target.closest('.shop-unbuy');
   if (unbuy) {
-    await api('/api/shopping/unbuy', { body: { id: +unbuy.dataset.id } });
-    toast('↩ Back on your list'); load();
+    try {
+      await api('/api/shopping/unbuy', { body: { id: +unbuy.dataset.id } });
+      toast('↩ Purchase reversed and returned to shopping list');
+      load();
+    } catch (err) {
+      console.error('[Shopping undo]', err);
+    }
     return;
   }
 });
@@ -3736,7 +3765,8 @@ const BASE_TARJETAS = [
   { key: 'Tarjeta DV', label: 'Davivienda', boss: 'Tarjeta DV — Jefe Final', creditor: 'Tarjeta DV', accent: 'red', code: '4582' },
   { key: 'ADDI', label: 'ADDI', boss: 'ADDI', creditor: 'ADDI', accent: 'green', code: '2048' },
   { key: 'Codensa', label: 'Codensa', boss: 'Codensa', creditor: 'Codensa', accent: 'amber', code: '7714' },
-  { key: 'Banco de Bogotá', label: 'Banco de Bogotá', boss: 'Banco de Bogotá', creditor: 'Banco de Bogotá', accent: 'blue', code: '9016' }
+  { key: 'Banco de Bogotá', label: 'Banco de Bogotá', boss: 'Banco de Bogotá', creditor: 'Banco de Bogotá', accent: 'blue', code: '9016' },
+  { key: 'Tarjeta Nicole', label: 'Tarjeta Nicole', boss: 'Tarjeta Nicole', creditor: 'Tarjeta Nicole', accent: 'violet', code: '0917' }
 ];
 function misTarjetas() {
   return [...BASE_TARJETAS, ...getCustomCards().map((c, i) => ({
@@ -5717,7 +5747,7 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 14. Trata este proyecto como un sistema compartido de largo plazo: memoriza sus reglas, comprende cada módulo antes de tocarlo y mantén continuidad entre solicitudes.
 15. El botón PROJECT CONTINUITY PROTOCOL debe actualizarse en cada nueva versión para conservar las decisiones, arquitectura, reglas y módulos añadidos. Nunca entregues una actualización dejando este prompt desactualizado.
 
-ESTADO ACTUAL DEL PROYECTO - V165 SKILLS & LEVEL COACH:
+ESTADO ACTUAL DEL PROYECTO - V169 SMART SHOPPING PAYMENT FLOW:
 - Life administra vida, hábitos, rutina, turnos, metas y sistemas personales existentes. No traslades módulos de Life a Work.
 - Hunter Skill Academy es un gimnasio mental libre para aprender temas y evitar perder tiempo. No debe aumentar automáticamente carreras, proyectos ni habilidades profesionales.
 - Work Mode es una pantalla independiente abierta desde Life, similar a Hunter Profile. Contiene entrenamiento profesional sin saturar ni reemplazar la aplicación principal.
@@ -5729,6 +5759,7 @@ ESTADO ACTUAL DEL PROYECTO - V165 SKILLS & LEVEL COACH:
 - V166 añade Market Intelligence: registra vacantes y fuentes con URL y fecha de captura, resume habilidades demandadas por rol, compara demanda contra evidencia aprobada y permite crear misiones desde brechas. Las fuentes pueden expirar y siempre deben verificarse; Academy no alimenta automáticamente estas evidencias.
 - V167 añade Portfolio Operations: agrupa únicamente misiones aprobadas en proyectos publicables, mantiene checklist de GitHub/README/pruebas/resultados/limitaciones, registra enlaces de repositorio y LinkedIn y prepara evidencia para entrevistas. Ningún proyecto se publica ni se marca listo automáticamente.
 - V168 añade Work Guidance: fechas de sprint automáticas, misiones iniciales completas, stakeholders ficticios, criterios y entregables claros, orientación de siguiente paso y explicaciones para acciones bloqueadas. La etiqueta de versión dentro de Mission Control fue retirada.
+- V169 añade Smart Shopping Payment Flow: Hunter Supply Request registra compras de forma atómica. Efectivo/Nequi descuentan el gasto completo del mes; Davivienda, Banco de Bogotá, Codensa, ADDI y Tarjeta Nicole crean una compra a cuotas vinculada al mismo motor de Debt Boss, My credit cards, Full debt breakdown y Monthly payment checklist. Davivienda usa internamente creditor Tarjeta DV. Cancelar cualquier modal no debe dejar registros parciales y Undo revierte los registros financieros vinculados solo si la compra de tarjeta aún no recibió pagos.
 - Cada versión de Work debe incluir un manual PDF en español sencillo con cambios, uso, verificaciones, precauciones, compatibilidad móvil y archivos modificados. Toda interfaz nueva debe ser responsive y táctil, sin scroll horizontal ni doble scroll.
 
 FORMA DE TRABAJO:
