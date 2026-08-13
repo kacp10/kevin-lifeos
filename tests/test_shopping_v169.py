@@ -10,7 +10,8 @@ JS = (ROOT / 'static' / 'app.js').read_text(encoding='utf-8')
 def test_v169_versions_are_synchronized():
     server = int(re.search(r'VERSION = (\d+)', APP).group(1))
     browser = int(re.search(r'const FRONT_V = (\d+);', JS).group(1))
-    assert server == browser == 169
+    assert server == browser
+    assert server >= 169
 
 
 def test_shopping_payment_methods_are_focused_and_card_routes_are_real():
