@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 169  # V169 Smart Shopping: atomic payment routing to cash/Nequi or credit-card installments
+VERSION = 170  # V170 Daily Activity Control: editable system activities + habit links
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -3634,6 +3634,23 @@ def routine_extra_new():
                  (j.get('time', ''), j['title'].strip(), j.get('descr', ''),
                   int(j.get('weekday', -1)), j.get('day', ''), j.get('habit', ''),
                   1 if j.get('scheduled') else 0))
+    db().commit()
+    return jsonify(ok=True)
+
+
+@app.patch('/api/routine_extra/<int:i>')
+def routine_extra_update(i):
+    """V170: edit a custom Life activity without recreating or moving its schedule."""
+    j = request.json or {}
+    row = db().execute('SELECT 1 FROM routine_extra WHERE id=?', (i,)).fetchone()
+    if not row:
+        return jsonify(error='Activity not found'), 404
+    title = str(j.get('title') or '').strip()
+    if not title:
+        return jsonify(error='Activity name is required'), 400
+    db().execute('''UPDATE routine_extra SET time=?, title=?, descr=?, habit=? WHERE id=?''',
+                 (str(j.get('time') or ''), title, str(j.get('descr') or ''),
+                  str(j.get('habit') or ''), i))
     db().commit()
     return jsonify(ok=True)
 
