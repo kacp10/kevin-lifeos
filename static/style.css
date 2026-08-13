@@ -4831,3 +4831,15 @@ body.hunter-profile-open {
   .work-next-step{flex-direction:column;gap:.3rem;}
   .work-next-step b{white-space:normal;}
 }
+
+/* V170 · Daily Activity Control ----------------------------------------- */
+.edit-activity{
+  appearance:none;-webkit-appearance:none;border:0;background:transparent;color:var(--muted,#aab3bf);
+  cursor:pointer;padding:2px 5px;border-radius:7px;font-size:.8rem;line-height:1;vertical-align:middle;
+}
+.edit-activity:hover,.edit-activity:focus-visible{color:var(--gold,#d5a94e);background:rgba(213,169,78,.10);outline:none}
+#manageLifeActivitiesBtn{white-space:nowrap}
+@media(max-width:640px){
+  #manageLifeActivitiesBtn{width:100%}
+  .rb-title .edit-activity,.rb-title .edit-time,.rb-title .del-x,.rb-title .hide-main{min-width:32px;min-height:32px}
+}

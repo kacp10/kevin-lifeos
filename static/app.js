@@ -244,14 +244,20 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 169;
+const FRONT_V = 170;
+const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
 // Medios de pago. isCard=true significa tarjeta de crédito -> suma a cuotas de esa deuda.
 // Conexión Life -> Habits: qué hábito marca cada actividad de la rutina.
 // Varias actividades pueden marcar el MISMO hábito (ej: ejercicio o gym -> Exercise).
 const ACT_TO_HABIT = {
-  ejercicio: ['Exercise'], gym: ['Exercise'],
+  // V170: daily Life defaults. The visible label can be customized without changing
+  // the internal key, so special flows (English, Study, Reading, Sleep, etc.) stay safe.
+  roomreset: ['Be organized'],
+  morning: ['God and Spirituality', 'Be organized'],
+  gratitude: ['God and Spirituality'],
+  gym: ['Exercise'],
   ingles: ['English'],
   estudio: ['Study and hard work', 'Mathematic / Data', 'Writing'],
   proyecto: ['Study and hard work'],
@@ -259,6 +265,54 @@ const ACT_TO_HABIT = {
   dormir: ['Sleep well'],
   skincare: ['Take care my face and body']
 };
+
+// V170 · user-editable system Life activities. Stored in Profile so the same
+// customization works in SQLite/PostgreSQL without creating a parallel routine engine.
+const LIFE_ACTIVITY_BASE = {
+  roomreset:{title:'🛏️ Room reset',descr:'Make the bed, put clothes and objects back in place, clear visible clutter. A quick reset — not the weekly deep clean.'},
+  morning:{title:'💧 Water + gratitude',descr:'Drink a big glass of water and name one thing you are grateful for.'},
+  gratitude:{title:'🙏 Gratitude',descr:'Close the day by naming something you are grateful for and reconnecting with what matters.'},
+  dormir:{title:'🌙 Hunter Rest',descr:'Protect your sleep window and close the day. Recovery is part of the training.'},
+  ingles:{title:'English',descr:'Language Hunter training for the day.'},
+  estudio:{title:'Study',descr:'Advance one active course and take notes.'},
+  work:{title:'WORK',descr:'Your real work block.'},
+  gym:{title:'Gym 🏋️',descr:'Your iron hour.'},
+  leer:{title:'📖 Read',descr:'Advance the book you are reading.'},
+  skincare:{title:'🧴 Skincare PM',descr:'Night skincare routine.'},
+  proyecto:{title:'Project / portfolio',descr:'Advance a real project or practice room.'},
+  wake:{title:'Wake up without an alarm',descr:'Rest for real.'},
+  plan:{title:'Plan the week',descr:'Review the schedule and adjust shifts.'}
+};
+function getLifeActivityOverrides(){
+  try { const x=JSON.parse((S.profile||{}).life_activity_overrides_v1||'{}'); return x&&typeof x==='object'?x:{}; }
+  catch { return {}; }
+}
+async function saveLifeActivityOverrides(o){
+  await api('/api/profile',{body:{key:'life_activity_overrides_v1',value:JSON.stringify(o||{})}});
+}
+function lifeDefaultHabits(key, day=''){
+  // Historical days keep the mapping that existed before V170 so a new routine
+  // never creates retroactive Habit debt or rewrites old Exercise/Spirituality history.
+  if(day && day < V170_ACTIVITY_EFFECTIVE_DAY){
+    if(key==='ejercicio') return ['Exercise'];
+    if(key==='morning') return [];
+    if(key==='dormir') return ['Sleep well'];
+  }
+  const ov=getLifeActivityOverrides()[key];
+  if(ov && Array.isArray(ov.habits)) return [...new Set(ov.habits.filter(Boolean))];
+  return ACT_TO_HABIT[key] ? [].concat(ACT_TO_HABIT[key]) : [];
+}
+function applyLifeActivityOverride(a){
+  if(!a || !a.key) return a;
+  const ov=getLifeActivityOverrides()[a.key];
+  if(ov?.deleted) return null;
+  if(!ov) return a;
+  return {...a,
+    title:String(ov.title||'').trim() || a.title,
+    d:ov.descr != null ? String(ov.descr) : a.d
+  };
+}
+
 // Sub-tareas del bloque de inglés (para preguntar una por una al marcar la casilla).
 // Devuelve el título del día y sus pasos: cada paso tiene .s (corto) y .how (cómo hacerlo bien).
 function pasosInglesDelDia(wd) {
@@ -5746,6 +5800,7 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 13. Si existe una decisión ambigua, elige la opción que preserve al máximo el comportamiento actual y explícame la suposición realizada.
 14. Trata este proyecto como un sistema compartido de largo plazo: memoriza sus reglas, comprende cada módulo antes de tocarlo y mantén continuidad entre solicitudes.
 15. El botón PROJECT CONTINUITY PROTOCOL debe actualizarse en cada nueva versión para conservar las decisiones, arquitectura, reglas y módulos añadidos. Nunca entregues una actualización dejando este prompt desactualizado.
+16. V170 Daily Activity Control: las actividades predeterminadas de Life conservan claves internas estables pero pueden renombrarse, cambiar hábitos vinculados o eliminarse permanentemente desde la UI. Water + gratitude marca God and Spirituality + Be organized; Gratitude nocturna marca God and Spirituality; Hunter Rest marca Sleep well; Room reset sustituye Abs + jump rope y marca Be organized. Las actividades personalizadas también pueden editar nombre, hora, nota y hábito sin recrearlas.
 
 ESTADO ACTUAL DEL PROYECTO - V169 SMART SHOPPING PAYMENT FLOW:
 - Life administra vida, hábitos, rutina, turnos, metas y sistemas personales existentes. No traslades módulos de Life a Work.
@@ -6412,14 +6467,14 @@ function expectedRecoveryMissions(scanDays=7) {
     const weekly=(S.shifts||{})[wd]||'libre';
     const shiftKey=isLifeRestDate(iso)?'descanso':weekly;
     if(shiftKey==='descanso') continue; // REST is sacred: no obligations and no pending missions.
-    const plan=actividadesDelDia(wd,shiftKey);
+    const plan=actividadesDelDia(wd,shiftKey,iso);
     if(plan.rest) continue;
     const acts=(plan.acts||[]).filter(a=>!hiddenWeek.has(`${wd}|${a.key}`)&&!hiddenDay.has(`${iso}|${a.key}`));
     const extras=(S.routine_extra||[]).filter(x=>(x.day&&x.day===iso)||(!x.day&&(x.weekday===-1||(x.weekday===-2&&wd<=4)||x.weekday===wd)));
     extras.forEach(x=>acts.push({key:'extra_'+x.id,title:x.title||'Extra activity'}));
     const seen=new Set();
     for(const act of acts){
-      const names=habitosDeActividad(act.key);
+      const names=habitosDeActividad(act.key, iso);
       for(const habitName of names){
         const habit=(S.habits||[]).find(h=>h.name===habitName); if(!habit) continue;
         const sig=`${habit.id}|${iso}|${act.key}`; if(seen.has(sig)) continue; seen.add(sig);
@@ -6924,7 +6979,8 @@ function renderCareer() {
   };
   wrap.innerHTML = careers.map(card).join('') + `<button class="btn-gold add-career-btn" id="addCareerBtn">+ Add a career to learn</button>`;
 }
-function actividadesDelDia(wd, shiftKey) {
+function actividadesDelDia(wd, shiftKey, iso='') {
+  const v170Active = !iso || iso >= V170_ACTIVITY_EFFECTIVE_DAY;
   const sh = SHIFTS[shiftKey] || SHIFTS.libre;
   const active = (S.careers || []).find(c => c.active) || (S.careers || [])[0];
   const focoLabel = active ? `${active.icon || ''} ${active.name}` : 'Study';
@@ -6951,15 +7007,19 @@ function actividadesDelDia(wd, shiftKey) {
       key: 'estudio',
       optional: true
     });
-    return { rest: true, msg: `Rest ${DIAS[wd]} 🌿`, acts: restActs };
+    return { rest: true, msg: `Rest ${DIAS[wd]} 🌿`, acts: restActs.map(applyLifeActivityOverride).filter(Boolean) };
   }
 
   const acts = [];
   const esSabado = (shiftKey === 'sabado' || shiftKey === 'sabado11');
-  if (!esSabado) {   // ejercicio matutino solo lunes a viernes (sábado y domingo son descanso de gym)
-    acts.push({ t: '6:00', title: 'Abs + jump rope', d: '4 min abs + ~10 min jump rope (increase over time). Wake up the body. ⚡', key: 'ejercicio' });
+  if (!esSabado) {
+    acts.push(v170Active
+      ? { t: '6:00', title: '🛏️ Room reset', d: 'Make the bed, put clothes and objects back in place, clear visible clutter. A quick reset — not the weekly deep clean.', key: 'roomreset' }
+      : { t: '6:00', title: 'Abs + jump rope', d: '4 min abs + ~10 min jump rope (increase over time). Wake up the body. ⚡', key: 'ejercicio' });
   }
-  acts.push({ t: '6:20', title: '💧 Water + gratitude', d: 'A big glass of water on waking, and name one thing you\'re grateful for. Tiny ritual, big day. 🙏', key: 'morning' });
+  acts.push({ t: '6:20', title: '💧 Water + gratitude', d: v170Active
+    ? 'Drink a big glass of water and name one thing you\'re grateful for. Start hydrated, grateful and organized. 🙏'
+    : 'A big glass of water on waking, and name one thing you\'re grateful for. Tiny ritual, big day. 🙏', key: 'morning' });
 
   if (sh.work && !esSabado) {
     const [ini, fin] = sh.work;
@@ -6974,7 +7034,10 @@ function actividadesDelDia(wd, shiftKey) {
     acts.push({ t: `${h}:00`, title: 'Gym 🏋️', d: 'Your iron hour. Don\'t negotiate it.', key: 'gym' }); h += 1;
     acts.push({ t: `${h}:30`, title: '📖 Read', d: 'Your pages for today. Advance the book you\'re reading. 📖', key: 'leer' });
     acts.push({ t: `${h}:45`, title: '🧴 Skincare PM', d: 'Night routine: cleanse, niacinamide serum, moisturizer. Close the day clean. 🧴', key: 'skincare' });
-    acts.push({ t: 'Sleep', title: 'Off to bed', d: 'Sleeping well is a habit on your list. Protect it like a payment.', key: 'dormir' });
+    if(v170Active) acts.push({ t: `${h}:55`, title: '🙏 Gratitude', d: 'Close the day by naming something you are grateful for and reconnecting with what matters.', key: 'gratitude' });
+    acts.push(v170Active
+      ? { t: 'Sleep', title: '🌙 Hunter Rest', d: 'Protect your sleep window and close the day. Recovery is part of the training.', key: 'dormir' }
+      : { t: 'Sleep', title: 'Off to bed', d: 'Sleeping well is a habit on your list. Protect it like a payment.', key: 'dormir' });
   } else if (shiftKey === 'sabado' || shiftKey === 'sabado11') {
     acts.push({ t: '8:00', title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
     const [si, sf] = sh.work || [10, 18];
@@ -6982,6 +7045,10 @@ function actividadesDelDia(wd, shiftKey) {
     acts.push({ t: `${sf + 1}:00`, title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' });
     acts.push({ t: 'Night', title: '📖 Read', d: 'Calm close — advance your book.', key: 'leer' });
     acts.push({ t: 'Night', title: '🧴 Skincare PM', d: 'Night routine: cleanse + serum + moisturizer.', key: 'skincare' });
+    if(v170Active){
+      acts.push({ t: 'Night', title: '🙏 Gratitude', d: 'Close the day by naming something you are grateful for and reconnecting with what matters.', key: 'gratitude' });
+      acts.push({ t: 'Sleep', title: '🌙 Hunter Rest', d: 'Protect your sleep window and close the day. Recovery is part of the training.', key: 'dormir' });
+    }
   } else {
     acts.push({ t: '6:40', title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
     acts.push({ t: '8:00', title: `DEEP study: ${focoLabel}`, d: studyDesc + ' Take advantage: day off = long project session.', key: 'estudio' });
@@ -6989,8 +7056,12 @@ function actividadesDelDia(wd, shiftKey) {
     acts.push({ t: 'Afternoon', title: 'Project / portfolio', d: 'Advance your project or a practice room.', key: 'proyecto' });
     acts.push({ t: 'Night', title: '📖 Read', d: 'Advance your book. Close the day.', key: 'leer' });
     acts.push({ t: 'Night', title: '🧴 Skincare PM', d: 'Night routine: cleanse + serum + moisturizer.', key: 'skincare' });
+    if(v170Active){
+      acts.push({ t: 'Night', title: '🙏 Gratitude', d: 'Close the day by naming something you are grateful for and reconnecting with what matters.', key: 'gratitude' });
+      acts.push({ t: 'Sleep', title: '🌙 Hunter Rest', d: 'Protect your sleep window and close the day. Recovery is part of the training.', key: 'dormir' });
+    }
   }
-  return { rest: false, acts };
+  return { rest: false, acts: acts.map(applyLifeActivityOverride).filter(Boolean) };
 }
 
 function bloqueEstudio(pf) {
@@ -7005,7 +7076,7 @@ function bloqueEstudio(pf) {
 function missingDefaultActivitiesForDay(iso, wd) {
   const weeklyShiftKey = (S.shifts || {})[wd] || 'libre';
   const shiftKey = isLifeRestDate(iso) ? 'descanso' : weeklyShiftKey;
-  const plan = actividadesDelDia(wd, shiftKey);
+  const plan = actividadesDelDia(wd, shiftKey, iso);
   const hiddenWeek = new Set(S.routine_hidden || []);
   const hiddenDay = new Set(S.routine_hidden_day || []);
   return (plan.acts || []).filter(a =>
@@ -7126,7 +7197,7 @@ function renderRoutineDay() {
   CUR_WD = wd;
   const weeklyShiftKey = (S.shifts || {})[wd] || 'libre';
   const shiftKey = isLifeRestDate(iso) ? 'descanso' : weeklyShiftKey;
-  const { rest, acts, msg } = actividadesDelDia(wd, shiftKey);
+  const { rest, acts, msg } = actividadesDelDia(wd, shiftKey, iso);
   // ocultar principales: por fecha exacta (puntual) o por weekday (recurrente)
   const hiddenWeek = new Set(S.routine_hidden || []);
   const hiddenDay = new Set(S.routine_hidden_day || []);
@@ -7181,6 +7252,9 @@ function renderRoutineDay() {
       d:`Pending since ${recoveryDayLabel(x.original_day)} · complete the normal activity flow; only then will the original Habit day be checked.`,
       key:`recovery_${x.id}`, sourceAct:x.activity, recoveryId:x.id, recoveryOriginal:x.original_day });
   }
+  // V170: apply permanent name/description/deletion overrides to every system activity,
+  // including generated reminders. Extras and recovery missions keep their own records.
+  lista = lista.map(a => (a.extraId || a.recoveryId) ? a : applyLifeActivityOverride(a)).filter(Boolean);
   // aplicar overrides de hora (la lista se reordena sola con la nueva hora)
   lista.forEach(a => { a.t = a.recoveryId ? a.t : effTime(a.key, iso, a.t); });
   // ORDENAR TODO por hora real (los textos como Sleep/Afternoon/Night van al final en orden lógico)
@@ -7198,7 +7272,7 @@ function renderRoutineDay() {
         : `<button class="hide-main" data-wd="${wd}" data-day="${iso}" data-key="${a.key}" title="Remove / replace">✕</button>`;
     return `<div class="routine-block ${a.work ? 'work' : ''} ${a.optional ? 'optional-activity' : ''} ${a.recoveryId ? 'recovery-mission' : ''} ${isDone ? 'done' : ''}">
       <span class="rb-time">${a.t}</span>
-      <div class="rb-body"><div class="rb-title">${a.title}${a.optional ? ' <span class="optional-life-badge">OPTIONAL</span>' : ''} <button class="edit-time" data-key="${a.key}" data-day="${iso}" data-cur="${a.t}" title="Edit time">⏰</button> ${delBtn}</div><div class="rb-desc">${a.d}</div></div>
+      <div class="rb-body"><div class="rb-title">${a.title}${a.optional ? ' <span class="optional-life-badge">OPTIONAL</span>' : ''} <button class="edit-time" data-key="${a.key}" data-day="${iso}" data-cur="${a.t}" title="Edit time">⏰</button> ${a.recoveryId ? '' : `<button class="edit-activity" ${a.extraId ? `data-life-extra-edit="${a.extraId}"` : `data-life-activity-edit="${a.key}" data-life-title="${esc(a.title)}" data-life-desc="${esc(a.d)}"`} title="Edit activity">✎</button>`} ${delBtn}</div><div class="rb-desc">${a.d}</div></div>
       <button class="rb-check ${isDone ? 'on' : ''}" data-day="${iso}" data-act="${a.recoveryId ? a.sourceAct : a.key}" ${a.recoveryId ? `data-recovery-complete="${a.recoveryId}" data-recovery-original="${a.recoveryOriginal}"` : ''}>${isDone ? '✓' : ''}</button>
     </div>`;
   }).join('');
@@ -7424,6 +7498,68 @@ document.addEventListener('click', async (e) => {
     toast('✦ Course skills updated');
     load();
     return;
+  }
+
+  const sysEdit = e.target.closest('[data-life-activity-edit]');
+  if (sysEdit) {
+    const key=sysEdit.dataset.lifeActivityEdit;
+    const ov=getLifeActivityOverrides();
+    const current=ov[key]||{};
+    const base=LIFE_ACTIVITY_BASE[key]||{title:sysEdit.dataset.lifeTitle||key,descr:sysEdit.dataset.lifeDesc||''};
+    const currentHabits=lifeDefaultHabits(key);
+    const habitOpts=[{v:'',t:'— No habit'}].concat((S.habits||[]).map(h=>({v:h.name,t:'🔥 '+h.name})));
+    const r=await modal({icon:'✎',title:'Edit system activity',
+      text:'Permanent settings keep the internal activity key intact, so its original Life behavior is protected.',
+      fields:[
+        {type:'text',label:'Activity name',value:current.title||sysEdit.dataset.lifeTitle||base.title||key},
+        {type:'text',label:'Description',value:current.descr!=null?current.descr:(sysEdit.dataset.lifeDesc||base.descr||'')},
+        {type:'select',label:'Habit 1',value:currentHabits[0]||'',options:habitOpts},
+        {type:'select',label:'Habit 2 (optional)',value:currentHabits[1]||'',options:habitOpts},
+        {type:'select',label:'Permanent action',options:[
+          {v:'save',t:'Save permanent changes'},
+          {v:'reset',t:'Restore system default'},
+          {v:'delete',t:'Delete this system activity permanently'}
+        ]}
+      ],okText:'Apply'});
+    if(r===null)return;
+    const action=r[4]||'save';
+    if(action==='delete'){
+      const ok=await confirmAction({icon:'✕',title:'Delete permanently?',text:`<b>${esc(r[0]||base.title||key)}</b> will stop appearing in Daily Activities. Historical checks stay preserved. You can restore it later from Manage activities.`,okText:'Delete permanently',cancelText:'Keep it',danger:true});
+      if(!ok)return;
+      ov[key]={...current,title:String(r[0]||'').trim()||base.title,descr:String(r[1]||''),habits:[r[2],r[3]].filter(Boolean),deleted:true};
+      await saveLifeActivityOverrides(ov); toast('✕ System activity removed permanently'); await load(); return;
+    }
+    if(action==='reset'){
+      delete ov[key]; await saveLifeActivityOverrides(ov); toast('↺ System activity restored to its original settings'); await load(); return;
+    }
+    const habits=[r[2],r[3]].filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i);
+    ov[key]={...current,title:String(r[0]||'').trim()||base.title,descr:String(r[1]||''),habits,deleted:false};
+    await saveLifeActivityOverrides(ov); toast('✓ Activity settings saved permanently'); await load(); return;
+  }
+
+  const extraEdit=e.target.closest('[data-life-extra-edit]');
+  if(extraEdit){
+    const ex=(S.routine_extra||[]).find(x=>Number(x.id)===Number(extraEdit.dataset.lifeExtraEdit)); if(!ex)return;
+    const habitOpts=[{v:'',t:'— Free (no habit)'}].concat((S.habits||[]).map(h=>({v:h.name,t:'🔥 '+h.name})));
+    const r=await modal({icon:'✎',title:'Edit custom activity',text:'Rename it, change its note, time or linked Habit. Its original schedule is preserved.',fields:[
+      {type:'text',label:'Time',value:ex.time||''},
+      {type:'text',label:'Activity name',value:ex.title||''},
+      {type:'text',label:'Description',value:ex.descr||''},
+      {type:'select',label:'Linked habit',value:ex.habit||'',options:habitOpts}
+    ],okText:'Save changes'});
+    if(r===null||!String(r[1]||'').trim())return;
+    await api(`/api/routine_extra/${ex.id}`,{method:'PATCH',body:{time:r[0]||'',title:String(r[1]).trim(),descr:r[2]||'',habit:r[3]||''}});
+    toast('✓ Custom activity updated'); await load(); return;
+  }
+
+  if(e.target.id==='manageLifeActivitiesBtn'){
+    const ov=getLifeActivityOverrides();
+    const deleted=Object.entries(ov).filter(([,v])=>v&&v.deleted);
+    if(!deleted.length){toast('All system activities are currently available. Use ✎ on any activity to rename it, change its Habit or delete it permanently.');return;}
+    const r=await modal({icon:'⚙️',title:'Manage activities',text:'Restore a system activity that you previously deleted permanently.',fields:[{type:'select',label:'Deleted system activity',options:deleted.map(([key,v])=>({v:key,t:`↺ ${v.title||LIFE_ACTIVITY_BASE[key]?.title||key}`}))}],okText:'Restore'});
+    if(r===null)return;
+    const key=r[0]; if(!key||!ov[key])return;
+    delete ov[key]; await saveLifeActivityOverrides(ov); toast('↺ System activity restored'); await load(); return;
   }
 
   const etBtn = e.target.closest('.edit-time');
@@ -7672,9 +7808,10 @@ document.addEventListener('click', async (e) => {
 
 // Marca/desmarca el hábito en Habits según una actividad de Life.
 // Respeta sinónimos: Exercise se marca si ejercicio O gym; se desmarca solo si NINGUNA queda hecha.
-function habitosDeActividad(act) {
-  // actividad fija (mapa, array) o actividad extra (su hábito guardado en routine_extra)
-  if (ACT_TO_HABIT[act]) return [].concat(ACT_TO_HABIT[act]);
+function habitosDeActividad(act, day='') {
+  // V170: default activities can override one or two linked habits permanently,
+  // while custom activities keep their saved habit in routine_extra.
+  if (ACT_TO_HABIT[act] || getLifeActivityOverrides()[act]) return lifeDefaultHabits(act, day);
   if (act && act.startsWith('extra_')) {
     const id = +act.slice(6);
     const ex = (S.routine_extra || []).find(x => x.id === id);
@@ -7683,7 +7820,7 @@ function habitosDeActividad(act) {
   return [];
 }
 async function sincronizarHabito(act, day, marcado) {
-  const habitNames = habitosDeActividad(act);
+  const habitNames = habitosDeActividad(act, day);
   if (!habitNames.length) return;   // actividad libre, no afecta hábitos
   // hechas hoy según rdone (S aún no incluye el cambio recién hecho), + el cambio actual
   const hechasHoy = new Set((S.rdone || []).filter(x => x.startsWith(day + '|')).map(x => x.split('|')[1]));
@@ -7692,7 +7829,8 @@ async function sincronizarHabito(act, day, marcado) {
     const habit = (S.habits || []).find(h => h.name === habitName);
     if (!habit) continue;
     // sinónimos: TODAS las actividades cuyo mapeo incluye este hábito (fijas + extras)
-    const sinonimos = Object.keys(ACT_TO_HABIT).filter(k => [].concat(ACT_TO_HABIT[k]).includes(habitName));
+    const defaultKeys = new Set([...Object.keys(ACT_TO_HABIT), ...Object.keys(getLifeActivityOverrides())]);
+    const sinonimos = [...defaultKeys].filter(k => lifeDefaultHabits(k, day).includes(habitName));
     for (const ex of (S.routine_extra || [])) {
       if (ex.habit === habitName) sinonimos.push('extra_' + ex.id);
     }
