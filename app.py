@@ -610,7 +610,8 @@ def init_db():
     CREATE TABLE IF NOT EXISTS shopping (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, slots INTEGER DEFAULT 1,
          done INTEGER DEFAULT 0, created TEXT DEFAULT '',
-         bought_at TEXT DEFAULT '', cost INTEGER DEFAULT 0, method TEXT DEFAULT '');
+         bought_at TEXT DEFAULT '', cost INTEGER DEFAULT 0, method TEXT DEFAULT '',
+         expense_id INTEGER DEFAULT NULL, compra_id INTEGER DEFAULT NULL);
     CREATE TABLE IF NOT EXISTS todos (
         id INTEGER PRIMARY KEY AUTOINCREMENT, texto TEXT,
         done INTEGER DEFAULT 0, created TEXT DEFAULT '',
@@ -1262,6 +1263,22 @@ def init_db():
             except Exception:
                 pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('shopping_finance_links_v1','1')")
+        con.commit()
+    # V170 hotfix: repair partially-applied legacy Shopping finance schemas.
+    if not con.execute("SELECT 1 FROM config WHERE key='shopping_finance_schema_repair_v170'").fetchone():
+        for col, decl in (
+            ('bought_at', "TEXT DEFAULT ''"), ('cost', 'INTEGER DEFAULT 0'),
+            ('method', "TEXT DEFAULT ''"), ('expense_id', 'INTEGER DEFAULT NULL'),
+            ('compra_id', 'INTEGER DEFAULT NULL')):
+            try:
+                con.execute(f"ALTER TABLE shopping ADD COLUMN {col} {decl}")
+                con.commit()
+            except Exception:
+                try:
+                    con.rollback()
+                except Exception:
+                    pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('shopping_finance_schema_repair_v170','1')")
         con.commit()
     if not con.execute("SELECT 1 FROM config WHERE key='routine_scheduled_v1'").fetchone():
         try:
@@ -3724,6 +3741,35 @@ SHOPPING_CARD_ROUTES = {
 SHOPPING_CASH_METHODS = {'Efectivo', 'Nequi'}
 
 
+def _ensure_shopping_finance_schema(con):
+    """V170 hotfix: self-heal legacy Shopping databases before a purchase.
+
+    Some upgraded databases can contain the migration marker while one of the
+    Shopping finance-link columns is still absent (for example after an older
+    interrupted/partial migration).  Each ALTER is committed independently so
+    SQLite and the Postgres compatibility layer remain safe when a column
+    already exists.
+    """
+    columns = (
+        ('bought_at', "TEXT DEFAULT ''"),
+        ('cost', 'INTEGER DEFAULT 0'),
+        ('method', "TEXT DEFAULT ''"),
+        ('expense_id', 'INTEGER DEFAULT NULL'),
+        ('compra_id', 'INTEGER DEFAULT NULL'),
+    )
+    for col, decl in columns:
+        try:
+            con.execute(f'ALTER TABLE shopping ADD COLUMN {col} {decl}')
+            con.commit()
+        except Exception:
+            # Expected when the column already exists. PGConn rolls back the
+            # failed statement; doing it explicitly keeps SQLite/PG equivalent.
+            try:
+                con.rollback()
+            except Exception:
+                pass
+
+
 @app.post('/api/shopping/complete')
 def shopping_complete():
     # V169 atomic Shopping flow: either every financial record is saved, or none is.
@@ -3754,6 +3800,9 @@ def shopping_complete():
         if cuotas < 1 or cuotas > 60 or not (0 <= start_month <= 11):
             return jsonify(error='Installments must be 1-60 and start month must be valid'), 400
         creditor, boss = SHOPPING_CARD_ROUTES[method]
+
+    # Repair legacy/partially migrated databases before touching finance links.
+    _ensure_shopping_finance_schema(db())
 
     expense_id = None
     compra_id = None
