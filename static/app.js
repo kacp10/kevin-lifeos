@@ -5801,6 +5801,7 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 14. Trata este proyecto como un sistema compartido de largo plazo: memoriza sus reglas, comprende cada módulo antes de tocarlo y mantén continuidad entre solicitudes.
 15. El botón PROJECT CONTINUITY PROTOCOL debe actualizarse en cada nueva versión para conservar las decisiones, arquitectura, reglas y módulos añadidos. Nunca entregues una actualización dejando este prompt desactualizado.
 16. V170 Daily Activity Control: las actividades predeterminadas de Life conservan claves internas estables pero pueden renombrarse, cambiar hábitos vinculados o eliminarse permanentemente desde la UI. Water + gratitude marca God and Spirituality + Be organized; Gratitude nocturna marca God and Spirituality; Hunter Rest marca Sleep well; Room reset sustituye Abs + jump rope y marca Be organized. Las actividades personalizadas también pueden editar nombre, hora, nota y hábito sin recrearlas.
+17. V170 Shopping hotfix: /api/shopping/complete debe autorreparar esquemas antiguos o parcialmente migrados antes de registrar una compra. Shopping debe seguir enlazando de forma atómica gasto, tarjeta/cuotas y sus IDs de reversión, sin impedir registrar valores por columnas faltantes en bases existentes.
 
 ESTADO ACTUAL DEL PROYECTO - V169 SMART SHOPPING PAYMENT FLOW:
 - Life administra vida, hábitos, rutina, turnos, metas y sistemas personales existentes. No traslades módulos de Life a Work.
