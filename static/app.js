@@ -112,6 +112,10 @@ const extraDebtCuota = (i) => (S.extra_debts || [])
 const compradoEn = (debtName) => S.compras
   .filter(c => (CRED_TO_DEBT[c.creditor] || c.creditor) === debtName)
   .reduce((s, c) => s + c.valor - (c.abonado || 0), 0);
+// V171: base-debt overpayments can never erase a later card purchase.
+// Math.max also preserves legacy detail payments without counting the same payment twice.
+const pagoBaseDeuda = (d) => Math.max(Number(d?.abonado || 0), Number(abonoDetalleDeUnJefe(d?.name || '') || 0));
+const saldoDeudaConCompras = (d) => Math.max((d?.initial || 0) - pagoBaseDeuda(d), 0) + compradoEn(d?.name || '');
 
 // Suma de abonos hechos a líneas del DESGLOSE ORIGINAL (detalle_items) cuyo grupo es un jefe.
 // Estas líneas ya están dentro del 'initial' del jefe, así que su abono = daño a ese jefe.
@@ -244,7 +248,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 170;
+const FRONT_V = 171;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -1384,8 +1388,7 @@ let _deudasVivasAntes = null;
 function snapshotDeudasVivas() {
   const set = new Set();
   for (const d of (S.debts || [])) {
-    const tot = d.initial + compradoEn(d.name);
-    if (tot - d.abonado > 0) set.add(d.name);
+    if (saldoDeudaConCompras(d) > 0) set.add(d.name);
   }
   for (const d of (S.extra_debts || [])) {
     if ((d.total - (d.abonado || 0)) > 0) set.add(d.name);
@@ -3045,13 +3048,14 @@ function renderShopping() {
 function renderFreedom() {
   const panel = document.getElementById('freedomPanel');
   if (!panel) return;
-  const init = (S.debts || []).reduce((s, d) => s + d.initial + compradoEn(d.name), 0)
-    + (S.extra_debts || []).reduce((s, d) => s + d.total, 0);
-  const dmgPlan = (S.debts || []).reduce((s, d) => s + (d.abonado || 0), 0);
-  const dmgExtras = (S.extra_debts || []).reduce((s, d) => s + Math.min(d.abonado || 0, d.total || 0), 0);
-  const dmg = dmgPlan + dmgExtras;
+  const comprasGross = (S.compras || []).reduce((sum, c) => sum + (c.valor || 0), 0);
+  const init = (S.debts || []).reduce((s, d) => s + (d.initial || 0), 0) + comprasGross
+    + (S.extra_debts || []).reduce((s, d) => s + (d.total || 0), 0);
+  const restPlan = (S.debts || []).reduce((s, d) => s + saldoDeudaConCompras(d), 0);
+  const restExtras = (S.extra_debts || []).reduce((s, d) => s + Math.max((d.total || 0) - (d.abonado || 0), 0), 0);
+  const rest = restPlan + restExtras;
+  const dmg = Math.max(init - rest, 0);
   const pct = init ? Math.min((dmg / init) * 100, 100) : 0;
-  const rest = Math.max(init - dmg, 0);
 
   // ritmo: total abonado / meses con actividad -> estimar meses restantes
   const abonos = S.abonos || [];
@@ -3068,7 +3072,7 @@ function renderFreedom() {
   }
 
   const enemigosVivos = (S.debts || []).filter(d =>
-    (d.initial + compradoEn(d.name) - (d.abonado || 0)) > 0).length
+    saldoDeudaConCompras(d) > 0).length
     + (S.extra_debts || []).filter(d =>
       ((d.total || 0) - (d.abonado || 0)) > 0).length;
   panel.innerHTML = `
@@ -3716,25 +3720,10 @@ document.addEventListener('click', async (e) => {
     const oldMethod = s.method, newMethod = r[2];
     await api('/api/service', { body: { id: s.id, field: 'method', value: newMethod } });
     await api('/api/service', { body: { id: s.id, field: 'payday', value: r[3] } });
-    // Si el método CAMBIÓ a una tarjeta de crédito: igual que "Used a Card" en Expenses,
-    // preguntar cuotas y registrarlo en el desglose de esa tarjeta (DebtBoss).
-    if (newMethod !== oldMethod) {
-      const mNew = payMethod(newMethod);
-      if (mNew.card) {
-        const rc = await modal({ icon: mNew.logo, title: 'Paid with ' + mNew.id,
-          text: `<b>${esc(r[0])}</b> will be charged to <b>${mNew.id}</b>. How many installments, and which month does the FIRST one start?`,
-          fields: [
-            { type: 'number', placeholder: '# installments (1 = single)', min: 1, value: '1' },
-            { type: 'select', label: 'First installment', options: mesInicioOpts() }
-          ],
-          okText: 'Add to card' });
-        if (rc) {
-          const cuotas = Math.max(1, +rc[0] || 1);
-          const startM = rc[1] != null && rc[1] !== '' ? +rc[1] : MES;
-          await api('/api/compra', { body: { creditor: newMethod, concepto: r[0] || s.name, valor: +r[1] || s.amount, cuotas, start: startM } });
-          toast(`💳 ${esc(r[0])} linked to ${mNew.id} (${cuotas} ${cuotas === 1 ? 'installment' : 'installments'} from ${S.plan.months[startM]})`);
-        }
-      }
+    // V171: recurring services paid by credit card are materialized by the
+    // backend once per real month. Do NOT create a second one-off purchase here.
+    if (newMethod !== oldMethod && payMethod(newMethod).card) {
+      toast(`💳 ${esc(r[0])} will now charge ${esc(newMethod)} once per month and reduce that card's available limit.`);
     }
     toast('✓ Service updated'); load();
     return;
@@ -3939,12 +3928,25 @@ function renderMyCards() {
     const bd = (S.debts || []).find(d => d.name === t.boss);
     const comprado = bd ? compradoEn(bd.name) : 0;
     const abonDet = bd ? abonoDetalleDeUnJefe(bd.name) : 0;
-    let totalCard = bd ? bd.initial + comprado : 0;
-    let pagado = bd ? bd.abonado + abonDet : 0;
-    let saldo = Math.max(totalCard - (bd ? bd.abonado : 0) - abonDet, 0);
+    const comprasCard = (S.compras || []).filter(c => (CRED_TO_DEBT[c.creditor] || c.creditor) === t.boss);
+    const comprasBrutas = comprasCard.reduce((sum, c) => sum + (c.valor || 0), 0);
+    const comprasPagadas = comprasCard.reduce((sum, c) => sum + Math.min(c.abonado || 0, c.valor || 0), 0);
+    // V171 invariant: an overpaid/legacy base balance must NEVER consume a new
+    // card purchase. Base debt and purchases are reduced independently, then added.
+    const basePaidRaw = bd ? Math.max(bd.abonado || 0, abonDet) : 0;
+    const basePagado = bd ? Math.min(basePaidRaw, bd.initial || 0) : 0;
+    const baseSaldo = bd ? Math.max((bd.initial || 0) - basePaidRaw, 0) : 0;
+    let totalCard = bd ? (bd.initial || 0) + comprasBrutas : comprasBrutas;
+    let pagado = basePagado + comprasPagadas;
+    let saldo = baseSaldo + comprado;
     if (t.key === 'Tarjeta DV') {
+      // V171: Davivienda's refinanced capital and NEW card purchases share the
+      // same real limit. The old tracker still owns the refinanced balance,
+      // while compradoEn() adds only outstanding purchases.
       const st = amortState();
-      totalCard = st.A.capital; saldo = st.saldoCapital; pagado = Math.max(totalCard - saldo, 0);
+      totalCard = st.A.capital + comprasBrutas;
+      saldo = st.saldoCapital + comprado;
+      pagado = Math.max(st.A.capital - st.saldoCapital, 0) + comprasPagadas;
     }
     const cupo = +(pf['cupo_' + t.key] || 0);
     const disponible = cupo ? Math.max(cupo - saldo, 0) : 0;
@@ -4008,17 +4010,12 @@ function renderBoss(animate) {
   const init = S.debts.reduce((s, d) => s + d.initial, 0)
     + comprasBrutas
     + (S.extra_debts || []).reduce((s, d) => s + (d.total || 0), 0);
-  // dmg = TODO lo pagado: abono directo al jefe + abonos a compras + abonos a extra_debts
-  //       + abonos hechos a líneas del DESGLOSE ORIGINAL (detalle_items) que pertenecen a un jefe.
-  const abonoCompras = (S.compras || []).reduce((s, c) => {
-    const dn = CRED_TO_DEBT[c.creditor] || c.creditor;
-    return S.debts.some(d => d.name === dn) ? s + (c.abonado || 0) : s;
-  }, 0);
-  const abonoDetalle = abonoDetalleDeJefes();     // abonos a líneas del desglose atadas a un jefe
-  const dmg = S.debts.reduce((s, d) => s + d.abonado, 0)
-    + abonoCompras + abonoDetalle
-    + (S.extra_debts || []).reduce((s, d) => s + (d.abonado || 0), 0);
-  const rest = Math.max(init - dmg, 0);
+  // V171: remaining debt is calculated directly. Historic overpayments on a
+  // base balance can no longer cancel a later card purchase.
+  const restPlan = (S.debts || []).reduce((sum, d) => sum + saldoDeudaConCompras(d), 0);
+  const restExtra = (S.extra_debts || []).reduce((sum, d) => sum + Math.max((d.total || 0) - (d.abonado || 0), 0), 0);
+  const rest = restPlan + restExtra;
+  const dmg = Math.max(init - rest, 0);
   animateNumber($('#bossInit'), init);
   animateNumber($('#bossDmg'), dmg);
   animateNumber($('#bossRest'), rest);
@@ -4026,8 +4023,8 @@ function renderBoss(animate) {
 
   const sel = $('#abonoDebt');
   const optsCore = S.debts
-    .filter(d => d.initial + compradoEn(d.name) - d.abonado > 0)
-    .map(d => `<option value="${d.id}">${d.name} (${fmt(d.initial + compradoEn(d.name) - d.abonado)})</option>`).join('');
+    .filter(d => saldoDeudaConCompras(d) > 0)
+    .map(d => `<option value="${d.id}">${d.name} (${fmt(saldoDeudaConCompras(d))})</option>`).join('');
   const optsExtra = (S.extra_debts || [])
     .filter(d => (d.total - (d.abonado || 0)) > 0)
     .map(d => `<option value="x:${d.id}">${d.name} (${fmt(d.total - (d.abonado || 0))})</option>`).join('');
@@ -4053,10 +4050,10 @@ function renderBoss(animate) {
         <small>${ab > 0 ? fmt(ab) + ' de daño · ' : ''}${cuotaTxt}${dueTxt}</small></div>`;
     }).join('');
   const coreBars = S.debts
-    .filter(d => (d.initial + compradoEn(d.name) - d.abonado) > 0)   // las derrotadas desaparecen
+    .filter(d => saldoDeudaConCompras(d) > 0)   // las derrotadas desaparecen
     .map(d => {
       const tot = d.initial + compradoEn(d.name);
-      const r = tot - d.abonado;
+      const r = saldoDeudaConCompras(d);
       const w = tot ? (r / tot) * 100 : 0;
       const esTarjeta = TARJETAS_CREDITO.includes(d.name);
       // las tarjetas/créditos se editan abajo (rediferir); los préstamos sí se editan/borran aquí
@@ -4074,7 +4071,7 @@ function renderBoss(animate) {
         <small>${fmt(d.abonado)} de daño causado${esTarjeta ? ' · edit below ↓' : ''}</small></div>`;
     }).join('');
   // contar derrotadas (para mostrar el logro sin saturar la lista)
-  const muertasCore = S.debts.filter(d => (d.initial + compradoEn(d.name) - d.abonado) <= 0).length;
+  const muertasCore = S.debts.filter(d => saldoDeudaConCompras(d) <= 0).length;
   const muertasExtra = (S.extra_debts || []).filter(d => (d.total - (d.abonado || 0)) <= 0).length;
   const totalMuertas = muertasCore + muertasExtra;
   const trofeo = totalMuertas > 0
@@ -4090,10 +4087,11 @@ function renderBoss(animate) {
     .map((m, ix) => `<option value="${ix}">1st installment: ${m}</option>`).join('');
   $('#ndStart').innerHTML = '<option value="0">1st installment: starting month</option>' + S.plan.months
     .map((m, ix) => `<option value="${ix}">1st installment: ${m}</option>`).join('');
-  $('#compraList').innerHTML = S.compras.map(c =>
+  const comprasPendientes = (S.compras || []).filter(c => (c.valor || 0) - (c.abonado || 0) > 0);
+  $('#compraList').innerHTML = comprasPendientes.map(c =>
     `<li><span>${c.creditor} · ${c.concepto} · ${c.cuotas} x ${fmt(cuotaDe(c))} desde ${S.plan.months[c.start]}</span>
-     <span>${fmt(c.valor)} <button class="del-x" data-type="compra" data-id="${c.id}">✕</button></span></li>`
-  ).join('') || '<li>No new installment purchases. Keep it that way. 🙏</li>';
+     <span>${fmt(Math.max((c.valor || 0) - (c.abonado || 0), 0))} <button class="del-x" data-type="compra" data-id="${c.id}">✕</button></span></li>`
+  ).join('') || '<li>No pending installment purchases. Keep it that way. 🙏</li>';
 
   renderDesglose();
   renderMyCards();
@@ -5699,7 +5697,7 @@ function pirateMetrics() {
   const gymDays=new Set((S.gym_sets||[]).map(x=>x.date).filter(Boolean)).size;
   const books=(S.books||[]).filter(b=>b.status==='Terminado').length;
   const englishDays=typeof diasInglesHechos==='function'?diasInglesHechos():0;
-  const debts=(S.debts||[]).filter(d=>(Number(d.initial||0)+compradoEn(d.name)-Number(d.abonado||0))<=0).length;
+  const debts=(S.debts||[]).filter(d=>saldoDeudaConCompras(d)<=0).length;
   let academyDomains=0; try { const st=academyReadState(), map=new Map(academyAllSkills().map(x=>[x.id,x.domain.key])); academyDomains=new Set((st.mastered||[]).map(id=>map.get(id)).filter(Boolean)).size; } catch(_) {}
   const domains=[conqueredMonths>=1,gymDays>=7,courses>=1||books>=3,englishDays>=21,goals>=1,debts>=1,academyDomains>=2].filter(Boolean).length;
   return {conqueredMonths,maxStreak,achievements,goals,courses,gymDays,books,englishDays,debts,academyDomains,domains,haki:hakiLevelFor(conqueredMonths).key};
@@ -5802,8 +5800,9 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 15. El botón PROJECT CONTINUITY PROTOCOL debe actualizarse en cada nueva versión para conservar las decisiones, arquitectura, reglas y módulos añadidos. Nunca entregues una actualización dejando este prompt desactualizado.
 16. V170 Daily Activity Control: las actividades predeterminadas de Life conservan claves internas estables pero pueden renombrarse, cambiar hábitos vinculados o eliminarse permanentemente desde la UI. Water + gratitude marca God and Spirituality + Be organized; Gratitude nocturna marca God and Spirituality; Hunter Rest marca Sleep well; Room reset sustituye Abs + jump rope y marca Be organized. Las actividades personalizadas también pueden editar nombre, hora, nota y hábito sin recrearlas.
 17. V170 Shopping hotfix: /api/shopping/complete debe autorreparar esquemas antiguos o parcialmente migrados antes de registrar una compra. Shopping debe seguir enlazando de forma atómica gasto, tarjeta/cuotas y sus IDs de reversión, sin impedir registrar valores por columnas faltantes en bases existentes.
+18. V171 Credit Card Balance Sync: My credit cards debe calcular cupo disponible con TODA compra pendiente de la tarjeta. Los servicios recurrentes pagados con tarjeta generan exactamente un cargo real por mes (sin duplicados), los checks mensuales distribuyen el pago entre compras y deuda base, desmarcar revierte esa distribución, y Davivienda suma compras nuevas a su saldo refinanciado especial. Comprar baja cupo; pagar lo libera.
 
-ESTADO ACTUAL DEL PROYECTO - V169 SMART SHOPPING PAYMENT FLOW:
+ESTADO ACTUAL DEL PROYECTO - V171 CREDIT CARD BALANCE SYNC:
 - Life administra vida, hábitos, rutina, turnos, metas y sistemas personales existentes. No traslades módulos de Life a Work.
 - Hunter Skill Academy es un gimnasio mental libre para aprender temas y evitar perder tiempo. No debe aumentar automáticamente carreras, proyectos ni habilidades profesionales.
 - Work Mode es una pantalla independiente abierta desde Life, similar a Hunter Profile. Contiene entrenamiento profesional sin saturar ni reemplazar la aplicación principal.
@@ -5850,7 +5849,7 @@ function renderHunterProfile() {
   const finished=(S.courses_done||[]).length;
   const pending=(S.courses_done||[]).filter(c=>!courseSkillNames(c.id).length);
   const books=(S.books||[]).filter(b=>b.status==='Terminado').length;
-  const defeated=(S.debts||[]).filter(d=>(Number(d.initial||0)+compradoEn(d.name)-Number(d.abonado||0))<=0).length;
+  const defeated=(S.debts||[]).filter(d=>saldoDeudaConCompras(d)<=0).length;
   const featured=(S.achievement_unlocks||[]).slice(0,4);
   const pirate=piratePositionState(), pirateRecords=pirateArchiveRecords();
   host.innerHTML=`<div class="hunter-profile-hero"><div><span>HUNTER ASSOCIATION · PRIVATE FILE</span><h1>KEVIN · HUNTER PROFILE</h1><p>A private record of the person your daily systems are building.</p></div><div class="hunter-profile-rank rank-${rank.current.rank}"><small>GLOBAL RANK</small><b>${rank.current.rank}</b><span>${esc(rank.current.title)}</span></div></div>
