@@ -248,7 +248,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 171;
+const FRONT_V = 172;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -2686,12 +2686,29 @@ function diasHastaDia(diaObjetivo) {
   }
   return Math.round((objetivo - hoy) / 86400000);
 }
+// Mes calendario actual en el mismo formato usado por payment_checks (AAAA-MM).
+function currentPaymentMonthKey() {
+  const hoy = new Date();
+  return `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+}
+// V172: un servicio solo es realmente pendiente si requiere pago manual y
+// todavía NO fue marcado en el Monthly payment checklist del mes actual.
+function servicePendingThisMonth(service, monthKeyValue = currentPaymentMonthKey()) {
+  if (!service) return false;
+  if (service.method === 'Fondo') return false;
+  const method = payMethod(service.method);
+  if (method.card) return false; // ya queda cubierto por la deuda real de la tarjeta
+  const checks = new Set(S.checks || []);
+  return !checks.has(`${service.name}|${monthKeyValue}`);
+}
 // Aviso de pagos próximos al abrir la app
 function avisarPagosProximos() {
   const VENTANA = 5;   // avisar de pagos en los próximos 5 días
   const proximos = [];
-  // servicios con día de pago
+  const currentMonth = currentPaymentMonthKey();
+  // servicios con día de pago que siguen pendientes ESTE mes
   for (const s of (S.servicios || [])) {
+    if (!servicePendingThisMonth(s, currentMonth)) continue;
     const dia = diaDePayday(s.payday);
     if (dia == null) continue;
     const faltan = diasHastaDia(dia);
@@ -5801,8 +5818,9 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 16. V170 Daily Activity Control: las actividades predeterminadas de Life conservan claves internas estables pero pueden renombrarse, cambiar hábitos vinculados o eliminarse permanentemente desde la UI. Water + gratitude marca God and Spirituality + Be organized; Gratitude nocturna marca God and Spirituality; Hunter Rest marca Sleep well; Room reset sustituye Abs + jump rope y marca Be organized. Las actividades personalizadas también pueden editar nombre, hora, nota y hábito sin recrearlas.
 17. V170 Shopping hotfix: /api/shopping/complete debe autorreparar esquemas antiguos o parcialmente migrados antes de registrar una compra. Shopping debe seguir enlazando de forma atómica gasto, tarjeta/cuotas y sus IDs de reversión, sin impedir registrar valores por columnas faltantes en bases existentes.
 18. V171 Credit Card Balance Sync: My credit cards debe calcular cupo disponible con TODA compra pendiente de la tarjeta. Los servicios recurrentes pagados con tarjeta generan exactamente un cargo real por mes (sin duplicados), los checks mensuales distribuyen el pago entre compras y deuda base, desmarcar revierte esa distribución, y Davivienda suma compras nuevas a su saldo refinanciado especial. Comprar baja cupo; pagar lo libera.
+19. V172 Smart Payment Reminders: el aviso de pagos próximos debe mostrar únicamente obligaciones realmente pendientes del mes actual. Un servicio marcado como pagado en Monthly payment checklist desaparece inmediatamente del aviso y no vuelve hasta el siguiente ciclo mensual. Servicios cubiertos automáticamente por tarjeta o Fondo no se anuncian como pagos manuales pendientes. La ventana de recordatorio permanece en 5 días.
 
-ESTADO ACTUAL DEL PROYECTO - V171 CREDIT CARD BALANCE SYNC:
+ESTADO ACTUAL DEL PROYECTO - V172 SMART PAYMENT REMINDERS:
 - Life administra vida, hábitos, rutina, turnos, metas y sistemas personales existentes. No traslades módulos de Life a Work.
 - Hunter Skill Academy es un gimnasio mental libre para aprender temas y evitar perder tiempo. No debe aumentar automáticamente carreras, proyectos ni habilidades profesionales.
 - Work Mode es una pantalla independiente abierta desde Life, similar a Hunter Profile. Contiene entrenamiento profesional sin saturar ni reemplazar la aplicación principal.
