@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 170  # V170 Daily Activity Control: editable system activities + habit links
+VERSION = 171  # V171 Credit Card Balance Sync: unified card charges, payments and available limit
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -595,7 +595,8 @@ def init_db():
         month TEXT PRIMARY KEY, income INTEGER);
     CREATE TABLE IF NOT EXISTS services (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, amount INTEGER,
-        method TEXT DEFAULT 'Efectivo', payday TEXT DEFAULT '');
+        method TEXT DEFAULT 'Efectivo', payday TEXT DEFAULT '',
+        card_charge_from TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS fund (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, quota INTEGER DEFAULT 0,
         frequency TEXT DEFAULT 'Monthly', last_deposit TEXT DEFAULT '',
@@ -652,7 +653,15 @@ def init_db():
         PRIMARY KEY (course_id, skill_id));
     CREATE TABLE IF NOT EXISTS compras (
         id INTEGER PRIMARY KEY AUTOINCREMENT, creditor TEXT, concepto TEXT,
-        valor INTEGER, cuotas INTEGER, start INTEGER, abonado INTEGER DEFAULT 0);
+        valor INTEGER, cuotas INTEGER, start INTEGER, abonado INTEGER DEFAULT 0,
+        source_type TEXT DEFAULT '', source_id INTEGER DEFAULT NULL, source_month TEXT DEFAULT '');
+    CREATE TABLE IF NOT EXISTS service_card_charges (
+        service_id INTEGER NOT NULL, month_key TEXT NOT NULL, compra_id INTEGER NOT NULL,
+        amount INTEGER DEFAULT 0, method TEXT DEFAULT '', created TEXT DEFAULT '',
+        PRIMARY KEY (service_id, month_key));
+    CREATE TABLE IF NOT EXISTS card_payment_allocations (
+        item TEXT NOT NULL, due_month TEXT NOT NULL, compra_id INTEGER NOT NULL,
+        amount INTEGER DEFAULT 0, PRIMARY KEY (item, due_month, compra_id));
     ''')
     # V117: fecha de finalización para retirar hitos completados después de 24 horas.
     try:
@@ -1280,6 +1289,31 @@ def init_db():
                     pass
         con.execute("INSERT OR IGNORE INTO config VALUES ('shopping_finance_schema_repair_v170','1')")
         con.commit()
+    # V171: unify recurring card charges and monthly card payment allocations.
+    if not con.execute("SELECT 1 FROM config WHERE key='card_balance_sync_v171'").fetchone():
+        for table, col, decl in (
+            ('services', 'card_charge_from', "TEXT DEFAULT ''"),
+            ('compras', 'source_type', "TEXT DEFAULT ''"),
+            ('compras', 'source_id', 'INTEGER DEFAULT NULL'),
+            ('compras', 'source_month', "TEXT DEFAULT ''")):
+            try:
+                con.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+                con.commit()
+            except Exception:
+                try: con.rollback()
+                except Exception: pass
+        con.execute('''CREATE TABLE IF NOT EXISTS service_card_charges (
+            service_id INTEGER NOT NULL, month_key TEXT NOT NULL, compra_id INTEGER NOT NULL,
+            amount INTEGER DEFAULT 0, method TEXT DEFAULT '', created TEXT DEFAULT '',
+            PRIMARY KEY (service_id, month_key))''')
+        con.execute('''CREATE TABLE IF NOT EXISTS card_payment_allocations (
+            item TEXT NOT NULL, due_month TEXT NOT NULL, compra_id INTEGER NOT NULL,
+            amount INTEGER DEFAULT 0, PRIMARY KEY (item, due_month, compra_id))''')
+        # Existing recurring card services begin tracking from the upgrade month, never retroactively.
+        current_key = date.today().strftime('%Y-%m')
+        con.execute("UPDATE services SET card_charge_from=? WHERE COALESCE(card_charge_from,'')=''", (current_key,))
+        con.execute("INSERT OR IGNORE INTO config VALUES ('card_balance_sync_v171','1')")
+        con.commit()
     if not con.execute("SELECT 1 FROM config WHERE key='routine_scheduled_v1'").fetchone():
         try:
             con.execute("ALTER TABLE routine_extra ADD COLUMN scheduled INTEGER DEFAULT 0")
@@ -1780,6 +1814,11 @@ def state():
     month = request.args.get('month', date.today().strftime('%Y-%m'))
     plan = json.loads(d.execute(
         "SELECT value FROM config WHERE key='plan'").fetchone()['value'])
+    # V171: recurring services paid by credit card become one real card charge per
+    # current month, and legacy monthly card checks are reconciled before balances
+    # are read so My credit cards / Debt Boss / checklist use the same source.
+    _materialize_current_service_card_charges(d)
+    _reconcile_legacy_card_checks_v171(d)
     debts = [dict(r) for r in d.execute(
         '''SELECT de.id, de.name, de.initial,
                   COALESCE(SUM(a.valor),0) AS abonado
@@ -2638,10 +2677,10 @@ def card_pay():
                 continue
             aplica = min(restante, saldo_c)
             nuevo = (c.get('abonado') or 0) + aplica
-            if nuevo >= (c['valor'] or 0):
-                con.execute('DELETE FROM compras WHERE id=?', (c['id'],))   # compra saldada
-            else:
-                con.execute('UPDATE compras SET abonado=? WHERE id=?', (nuevo, c['id']))
+            # V171 keeps settled purchases as financial history so monthly-check undo
+            # and recurring-service links can never point to a deleted purchase.
+            con.execute('UPDATE compras SET abonado=? WHERE id=?',
+                        (min(nuevo, c['valor'] or 0), c['id']))
             restante -= aplica
         # 2) lo que sobre baja la deuda base del jefe (registrada como abono)
         if restante > 0:
@@ -2792,12 +2831,16 @@ def check():
     if not item or not due_month:
         return jsonify(error='Payment item and due month are required'), 400
 
+    _ensure_card_balance_schema(db())
     with transaction() as con:
         cur = con.execute(
             'SELECT 1 FROM payment_checks WHERE item=? AND month=?',
             (item, due_month)
         ).fetchone()
         if cur:
+            # V171: undo restores both the base card payment and the purchase
+            # portions allocated by this monthly check.
+            _reverse_card_check_allocations(con, item, due_month)
             con.execute('DELETE FROM payment_checks WHERE item=? AND month=?', (item, due_month))
             if debt_id:
                 con.execute(
@@ -2818,10 +2861,15 @@ def check():
              int(extra_id) if extra_id else None)
         )
         if debt_id and valor > 0:
-            con.execute(
-                'INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
-                (int(debt_id), date.today().isoformat(), valor, f'check:{item}:{due_month}')
-            )
+            # Card payments first satisfy installment purchases included in this
+            # month's card row. Only the remainder reduces the legacy/base debt.
+            allocated = _allocate_card_check_payment(con, item, due_month, valor)
+            base_amount = max(valor - allocated, 0)
+            if base_amount > 0:
+                con.execute(
+                    'INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
+                    (int(debt_id), date.today().isoformat(), base_amount, f'check:{item}:{due_month}')
+                )
         if extra_id and valor > 0:
             con.execute(
                 'INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
@@ -3739,6 +3787,251 @@ SHOPPING_CARD_ROUTES = {
     'Tarjeta Nicole': ('Tarjeta Nicole', 'Tarjeta Nicole'),
 }
 SHOPPING_CASH_METHODS = {'Efectivo', 'Nequi'}
+CARD_PAYMENT_ITEMS = {
+    'Tarjeta DV': 'Tarjeta DV',
+    'Tarjeta DV — Jefe Final': 'Tarjeta DV',
+    'ADDI': 'ADDI',
+    'Codensa': 'Codensa',
+    'Banco de Bogotá': 'Banco de Bogotá',
+    'Tarjeta Nicole': 'Tarjeta Nicole',
+}
+
+
+def _ensure_card_balance_schema(con):
+    """V171: self-heal the columns/tables used by credit-card synchronization."""
+    for table, col, decl in (
+        ('services', 'card_charge_from', "TEXT DEFAULT ''"),
+        ('compras', 'source_type', "TEXT DEFAULT ''"),
+        ('compras', 'source_id', 'INTEGER DEFAULT NULL'),
+        ('compras', 'source_month', "TEXT DEFAULT ''")):
+        try:
+            con.execute(f'ALTER TABLE {table} ADD COLUMN {col} {decl}')
+            con.commit()
+        except Exception:
+            try: con.rollback()
+            except Exception: pass
+    con.execute('''CREATE TABLE IF NOT EXISTS service_card_charges (
+        service_id INTEGER NOT NULL, month_key TEXT NOT NULL, compra_id INTEGER NOT NULL,
+        amount INTEGER DEFAULT 0, method TEXT DEFAULT '', created TEXT DEFAULT '',
+        PRIMARY KEY (service_id, month_key))''')
+    con.execute('''CREATE TABLE IF NOT EXISTS card_payment_allocations (
+        item TEXT NOT NULL, due_month TEXT NOT NULL, compra_id INTEGER NOT NULL,
+        amount INTEGER DEFAULT 0, PRIMARY KEY (item, due_month, compra_id))''')
+    con.commit()
+
+
+def _plan_month_index(con, month_key):
+    """Translate YYYY-MM to the current 12-month plan index."""
+    try:
+        year_s, month_s = str(month_key).split('-', 1)
+        year, month_num = int(year_s), int(month_s)
+    except Exception:
+        return -1
+    if not (1 <= month_num <= 12):
+        return -1
+    names = ('enero','febrero','marzo','abril','mayo','junio',
+             'julio','agosto','septiembre','octubre','noviembre','diciembre')
+    row = con.execute("SELECT value FROM config WHERE key='plan'").fetchone()
+    if not row:
+        return -1
+    try:
+        plan = json.loads(dict(row)['value'])
+    except Exception:
+        return -1
+    needle_name, needle_year = names[month_num - 1], str(year)
+    for i, label in enumerate(plan.get('months') or []):
+        low = str(label or '').lower()
+        if needle_name in low and needle_year in low:
+            return i
+    return -1
+
+
+def _card_creditor_for_method(method):
+    route = SHOPPING_CARD_ROUTES.get(str(method or '').strip())
+    return route[0] if route else ''
+
+
+def _card_creditor_for_item(item):
+    return CARD_PAYMENT_ITEMS.get(str(item or '').strip(), '')
+
+
+def _purchase_due_for_month(purchase, month_index):
+    valor = int(purchase.get('valor') or 0)
+    cuotas = max(1, int(purchase.get('cuotas') or 1))
+    start = int(purchase.get('start') or 0)
+    cuota = round(valor / cuotas) if cuotas else 0
+    if cuota <= 0:
+        return 0
+    num = month_index - start + 1
+    if num < 1 or num > cuotas:
+        return 0
+    abonado = max(0, int(purchase.get('abonado') or 0))
+    cubiertas = abonado // cuota
+    if num <= cubiertas:
+        return 0
+    if num == cubiertas + 1:
+        parcial = abonado - cubiertas * cuota
+        return max(min(cuota - parcial, valor - abonado), 0)
+    return max(min(cuota, valor - abonado), 0)
+
+
+def _sync_service_card_charge(con, service, month_key):
+    """Create exactly one recurring service charge on its credit card for month_key."""
+    service = dict(service)
+    creditor = _card_creditor_for_method(service.get('method'))
+    amount = max(0, int(service.get('amount') or 0))
+    if not creditor or amount <= 0:
+        return None
+    start_key = str(service.get('card_charge_from') or '').strip()
+    if start_key and str(month_key) < start_key:
+        return None
+    idx = _plan_month_index(con, month_key)
+    if idx < 0:
+        return None
+    link = con.execute(
+        'SELECT * FROM service_card_charges WHERE service_id=? AND month_key=?',
+        (service['id'], month_key)).fetchone()
+    if link:
+        link = dict(link)
+        purchase = con.execute('SELECT * FROM compras WHERE id=?', (link['compra_id'],)).fetchone()
+        if purchase:
+            purchase = dict(purchase)
+            # Keep historical/partially-paid charges immutable. An unpaid current charge follows edits.
+            if int(purchase.get('abonado') or 0) == 0:
+                con.execute('''UPDATE compras SET creditor=?, concepto=?, valor=?, cuotas=1, start=?,
+                               source_type='service', source_id=?, source_month=? WHERE id=?''',
+                            (creditor, str(service.get('name') or 'Service'), amount, idx,
+                             service['id'], month_key, purchase['id']))
+                con.execute('UPDATE service_card_charges SET amount=?, method=? WHERE service_id=? AND month_key=?',
+                            (amount, service.get('method') or '', service['id'], month_key))
+        return link.get('compra_id')
+    con.execute('''INSERT INTO compras
+        (creditor, concepto, valor, cuotas, start, abonado, source_type, source_id, source_month)
+        VALUES (?,?,?,?,?,0,'service',?,?)''',
+        (creditor, str(service.get('name') or 'Service'), amount, 1, idx, service['id'], month_key))
+    row = con.execute(
+        "SELECT id FROM compras WHERE source_type='service' AND source_id=? AND source_month=? ORDER BY id DESC LIMIT 1",
+        (service['id'], month_key)).fetchone()
+    compra_id = dict(row)['id'] if row else None
+    if compra_id is not None:
+        con.execute('''INSERT INTO service_card_charges
+            (service_id, month_key, compra_id, amount, method, created) VALUES (?,?,?,?,?,?)''',
+            (service['id'], month_key, compra_id, amount, service.get('method') or '', date.today().isoformat()))
+    return compra_id
+
+
+def _remove_unpaid_service_card_charge(con, service_id, month_key):
+    link = con.execute('SELECT * FROM service_card_charges WHERE service_id=? AND month_key=?',
+                       (service_id, month_key)).fetchone()
+    if not link:
+        return False
+    link = dict(link)
+    purchase = con.execute('SELECT * FROM compras WHERE id=?', (link['compra_id'],)).fetchone()
+    if purchase and int(dict(purchase).get('abonado') or 0) > 0:
+        return False
+    # Do not remove a purchase that already has a monthly check allocation.
+    alloc = con.execute('SELECT 1 FROM card_payment_allocations WHERE compra_id=? LIMIT 1',
+                        (link['compra_id'],)).fetchone()
+    if alloc:
+        return False
+    con.execute('DELETE FROM compras WHERE id=?', (link['compra_id'],))
+    con.execute('DELETE FROM service_card_charges WHERE service_id=? AND month_key=?',
+                (service_id, month_key))
+    return True
+
+
+def _materialize_current_service_card_charges(con):
+    _ensure_card_balance_schema(con)
+    current_key = date.today().strftime('%Y-%m')
+    if _plan_month_index(con, current_key) < 0:
+        return 0
+    made = 0
+    for row in con.execute('SELECT * FROM services ORDER BY id').fetchall():
+        service = dict(row)
+        if not str(service.get('card_charge_from') or '').strip():
+            con.execute('UPDATE services SET card_charge_from=? WHERE id=?', (current_key, service['id']))
+            service['card_charge_from'] = current_key
+        before = con.execute('SELECT 1 FROM service_card_charges WHERE service_id=? AND month_key=?',
+                             (service['id'], current_key)).fetchone()
+        cid = _sync_service_card_charge(con, service, current_key)
+        if cid and not before:
+            made += 1
+    con.commit()
+    return made
+
+
+def _allocate_card_check_payment(con, item, due_month, amount):
+    """Apply the purchase portion of a monthly card payment to card purchases first."""
+    creditor = _card_creditor_for_item(item)
+    amount = max(0, int(amount or 0))
+    idx = _plan_month_index(con, due_month)
+    if not creditor or amount <= 0 or idx < 0:
+        return 0
+    already = con.execute('SELECT COALESCE(SUM(amount),0) AS s FROM card_payment_allocations WHERE item=? AND due_month=?',
+                          (item, due_month)).fetchone()
+    if already and int(dict(already).get('s') or 0) > 0:
+        return int(dict(already).get('s') or 0)
+    remaining = amount
+    allocated = 0
+    purchases = [dict(r) for r in con.execute(
+        'SELECT * FROM compras WHERE creditor=? ORDER BY start, id', (creditor,)).fetchall()]
+    for purchase in purchases:
+        if remaining <= 0:
+            break
+        due = _purchase_due_for_month(purchase, idx)
+        if due <= 0:
+            continue
+        apply = min(remaining, due, max((purchase.get('valor') or 0) - (purchase.get('abonado') or 0), 0))
+        if apply <= 0:
+            continue
+        con.execute('UPDATE compras SET abonado=? WHERE id=?',
+                    (int(purchase.get('abonado') or 0) + apply, purchase['id']))
+        con.execute('INSERT INTO card_payment_allocations (item,due_month,compra_id,amount) VALUES (?,?,?,?)',
+                    (item, due_month, purchase['id'], apply))
+        allocated += apply
+        remaining -= apply
+    return allocated
+
+
+def _reverse_card_check_allocations(con, item, due_month):
+    rows = [dict(r) for r in con.execute(
+        'SELECT * FROM card_payment_allocations WHERE item=? AND due_month=?',
+        (item, due_month)).fetchall()]
+    for alloc in rows:
+        purchase = con.execute('SELECT * FROM compras WHERE id=?', (alloc['compra_id'],)).fetchone()
+        if purchase:
+            purchase = dict(purchase)
+            con.execute('UPDATE compras SET abonado=? WHERE id=?',
+                        (max(int(purchase.get('abonado') or 0) - int(alloc.get('amount') or 0), 0), purchase['id']))
+    con.execute('DELETE FROM card_payment_allocations WHERE item=? AND due_month=?', (item, due_month))
+    return sum(int(x.get('amount') or 0) for x in rows)
+
+
+def _reconcile_legacy_card_checks_v171(con):
+    """One-time repair for checks saved before V171 that paid base debt but not purchases."""
+    if con.execute("SELECT 1 FROM config WHERE key='card_payment_reconcile_v171'").fetchone():
+        return
+    _ensure_card_balance_schema(con)
+    for row in con.execute('SELECT * FROM payment_checks ORDER BY paid_date, item').fetchall():
+        chk = dict(row)
+        item = str(chk.get('item') or '')
+        valor = max(0, int(chk.get('valor') or 0))
+        debt_id = chk.get('debt_id')
+        if not debt_id or valor <= 0 or not _card_creditor_for_item(item):
+            continue
+        allocated = _allocate_card_check_payment(con, item, chk.get('month') or '', valor)
+        base_amount = max(valor - allocated, 0)
+        note = f"check:{item}:{chk.get('month') or ''}"
+        existing = con.execute('SELECT id FROM abonos WHERE debt_id=? AND nota=? ORDER BY id DESC LIMIT 1',
+                               (int(debt_id), note)).fetchone()
+        if existing:
+            eid = dict(existing)['id']
+            if base_amount > 0:
+                con.execute('UPDATE abonos SET valor=? WHERE id=?', (base_amount, eid))
+            else:
+                con.execute('DELETE FROM abonos WHERE id=?', (eid,))
+    con.execute("INSERT OR IGNORE INTO config VALUES ('card_payment_reconcile_v171','1')")
+    con.commit()
 
 
 def _ensure_shopping_finance_schema(con):
@@ -3978,24 +4271,67 @@ def fund_del(i):
 
 @app.post('/api/service/new')
 def service_new():
-    j = request.json
-    db().execute('INSERT INTO services (name, amount, method, payday) VALUES (?,?,?,?)',
-                 (j['name'].strip(), int(j.get('amount') or 0),
-                  j.get('method', 'Efectivo'), j.get('payday', '')))
-    db().commit()
+    j = request.json or {}
+    name = str(j.get('name') or '').strip()
+    if not name:
+        return jsonify(error='Service name is required'), 400
+    amount = max(0, int(j.get('amount') or 0))
+    method = str(j.get('method') or 'Efectivo').strip()
+    current_key = date.today().strftime('%Y-%m')
+    charge_from = current_key if _card_creditor_for_method(method) else ''
+    _ensure_card_balance_schema(db())
+    with transaction() as con:
+        con.execute('INSERT INTO services (name, amount, method, payday, card_charge_from) VALUES (?,?,?,?,?)',
+                    (name, amount, method, str(j.get('payday') or ''), charge_from))
+        row = con.execute('SELECT * FROM services ORDER BY id DESC LIMIT 1').fetchone()
+        if row and charge_from:
+            _sync_service_card_charge(con, dict(row), current_key)
     return jsonify(ok=True)
 
 
 @app.post('/api/service')
 def service_update():
-    return safe_field_update('services', ('name', 'amount', 'method', 'payday'),
-                              ('amount',), request.json or {})
+    j = request.json or {}
+    try:
+        sid = int(j.get('id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid service'), 400
+    field = str(j.get('field') or '')
+    if field not in ('name', 'amount', 'method', 'payday'):
+        return jsonify(error='Field not allowed'), 400
+    value = j.get('value')
+    if field == 'amount':
+        value = max(0, int(value or 0))
+    else:
+        value = str(value or '').strip()
+    current_key = date.today().strftime('%Y-%m')
+    _ensure_card_balance_schema(db())
+    with transaction() as con:
+        row = con.execute('SELECT * FROM services WHERE id=?', (sid,)).fetchone()
+        if not row:
+            return jsonify(error='Service not found'), 404
+        old = dict(row)
+        old_card = bool(_card_creditor_for_method(old.get('method')))
+        new_method = value if field == 'method' else old.get('method')
+        new_card = bool(_card_creditor_for_method(new_method))
+        if field == 'method' and old_card and str(new_method) != str(old.get('method')):
+            _remove_unpaid_service_card_charge(con, sid, current_key)
+        con.execute(f'UPDATE services SET {field}=? WHERE id=?', (value, sid))
+        if field == 'method' and new_card:
+            con.execute('UPDATE services SET card_charge_from=? WHERE id=?', (current_key, sid))
+        updated = con.execute('SELECT * FROM services WHERE id=?', (sid,)).fetchone()
+        if updated and new_card:
+            _sync_service_card_charge(con, dict(updated), current_key)
+    return jsonify(ok=True)
 
 
 @app.delete('/api/service/<int:i>')
 def service_del(i):
-    db().execute('DELETE FROM services WHERE id=?', (i,))
-    db().commit()
+    current_key = date.today().strftime('%Y-%m')
+    _ensure_card_balance_schema(db())
+    with transaction() as con:
+        _remove_unpaid_service_card_charge(con, i, current_key)
+        con.execute('DELETE FROM services WHERE id=?', (i,))
     return jsonify(ok=True)
 
 
@@ -4433,10 +4769,8 @@ def compra_abonar():
     cuotas_nuevas = 0
     if cuota > 0:
         cuotas_nuevas = (nuevo_abonado // cuota) - (yaAbonado // cuota)
-    if nuevo_abonado >= valor:
-        db().execute('DELETE FROM compras WHERE id=?', (cid,))   # pagada por completo
-    else:
-        db().execute('UPDATE compras SET abonado=? WHERE id=?', (nuevo_abonado, cid))
+    # V171 preserves settled purchases as traceable history instead of deleting them.
+    db().execute('UPDATE compras SET abonado=? WHERE id=?', (min(nuevo_abonado, valor), cid))
     # registrar el ataque en el HISTORIAL (debt_id=None: el boss ya lo cuenta vía 'abonado')
     db().execute('INSERT INTO abonos (debt_id, fecha, valor, nota) VALUES (?,?,?,?)',
                  (None, date.today().isoformat(), monto, f'compra:{cid}:{c["concepto"]}'))
