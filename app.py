@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 172  # V172 Smart Payment Reminders: only unpaid current-month obligations are notified
+VERSION = 174  # V174 Hunter Code: bilingual personal laws in Hunter Profile
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
