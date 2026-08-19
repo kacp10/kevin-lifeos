@@ -248,7 +248,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 172;
+const FRONT_V = 174;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -946,7 +946,7 @@ function languageTutorPrompt(wd, minutes = 25) {
   const phraseText = learning.phrases.length ? learning.phrases.map((x,i)=>`${i+1}. ${x.phrase}${x.example ? ` — ${x.example}` : ''}`).join('\n') : 'No useful phrases saved yet.';
   const wordText = learning.words.length ? learning.words.map((x,i)=>`${i+1}. ${x.word||x.correct}${x.wrong ? ` (previous error: ${x.wrong})` : ''}`).join('\n') : 'No priority words due today.';
   const previous = languageSessions().slice(-1)[0] || {};
-  return `You are my Language Hunter English tutor.\n\nTODAY\nDay: ${DIAS[wd]}\nMission: ${titulo}\nVerified level: ${verified}\nCurrent target: ${target}\nAvailable time: ${minutes} minutes\n\nSTUDY LESSON\nBook: ${cfg.book || 'Not specified'}\nBook level: ${cfg.level || 'Not specified'}\nUnit: ${cfg.unit || 'Not specified'}\nPages: ${cfg.pages || 'Not specified'}\nTopics: ${cfg.topic || 'Not specified'}\nGrammar focuses: ${cfg.grammar || 'Not specified'}\n\nMISSION STEPS\n${pasos.map((p,i)=>`${i+1}. ${p.s}: ${p.how}`).join('\n')}\n\nRECURRING ERRORS TO RETRAIN\n${errorText}\n\nUSEFUL PHRASES TO REUSE\n${phraseText}\n\nWORDS TO RETRAIN\n${wordText}\n\nPREVIOUS SESSION\nMain issue: ${previous.issue || 'No previous issue logged'}\nHomework: ${previous.homework || 'No pending homework'}\n\nRULES\nSpeak mainly in English. Ask one question at a time. Make me produce English before explaining. Correct the most important errors, ask me to retry the corrected form, deliberately reuse the saved phrases, and finish with the exact LANGUAGE HUNTER SESSION REPORT plus a compact APP LOG line.\n\nIn the report, include a section named NEW WORDS FOR WORD HUNTER. Add only isolated English words the learner did not know, could not recall, mistranslated or used incorrectly. Do not put full sentences there. Use one line per word in this exact format:\nword | Spanish meaning | one natural A2-B1 example\nIf there are no new isolated words, write: None.`;
+  return `You are my Language Hunter English tutor.\n\nTODAY\nDay: ${DIAS[wd]}\nMission: ${titulo}\nVerified level: ${verified}\nCurrent target: ${target}\nAvailable time: ${minutes} minutes\n\nSTUDY LESSON\nBook: ${cfg.book || 'Not specified'}\nBook level: ${cfg.level || 'Not specified'}\nUnit: ${cfg.unit || 'Not specified'}\nPages: ${cfg.pages || 'Not specified'}\nTopics: ${cfg.topic || 'Not specified'}\nGrammar focuses: ${cfg.grammar || 'Not specified'}\n\nMISSION STEPS\n${pasos.map((p,i)=>`${i+1}. ${p.s}: ${p.how}`).join('\n')}\n\nRECURRING ERRORS TO RETRAIN\n${errorText}\n\nUSEFUL PHRASES TO REUSE\n${phraseText}\n\nWORDS TO RETRAIN\n${wordText}\n\nPREVIOUS SESSION\nMain issue: ${previous.issue || 'No previous issue logged'}\nHomework: ${previous.homework || 'No pending homework'}\n\nRULES\nSpeak mainly in English. Ask one question at a time. Make me produce English before explaining. Correct the most important errors, ask me to retry the corrected form, deliberately reuse the saved phrases, and finish with the exact LANGUAGE HUNTER SESSION REPORT plus a compact APP LOG line.\n\nFor the final report, prefer these machine-readable section names: MAIN ISSUE, CORRECTIONS, USEFUL PHRASES, NEW WORDS FOR WORD HUNTER, HOMEWORK and APP LOG. Put each correction on its own line as wrong → correct. Under NEW WORDS FOR WORD HUNTER, add only isolated English words the learner did not know, could not recall, mistranslated or used incorrectly. Do not put full sentences there. Use one line per word in this exact format:\nword | Spanish meaning | one natural A2-B1 example\nIf a section has no items, write: None. The app accepts minor formatting variations, but keep these headings whenever possible.`;
 }
 
 function copyLanguageTutorPrompt(wd) {
@@ -976,58 +976,92 @@ async function persistLanguageSessions(rows) {
 
 function reportSection(text, heading, nextHeadings = []) {
   const normalized = String(text || '').replace(/\r/g, '');
-  const start = normalized.search(new RegExp(`^${heading.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\s*$`, 'mi'));
-  if (start < 0) return '';
-  const after = normalized.slice(start).replace(/^.*\n/, '');
+  const escRe = value => String(value || '').replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  // Accept both:
+  //   HEADING\nvalue
+  //   HEADING: value
+  // without forcing AI tutors to emit one exact punctuation style.
+  const headingRe = new RegExp(`^[ \t]*${escRe(heading)}[ \t]*(?::[ \t]*(.*))?$`, 'mi');
+  const match = headingRe.exec(normalized);
+  if (!match) return '';
+  const lineEnd = normalized.indexOf('\n', match.index);
+  const inline = String(match[1] || '').trim();
+  const afterStart = lineEnd < 0 ? normalized.length : lineEnd + 1;
+  const after = normalized.slice(afterStart);
   let end = after.length;
   for (const next of nextHeadings) {
-    const pos = after.search(new RegExp(`^${next.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\s*$`, 'mi'));
+    const pos = after.search(new RegExp(`^[ \t]*${escRe(next)}[ \t]*(?::[ \t]*.*)?$`, 'mi'));
     if (pos >= 0) end = Math.min(end, pos);
   }
-  return after.slice(0, end).trim();
+  const body = after.slice(0, end).trim();
+  return [inline, body].filter(Boolean).join('\n').trim();
 }
 
 function parseTutorReport(raw) {
   const text = String(raw || '').replace(/\r/g, '').trim();
-  const field = label => {
-    const m = text.match(new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\s*:\\s*(.*)$`, 'mi'));
-    return m ? m[1].trim() : '';
+  const escRe = value => String(value || '').replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const field = (...labels) => {
+    for (const label of labels.flat()) {
+      const m = text.match(new RegExp(`^[ \t]*${escRe(label)}[ \t]*:[ \t]*(.*)$`, 'mi'));
+      if (m && m[1].trim()) return m[1].trim();
+    }
+    return '';
   };
-  const mission = reportSection(text, 'MISSION RESULT', ['TOP CORRECTIONS']);
-  const correctionsRaw = reportSection(text, 'TOP CORRECTIONS', ['NEW USEFUL PHRASES']);
-  const phrasesRaw = reportSection(text, 'NEW USEFUL PHRASES', ['NEW WORDS FOR WORD HUNTER','PRONUNCIATION OR SHADOWING NOTE']);
-  const wordsRaw = reportSection(text, 'NEW WORDS FOR WORD HUNTER', ['PRONUNCIATION OR SHADOWING NOTE']);
-  const list = rawSection => rawSection.split('\n').map(x=>x.replace(/^\s*\d+[.)]\s*/, '').trim()).filter(Boolean);
-  const corrections = list(correctionsRaw).slice(0, 3).map(line => {
-    const parts = line.split(/\s*(?:→|->|=>)\s*/);
-    return { raw:line, wrong:(parts[0] || '').trim(), correct:(parts[1] || '').trim() };
-  });
-  const phrases = list(phrasesRaw).slice(0, 5);
-  const words = list(wordsRaw).filter(x=>!/^none$/i.test(x)).slice(0,10).map(line=>{
+  const section = (headings, nextHeadings=[]) => {
+    for (const heading of headings) {
+      const value = reportSection(text, heading, nextHeadings);
+      if (value) return value;
+    }
+    return '';
+  };
+  const stripListMarker = line => String(line || '')
+    .replace(/^\s*(?:[-*•]+|\d+[.)])\s*/, '')
+    .trim();
+  const list = rawSection => String(rawSection || '').split('\n').map(stripListMarker).filter(Boolean);
+
+  // New natural report format + legacy report format remain supported together.
+  const mission = section(['MISSION RESULT'], ['TOP CORRECTIONS','CORRECTIONS','NEW USEFUL PHRASES','USEFUL PHRASES']);
+  const correctionsRaw = section(['CORRECTIONS','TOP CORRECTIONS'], ['USEFUL PHRASES','NEW USEFUL PHRASES','NEW WORDS FOR WORD HUNTER','NEW WORDS','PRONUNCIATION OR SHADOWING NOTE','HOMEWORK','APP LOG']);
+  const phrasesRaw = section(['USEFUL PHRASES','NEW USEFUL PHRASES'], ['NEW WORDS FOR WORD HUNTER','NEW WORDS','PRONUNCIATION OR SHADOWING NOTE','HOMEWORK','APP LOG']);
+  const wordsRaw = section(['NEW WORDS FOR WORD HUNTER','NEW WORDS'], ['PRONUNCIATION OR SHADOWING NOTE','RECURRING ERROR TO REVIEW NEXT TIME','HOMEWORK','APP LOG']);
+  const mainIssueSection = section(['MAIN ISSUE'], ['CORRECTIONS','TOP CORRECTIONS','USEFUL PHRASES','NEW USEFUL PHRASES','NEW WORDS FOR WORD HUNTER','NEW WORDS','HOMEWORK','APP LOG']);
+
+  const corrections = list(correctionsRaw).slice(0, 12).map(line => {
+    let parts = line.split(/\s*(?:→|->|=>)\s*/);
+    if (parts.length < 2 && line.includes('|')) parts = line.split('|').map(x=>x.trim());
+    return { raw:line, wrong:(parts[0] || '').trim(), correct:(parts.slice(1).join('|') || '').trim() };
+  }).filter(x=>x.wrong && x.correct);
+  const phrases = list(phrasesRaw).filter(x=>!/^none[.!]?$/i.test(x)).slice(0, 12);
+  const words = list(wordsRaw).filter(x=>!/^none[.!]?$/i.test(x)).slice(0,20).map(line=>{
     const parts=line.split('|').map(x=>x.trim());
     const word=String(parts[0]||'').trim();
     return {word,meaning:String(parts[1]||'').trim(),example:String(parts.slice(2).join('|')||'').trim()};
   }).filter(x=>/^[A-Za-z][A-Za-z'-]*$/.test(x.word));
-  const difficultyMatch = mission.match(/Difficulty\s*:\s*(Easy|Appropriate|Hard)/i);
+
+  const difficultyRaw = field('Difficulty') || ((mission.match(/Difficulty\s*:\s*(Easy|Appropriate|Hard)/i)||[])[1] || '');
+  const difficultyMatch = String(difficultyRaw).match(/Easy|Appropriate|Hard/i);
   const weaknessMatch = mission.match(/Main weakness\s*:\s*(.*)/i);
+  const directIssue = field('Main issue');
+  const weakness = mainIssueSection || directIssue || (weaknessMatch ? weaknessMatch[1].trim() : '') || field('RECURRING ERROR TO REVIEW NEXT TIME');
+
   return {
     date: field('Date') || hoyLocal(),
     day: field('Day'),
-    level: field('Level'),
-    target: field('Target'),
+    level: field('Verified level','Level'),
+    target: field('Current target','Target'),
     bookUnit: field('Book / unit'),
-    topic: field('Topics') || field('Weekly topic'),
-    skill: field('Main skill trained'),
-    minutes: +(field('Minutes practiced').match(/\d+/) || [0])[0],
-    difficulty: difficultyMatch ? difficultyMatch[1][0].toUpperCase()+difficultyMatch[1].slice(1).toLowerCase() : 'Appropriate',
-    weakness: weaknessMatch ? weaknessMatch[1].trim() : field('RECURRING ERROR TO REVIEW NEXT TIME'),
+    topic: field('Topics','Weekly topic'),
+    skill: field('Main skill trained','Mission'),
+    minutes: +(String(field('Minutes practiced')).match(/\d+/) || [0])[0],
+    difficulty: difficultyMatch ? difficultyMatch[0][0].toUpperCase()+difficultyMatch[0].slice(1).toLowerCase() : 'Appropriate',
+    weakness,
     corrections,
     phrases,
     words,
-    pronunciation: reportSection(text, 'PRONUNCIATION OR SHADOWING NOTE', ['RECURRING ERROR TO REVIEW NEXT TIME']),
-    recurring: reportSection(text, 'RECURRING ERROR TO REVIEW NEXT TIME', ['HOMEWORK']),
-    homework: reportSection(text, 'HOMEWORK', ['APP LOG']),
-    log: reportSection(text, 'APP LOG', []),
+    pronunciation: section(['PRONUNCIATION OR SHADOWING NOTE'], ['RECURRING ERROR TO REVIEW NEXT TIME','HOMEWORK','APP LOG']),
+    recurring: section(['RECURRING ERROR TO REVIEW NEXT TIME'], ['HOMEWORK','APP LOG']),
+    homework: section(['HOMEWORK'], ['APP LOG']),
+    log: section(['APP LOG'], []),
     raw:text
   };
 }
@@ -5819,8 +5853,11 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 17. V170 Shopping hotfix: /api/shopping/complete debe autorreparar esquemas antiguos o parcialmente migrados antes de registrar una compra. Shopping debe seguir enlazando de forma atómica gasto, tarjeta/cuotas y sus IDs de reversión, sin impedir registrar valores por columnas faltantes en bases existentes.
 18. V171 Credit Card Balance Sync: My credit cards debe calcular cupo disponible con TODA compra pendiente de la tarjeta. Los servicios recurrentes pagados con tarjeta generan exactamente un cargo real por mes (sin duplicados), los checks mensuales distribuyen el pago entre compras y deuda base, desmarcar revierte esa distribución, y Davivienda suma compras nuevas a su saldo refinanciado especial. Comprar baja cupo; pagar lo libera.
 19. V172 Smart Payment Reminders: el aviso de pagos próximos debe mostrar únicamente obligaciones realmente pendientes del mes actual. Un servicio marcado como pagado en Monthly payment checklist desaparece inmediatamente del aviso y no vuelve hasta el siguiente ciclo mensual. Servicios cubiertos automáticamente por tarjeta o Fondo no se anuncian como pagos manuales pendientes. La ventana de recordatorio permanece en 5 días.
+20. V173 Language Hunter Flexible Import: el importador de LANGUAGE HUNTER SESSION REPORT debe aceptar tanto el formato legacy como reportes naturales con MAIN ISSUE, CORRECTIONS, USEFUL PHRASES, NEW WORDS FOR WORD HUNTER, HOMEWORK y APP LOG; encabezados con o sin dos puntos; correcciones separadas por →, ->, => o |; y bullets o numeración. Nunca debe perder Main issue o Corrections por diferencias triviales de formato.
+21. V174 Hunter Code: Hunter Profile incluye un botón desplegable HUNTER CODE · PERSONAL LAWS con 41 principios permanentes en español e inglés, agrupados por fe, dominio propio, familia/honor, carácter, relaciones, cuerpo/orden, propósito/trabajo y crecimiento. Son principios de referencia, no hábitos, checks, puntos ni progreso; no deben alterar Habits ni Routine.
 
-ESTADO ACTUAL DEL PROYECTO - V172 SMART PAYMENT REMINDERS:
+ESTADO ACTUAL DEL PROYECTO - V174 HUNTER CODE:
+- Hunter Profile ahora incluye Hunter Code como panel compacto y desplegable con 41 leyes personales bilingües; debe seguir siendo responsive y no convertirse en un sistema de puntos o checks.
 - Life administra vida, hábitos, rutina, turnos, metas y sistemas personales existentes. No traslades módulos de Life a Work.
 - Hunter Skill Academy es un gimnasio mental libre para aprender temas y evitar perder tiempo. No debe aumentar automáticamente carreras, proyectos ni habilidades profesionales.
 - Work Mode es una pantalla independiente abierta desde Life, similar a Hunter Profile. Contiene entrenamiento profesional sin saturar ni reemplazar la aplicación principal.
@@ -5858,6 +5895,83 @@ async function copyHunterProjectContinuityPrompt() {
     ta.remove();
   }
 }
+
+const HUNTER_CODE = [
+  {key:'faith', icon:'✦', title:'FAITH', subtitle:'Fe · Faith', laws:[
+    ['Mantener una relación consciente con Dios, agradecer y reconocer lo que tengo.','Maintain a conscious relationship with God, practice gratitude, and recognize what I have.'],
+    ['Orar todos los días y buscar dirección en Dios antes de actuar por impulso.','Pray every day and seek God\'s guidance before acting on impulse.']
+  ]},
+  {key:'self-mastery', icon:'◆', title:'SELF-MASTERY', subtitle:'Dominio propio · Self-mastery', laws:[
+    ['No fumar.','Do not smoke.'],
+    ['No permitir que los vicios controlen mi vida.','Never let addictions control my life.'],
+    ['Dominar la lujuria; no dejar que mis impulsos gobiernen mis decisiones.','Master lust; never let impulses control my decisions.'],
+    ['Jamás dejarme gobernar por la ira.','Never let anger rule me.'],
+    ['No abandonar mis responsabilidades por placer momentáneo.','Never abandon my responsibilities for temporary pleasure.'],
+    ['No tomar decisiones importantes dominado por ira, miedo, deseo o desesperación.','Do not make important decisions while ruled by anger, fear, desire, or desperation.'],
+    ['Ser disciplinado también cuando nadie me está observando.','Be disciplined even when nobody is watching.']
+  ]},
+  {key:'family', icon:'⚜', title:'FAMILY & HONOR', subtitle:'Familia y honor · Family & honor', laws:[
+    ['No hablar mal de mi familia.','Do not speak badly about my family.'],
+    ['Honrar a mi padre y a mi madre.','Honor my father and mother.'],
+    ['Ayudar a mi familia cuando esté en mis posibilidades, sin destruirme para hacerlo.','Help my family when I can, without destroying myself to do it.'],
+    ['Cumplir mi palabra. Si prometo algo, hacerlo.','Keep my word. If I promise something, do it.']
+  ]},
+  {key:'character', icon:'♜', title:'CHARACTER', subtitle:'Carácter · Character', laws:[
+    ['No mentir para escapar de las consecuencias de mis actos.','Do not lie to escape the consequences of my actions.'],
+    ['Aceptar mis errores y corregirlos.','Own my mistakes and correct them.'],
+    ['No huir de las conversaciones difíciles.','Do not run from difficult conversations.'],
+    ['Hablar con respeto incluso cuando estoy molesto.','Speak with respect even when I am angry.'],
+    ['No humillar a alguien para sentirme superior.','Never humiliate someone to feel superior.'],
+    ['Proteger mi paz sin volverme indiferente a los demás.','Protect my peace without becoming indifferent to others.'],
+    ['Defender mis límites y respetar los límites de los demás.','Defend my boundaries and respect the boundaries of others.'],
+    ['Perdonar cuando corresponda, pero aprender de lo ocurrido.','Forgive when appropriate, but learn from what happened.'],
+    ['No convertirme en aquello que alguna vez critiqué.','Do not become what I once criticized.'],
+    ['Construir una vida que no necesite esconder.','Build a life I do not need to hide.'],
+    ['Recordar que mi carácter vale más que mi apariencia, dinero o estatus.','Remember that my character matters more than my appearance, money, or status.']
+  ]},
+  {key:'relationships', icon:'◇', title:'RELATIONSHIPS', subtitle:'Relaciones · Relationships', laws:[
+    ['Tratar con respeto a las mujeres sin convertirlas en una fuente de validación.','Treat women with respect without making them a source of validation.'],
+    ['No perseguir a quien claramente no quiere estar conmigo.','Do not chase someone who clearly does not want to be with me.'],
+    ['No sacrificar mi dignidad por atención, amor o aprobación.','Do not sacrifice my dignity for attention, love, or approval.'],
+    ['Ser fiel cuando decida estar en una relación.','Be faithful when I choose to be in a relationship.'],
+    ['No jugar con los sentimientos de otra persona.','Do not play with another person\'s feelings.']
+  ]},
+  {key:'body-order', icon:'▣', title:'BODY & ORDER', subtitle:'Cuerpo y orden · Body & order', laws:[
+    ['Cuidar mi cuerpo: dormir, entrenar, alimentarme y mantenerme limpio.','Take care of my body: sleep, train, eat well, and stay clean.'],
+    ['Mantener mi espacio en orden.','Keep my space in order.'],
+    ['No desperdiciar horas de mi vida haciendo scroll sin propósito.','Do not waste hours of my life scrolling without purpose.']
+  ]},
+  {key:'purpose', icon:'⌁', title:'PURPOSE & WORK', subtitle:'Propósito y trabajo · Purpose & work', laws:[
+    ['No gastar dinero que sé que no puedo permitirme gastar.','Do not spend money I know I cannot afford to spend.'],
+    ['Pagar mis deudas y enfrentar mis responsabilidades.','Pay my debts and face my responsibilities.'],
+    ['Aprender algo constantemente y mantener mi mente afilada.','Keep learning and keep my mind sharp.'],
+    ['Hacer lo que debo hacer incluso cuando no tenga ganas.','Do what must be done even when I do not feel like it.'],
+    ['Buscar soluciones antes que excusas.','Look for solutions before excuses.']
+  ]},
+  {key:'growth', icon:'▲', title:'GROWTH', subtitle:'Crecimiento · Growth', laws:[
+    ['No compararme constantemente con la vida de los demás.','Do not constantly compare my life with others.'],
+    ['No usar mi pasado como excusa para seguir repitiendo los mismos errores.','Do not use my past as an excuse to repeat the same mistakes.'],
+    ['No rendirme por un mal día.','Never surrender because of one bad day.'],
+    ['Dejar cada año una versión de mí más fuerte, sabia y responsable que la anterior.','Become stronger, wiser, and more responsible each year.']
+  ]}
+];
+function hunterCodeLawCount(){return HUNTER_CODE.reduce((n,g)=>n+g.laws.length,0);}
+function hunterCodeMarkup(){
+  let n=0;
+  return HUNTER_CODE.map(group=>`<section class="hunter-code-group" data-hunter-code-group="${esc(group.key)}"><header><span class="hunter-code-icon">${group.icon}</span><div><b>${esc(group.title)}</b><small>${esc(group.subtitle)}</small></div></header><div class="hunter-code-laws">${group.laws.map(([es,en])=>{n+=1;return `<article class="hunter-code-law"><span>${String(n).padStart(2,'0')}</span><div><p>${esc(es)}</p><small>${esc(en)}</small></div></article>`}).join('')}</div></section>`).join('');
+}
+function toggleHunterCode(force){
+  const panel=document.querySelector('[data-hunter-code-panel]');
+  const btn=document.querySelector('[data-toggle-hunter-code]');
+  if(!panel||!btn)return;
+  const open=typeof force==='boolean'?force:panel.hidden;
+  panel.hidden=!open;
+  btn.setAttribute('aria-expanded',open?'true':'false');
+  const label=btn.querySelector('b'); if(label)label.textContent=open?'Close code':'Open code';
+  const hint=btn.querySelector('small'); if(hint)hint.textContent=open?'Return to the profile':'Spanish + English · permanent principles';
+  if(open) requestAnimationFrame(()=>panel.scrollIntoView({behavior:'smooth',block:'nearest'}));
+}
+
 function renderHunterProfile() {
   const host=document.getElementById('hunterProfileContent'); if(!host)return;
   const rank=hunterGlobalRankState(), license=hunterLicenseState(), skills=hunterProfileSkillStats();
@@ -5886,6 +6000,10 @@ function renderHunterProfile() {
     <div id="hakiShowcase" class="haki-showcase" aria-live="polite"></div>
     <div class="hunter-profile-haki-history"><h3>Haki history · conquered months (≥70%)</h3><div id="hakiHistory" class="haki-history"></div><canvas id="hakiChart" height="150"></canvas></div>
   </section>
+  <section class="hunter-profile-section hunter-code-summary">
+    <div class="row-between hunter-code-summary-head"><div><span class="profile-kicker">HUNTER CODE · PERSONAL LAWS</span><h2>Character before comfort</h2><p>${hunterCodeLawCount()} principles chosen to protect faith, family, discipline, dignity and purpose.</p></div><button type="button" class="btn-ghost hunter-code-open" data-toggle-hunter-code aria-expanded="false"><span>⚔</span><b>Open code</b><small>Spanish + English · permanent principles</small></button></div>
+    <div class="hunter-code-panel" data-hunter-code-panel hidden><div class="hunter-code-intro"><span>HUNTER ASSOCIATION · PERSONAL CONSTITUTION</span><h3>Rules I do not negotiate with myself.</h3><p>These are principles, not habits or points. They exist to be remembered and respected.</p></div>${hunterCodeMarkup()}</div>
+  </section>
   <section class="hunter-project-continuity">
     <div><span class="profile-kicker">PROJECT CONTINUITY PROTOCOL</span><h2>Restore your AI programmer</h2><p>Attach your Kevin Life OS ZIP to a new AI chat and paste this master prompt so it understands the project, protects its logic and delivers files correctly.</p></div>
     <button type="button" data-copy-project-continuity><span>⌘</span><b>Copy master prompt</b><small>ZIP + prompt · ready for a new chat</small></button>
@@ -5895,7 +6013,7 @@ function renderHunterProfile() {
 }
 function openHunterProfile(){const screen=document.getElementById('hunterProfileScreen');if(!screen)return;if(!S){toast('Hunter Profile is still loading…','warn');return;}renderHunterProfile();screen.classList.add('open');screen.setAttribute('aria-hidden','false');document.body.classList.add('hunter-profile-open');window.scrollTo({top:0,behavior:'smooth'});}
 function closeHunterProfile(){const screen=document.getElementById('hunterProfileScreen');if(!screen)return;screen.classList.remove('open');screen.setAttribute('aria-hidden','true');document.body.classList.remove('hunter-profile-open');}
-document.addEventListener('click',e=>{if(e.target.closest('#openHunterProfile'))openHunterProfile();if(e.target.closest('#closeHunterProfile'))closeHunterProfile();if(e.target.closest('[data-open-pirate-route]'))pirateRouteModal();if(e.target.closest('[data-copy-project-continuity]'))copyHunterProjectContinuityPrompt();});
+document.addEventListener('click',e=>{if(e.target.closest('#openHunterProfile'))openHunterProfile();if(e.target.closest('#closeHunterProfile'))closeHunterProfile();if(e.target.closest('[data-open-pirate-route]'))pirateRouteModal();if(e.target.closest('[data-toggle-hunter-code]'))toggleHunterCode();if(e.target.closest('[data-copy-project-continuity]'))copyHunterProjectContinuityPrompt();});
 
 function hunterLicenseState() {
   const months = (S.history || []).filter(h => h.pct >= 0.7).length;
