@@ -88,7 +88,7 @@ const CRED_TO_GRUPO = { 'Joseph (cuota)': 'Joseph' };
 const mesInicioOpts = () => (S.plan.months || [])
   .map((m, ix) => ({ v: String(ix), t: ix === MES ? `${m} (this month)` : m }))
   .slice(MES, MES + 12);
-const cuotaDe = (c) => Math.round(c.valor / c.cuotas);
+const cuotaDe = (c) => Math.round(Math.max(c.valor - (c.refinance_baseline || 0), 0) / c.cuotas);
 const compraActiva = (c, i) => i >= c.start && i < c.start + c.cuotas;
 const extraCuota = (cred, i) => S.compras
   .filter(c => c.creditor === cred)
@@ -97,14 +97,15 @@ const extraCuota = (cred, i) => S.compras
     if (cuotaBase <= 0) return s;
     const num = i - c.start + 1;                       // qué cuota corresponde al mes i
     if (num < 1 || num > c.cuotas) return s;           // fuera del plan
-    const abonado = c.abonado || 0;
+    const abonado = Math.max((c.abonado || 0) - (c.refinance_baseline || 0), 0);
     const cubiertas = Math.floor(abonado / cuotaBase); // cuotas YA pagadas con abonos (las primeras)
     if (num <= cubiertas) return s;                    // esta cuota ya la pagaste -> no cobra este mes
+    const scheduled = Math.max((c.valor - (c.refinance_baseline || 0)) - cuotaBase * (num - 1), 0);
     if (num === cubiertas + 1) {                       // cuota parcialmente abonada -> cobra solo el resto
       const parcial = abonado - cubiertas * cuotaBase;
-      return s + Math.max(cuotaBase - parcial, 0);
+      return s + Math.max(Math.min(cuotaBase - parcial, scheduled), 0);
     }
-    return s + cuotaBase;
+    return s + Math.min(cuotaBase, scheduled);
   }, 0);
 const extraDebtCuota = (i) => (S.extra_debts || [])
   .filter(d => d.cuotas >= 1 && i >= d.start && i < d.start + d.cuotas)
@@ -156,13 +157,25 @@ function deudaDelMes(i) {
 // igual que el apartado "Full debt breakdown". Así Inicio y el desglose nunca se
 // desincronizan (antes Inicio usaba un número guardado que quedaba viejo al pagar/quitar cuotas).
 // Si el creditor no tiene desglose, usa el número del plan como respaldo.
+function detallePagosDesdeRefinanciacion(grupo, it) {
+  const offset = it[8] || 0;
+  const groupChecks = (S.checks || []).filter(k => k.startsWith(`${grupo}|`));
+  // A check for a month BEFORE the newly selected start cannot pay a new installment.
+  const beforeStart = it[7] != null && it[7] >= 0
+    ? groupChecks.filter(k => k.split('|')[1] < monthKey(it[7])).length : 0;
+  return Math.max(groupChecks.length - Math.max(offset, beforeStart), 0);
+}
 function cuotaPlanMes(creditorName, i) {
   if (creditorName === 'Tarjeta DV') return amortMontoMes(i);   // Davivienda: amortización real
   const grupo = CRED_TO_GRUPO[creditorName] || creditorName;
   const items = S.detalle && S.detalle[grupo];
-  if (!items || !items.length) return ((S.plan.creditors[creditorName] || [])[i]) || 0;
+  if (!items || !items.length) {
+    if (['Codensa', 'Banco de Bogotá', 'ADDI'].includes(creditorName)) return 0;
+    return ((S.plan.creditors[creditorName] || [])[i]) || 0;
+  }
   return items.reduce((s, it) => {
-    const ci = calcItem(it, i);
+    const ci = calcItem(it, i, ['Codensa', 'Banco de Bogotá', 'ADDI'].includes(creditorName)
+      ? { pagados: detallePagosDesdeRefinanciacion(grupo, it) } : {});
     return s + (ci.done ? 0 : (ci.cuota || 0));
   }, 0);
 }
@@ -248,7 +261,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 174;
+const FRONT_V = 175;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -3890,7 +3903,7 @@ function amortCuota(A) {   // cuota fija real del banco; si no está, la calcula
 function amortMontoMes(i) {
   const A = getAmortDav();
   const extras = (A.extras || []).reduce((s, e) => s + (i < (e.meses || 0) ? e.valor : 0), 0);
-  return amortCuota(A) + (A.seguro || 0) + extras;
+  return (i >= (A.start || 0) ? amortCuota(A) + (A.seguro || 0) : 0) + extras;
 }
 // Estado REAL del crédito: las cuotas pagadas se cuentan desde los checks de Inicio
 // (item "Tarjeta DV"), más los abonos extra a capital. Una sola fuente de verdad.
@@ -3898,7 +3911,7 @@ function amortState() {
   const A = getAmortDav();
   const r = Math.pow(1 + A.ea / 100, 1 / 12) - 1;
   const cuota = amortCuota(A);
-  const pagadas = (S.checks || []).filter(c => c.startsWith('Tarjeta DV|')).length;
+  const pagadas = Math.max((S.checks || []).filter(c => c.startsWith('Tarjeta DV|')).length - (A.paid_offset || 0), 0);
   let bal = A.capital, intPag = 0;
   for (let k = 0; k < pagadas && bal > 0; k++) { const it = bal * r; bal -= Math.min(cuota - it, bal); intPag += it; }
   bal = Math.max(bal - (A.abonosExtra || 0), 0);
@@ -3910,15 +3923,16 @@ function amortRowsMes(i) {
   const r = Math.pow(1 + A.ea / 100, 1 / 12) - 1;
   const cuota = amortCuota(A);
   let bal = A.capital;
-  for (let k = 0; k < i && bal > 0; k++) { const it = bal * r; bal -= Math.min(cuota - it, bal); }
+  for (let k = 0; k < Math.max(i - (A.start || 0), 0) && bal > 0; k++) { const it = bal * r; bal -= Math.min(cuota - it, bal); }
   const rows = [];
-  if (bal > 0) {
+  if (bal > 0 && i >= (A.start || 0)) {
     const interes = Math.round(bal * r), capital = Math.max(Math.min(cuota - interes, bal), 0);
-    rows.push({ label: `Crédito Davivienda · cuota ${i + 1}/${A.cuotas} (capital ${fmt(capital)} · interés ${fmt(interes)})`,
+    rows.push({ label: `Crédito Davivienda · cuota ${i - (A.start || 0) + 1}/${A.cuotas} (capital ${fmt(capital)} · interés ${fmt(interes)})`,
       cuota, saldo: Math.round(Math.max(bal - capital, 0)), done: false });
     if (A.seguro) rows.push({ label: 'Seguro + cuota de manejo (no baja deuda)', cuota: A.seguro, saldo: 0, done: false });
   }
   (A.extras || []).forEach(e => { if (i < (e.meses || 0)) rows.push({ label: `${e.name} · ${i + 1}/${e.meses}`, cuota: e.valor, saldo: 0, done: false }); });
+  if (!rows.length && bal > 0) rows.push({ label: `Crédito Davivienda · starts ${S.plan.months[A.start || 0]}`, cuota: 0, saldo: Math.round(bal), done: false });
   if (!rows.length) rows.push({ label: 'Crédito pagado 🎉', cuota: 0, saldo: 0, done: true });
   return rows;
 }
@@ -3930,9 +3944,10 @@ function renderAmortDav() {
   const saldo = st.saldoCapital;
   const interesMes = Math.round(saldo * r);
   const capitalMes = Math.max(Math.min(cuota - interesMes, saldo), 0);
-  const extrasMes = (A.extras || []).filter(e => st.pagadas < (e.meses || 0));
+  const extrasMes = (A.extras || []).filter(e => MES < (e.meses || 0));
   const sumaExtras = extrasMes.reduce((s, e) => s + e.valor, 0);
-  const totalMes = saldo > 0 ? cuota + A.seguro + sumaExtras : 0;
+  const startsNow = MES >= (A.start || 0);
+  const totalMes = saldo > 0 ? (startsNow ? cuota + A.seguro : 0) + sumaExtras : 0;
   // proyección de cuántas cuotas faltan e interés futuro con el saldo actual
   let b = saldo, meses = 0, intFut = 0, noAmortiza = false;
   while (b > 0 && meses < 1000) {
@@ -3950,10 +3965,10 @@ function renderAmortDav() {
     </div>
     ${pagado ? `<p class="amort-done">🎉 Capital fully paid — Davivienda defeated!</p>` : `
     <div class="amort-grid">
-      <div><label>You pay this month</label><b>${fmt(totalMes)}</b></div>
-      <div><label>↳ goes to your debt (capital)</label><b class="paid">${fmt(capitalMes)}</b></div>
-      <div><label>↳ interest (lost)</label><b class="owe">${fmt(interesMes)}</b></div>
-      <div><label>↳ insurance + handling</label><b>${fmt(A.seguro)}</b></div>
+      <div><label>${startsNow ? 'You pay this month' : `Installments start ${(S.plan.months || [])[A.start || 0] || 'later'}`}</label><b>${fmt(totalMes)}</b></div>
+      <div><label>↳ goes to your debt (capital)</label><b class="paid">${fmt(startsNow ? capitalMes : 0)}</b></div>
+      <div><label>↳ interest (lost)</label><b class="owe">${fmt(startsNow ? interesMes : 0)}</b></div>
+      <div><label>↳ insurance + handling</label><b>${fmt(startsNow ? A.seguro : 0)}</b></div>
       ${extrasMes.map(e => `<div><label>↳ ${esc(e.name)} (${e.meses - st.pagadas} left)</label><b>${fmt(e.valor)}</b></div>`).join('')}
     </div>
     <p class="amort-proj">${noAmortiza
@@ -4384,7 +4399,7 @@ function calcItem(it, i, opts = {}) {
   const sm = (startMonth != null && startMonth >= 0) ? startMonth : null;
   if (sm != null && i < sm) {
     return { label: `${nombre} · starts ${(S.plan && S.plan.months && S.plan.months[sm]) || 'later'}`, cuota: 0,
-             saldo: cuota * total, done: false,
+             saldo: Math.max(cuota * total - (abonadoFijo || 0), 0), done: false,
              redefer: detId ? { type: 'detalle', id: detId, cuotas: total } : null };
   }
   // ── CUÁNTAS CUOTAS YA "PASARON" ──
@@ -4448,7 +4463,7 @@ function renderDesglose() {
   for (const [g, items] of Object.entries(S.detalle)) {
     const esNomina = g.startsWith('Nómina') || g.startsWith('Nomina');
     const pagados = checksPagadosDeGrupo(g);
-    filas[g] = items.map(it => calcItem(it, i, { esNomina, pagados }));
+    filas[g] = items.map(it => calcItem(it, i, { esNomina, pagados: it[8] ? detallePagosDesdeRefinanciacion(g, it) : pagados }));
   }
   if (filas['Tarjeta DV']) filas['Tarjeta DV'] = amortRowsMes(i);   // Davivienda = amortización (avanza sola)
   const grupoRedefer = {};   // grupo -> {type, id/name} para el botón de rediferir
@@ -4494,13 +4509,13 @@ function renderDesglose() {
   for (const c of S.compras) {
     const g = CRED_TO_GRUPO[c.creditor] || c.creditor;
     const cuotaBase = cuotaDe(c);                              // cuota mensual original
-    const abonado = c.abonado || 0;
+    const abonado = Math.max((c.abonado || 0) - (c.refinance_baseline || 0), 0);
     const antesDeInicio = i < c.start;
     const num = i - c.start + 1;                              // qué cuota toca en el mes elegido
     const transcurridas = Math.min(Math.max(num - 1, 0), c.cuotas);
     // cuotas cubiertas por el ABONO (pagos que hiciste), aparte de las del mes
     const cuotasAbonadas = cuotaBase > 0 ? Math.floor(abonado / cuotaBase) : 0;
-    const saldo = Math.max(c.valor - abonado - cuotaBase * transcurridas, 0);
+    const saldo = Math.max(c.valor - (c.abonado || 0) - cuotaBase * transcurridas, 0);
     if (saldo <= 0) continue;                                 // saldado: no aparece
     const cuotasQuedan = cuotaBase > 0 ? Math.ceil(saldo / cuotaBase) : 0;
     const pagadasTotal = transcurridas + cuotasAbonadas;      // cuotas ya cubiertas en total
@@ -4549,9 +4564,11 @@ function renderDesglose() {
            <td class="num">${it.saldo ? fmt(it.saldo) : '—'}</td></tr>`;
       }).join('') +
       '</table>' +
-      (grupoRedefer[grupo] && grupoRedefer[grupo].type === 'creditor'
-        ? `<button class="btn-ghost redefer-btn" data-type="creditor" data-name="${grupoRedefer[grupo].name}" style="margin:8px 0">🔄 Reschedule the whole ${grupo}</button>`
-        : '') +
+      (['Tarjeta DV', 'Codensa', 'Banco de Bogotá', 'ADDI'].includes(grupo)
+        ? `<button class="btn-ghost redefer-btn" data-type="card_all" data-name="${grupo}" style="margin:8px 0">🔄 Reschedule all outstanding ${grupo}</button>`
+        : (grupoRedefer[grupo] && grupoRedefer[grupo].type === 'creditor'
+          ? `<button class="btn-ghost redefer-btn" data-type="creditor" data-name="${grupoRedefer[grupo].name}" style="margin:8px 0">🔄 Reschedule the whole ${grupo}</button>`
+          : '')) +
       '</details>';
   }).join('');
   html += `<div class="desglose-total"><span>TOTAL DEBT IN ${S.plan.months[i].toUpperCase()} (excl. payroll)</span>
@@ -5855,8 +5872,13 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 19. V172 Smart Payment Reminders: el aviso de pagos próximos debe mostrar únicamente obligaciones realmente pendientes del mes actual. Un servicio marcado como pagado en Monthly payment checklist desaparece inmediatamente del aviso y no vuelve hasta el siguiente ciclo mensual. Servicios cubiertos automáticamente por tarjeta o Fondo no se anuncian como pagos manuales pendientes. La ventana de recordatorio permanece en 5 días.
 20. V173 Language Hunter Flexible Import: el importador de LANGUAGE HUNTER SESSION REPORT debe aceptar tanto el formato legacy como reportes naturales con MAIN ISSUE, CORRECTIONS, USEFUL PHRASES, NEW WORDS FOR WORD HUNTER, HOMEWORK y APP LOG; encabezados con o sin dos puntos; correcciones separadas por →, ->, => o |; y bullets o numeración. Nunca debe perder Main issue o Corrections por diferencias triviales de formato.
 21. V174 Hunter Code: Hunter Profile incluye un botón desplegable HUNTER CODE · PERSONAL LAWS con 41 principios permanentes en español e inglés, agrupados por fe, dominio propio, familia/honor, carácter, relaciones, cuerpo/orden, propósito/trabajo y crecimiento. Son principios de referencia, no hábitos, checks, puntos ni progreso; no deben alterar Habits ni Routine.
+22. V175 Card Rescheduling and Debt Payment Sync: Davivienda, Codensa, Banco de Bogotá y ADDI pueden rediferir juntas todas sus cuotas vigentes desde un mes elegido por el usuario y conservar 🔄 individual de cada línea. Los pagos históricos y sus referencias de reversión se conservan; seguros/manejo permanecen fuera del capital. Eliminar una línea original de estas tarjetas retira también su saldo pendiente del jefe, sin inventar un pago. Home Debt payments toma el detalle real, nunca plan estático residual para estas tarjetas.
 
-ESTADO ACTUAL DEL PROYECTO - V174 HUNTER CODE:
+ESTADO ACTUAL DEL PROYECTO - V175 CARD RESCHEDULING AND DEBT PAYMENT SYNC:
+- V175 agrega refinanciación global de cuatro tarjetas y conserva refinanciación por compra/cuota, selección de mes, pagos, cuotas de manejo y seguro sin duplicaciones. Home depende del detalle vigente. Un saldo real de la tarjeta superior a las líneas identificadas se conserva como fila separada para contrastarlo con el extracto.
+- Reglas: no reconstruir pagos históricos; la refinanciación global es atómica y preserva allocations de V171. La refinanciación Davivienda continúa usando amortización separada con fecha y offset de checks.
+
+ESTADO HEREDADO - V174 HUNTER CODE:
 - Hunter Profile ahora incluye Hunter Code como panel compacto y desplegable con 41 leyes personales bilingües; debe seguir siendo responsive y no convertirse en un sistema de puntos o checks.
 - Life administra vida, hábitos, rutina, turnos, metas y sistemas personales existentes. No traslades módulos de Life a Work.
 - Hunter Skill Academy es un gimnasio mental libre para aprender temas y evitar perder tiempo. No debe aumentar automáticamente carreras, proyectos ni habilidades profesionales.
@@ -8051,6 +8073,27 @@ document.addEventListener('click', async (e) => {
   const btn = e.target.closest('.redefer-btn');
   if (!btn) return;
   const tipo = btn.dataset.type;
+  if (tipo === 'card_all') {
+    const creditor = btn.dataset.name;
+    const r = await modal({ icon: '🔄', title: `Reschedule all ${creditor}`,
+      text: 'Reschedule every outstanding installment on this card together. Individual 🔄 controls will remain available. Fixed charges (insurance/handling) stay separate. Existing recorded payments stay in history. If your old card balance exceeds its listed purchases, the unitemized difference is shown as a separate line to verify against your statement.',
+      fields: [
+        { type: 'number', placeholder: 'New installments (e.g. 12)', min: 1, max: 60 },
+        { type: 'select', value: String(MES), options: S.plan.months.map((m, ix) => ({ v: String(ix), t: 'Start: ' + m })) }
+      ], okText: 'Apply to all' });
+    if (!r) return;
+    const cuotas = Number(r[0]), start = Number(r[1]);
+    if (!Number.isInteger(cuotas) || cuotas < 1 || cuotas > 60) { toast('Choose 1-60 installments.', 'err'); return; }
+    const body = { creditor, cuotas, start };
+    if (creditor === 'Tarjeta DV') {
+      const st = amortState();
+      body.dav = { amort: st.A, saldo: st.saldoCapital };
+    }
+    const result = await api('/api/card/redefer-all', { body });
+    toast(`🔄 ${fmt(result.saldo)} rescheduled across ${cuotas} installments`);
+    load();
+    return;
+  }
   // calcular cuántas cuotas ya se pagaron, según el tipo
   let pagadas = 0, actualesTxt = '';
   if (tipo === 'compra') {
