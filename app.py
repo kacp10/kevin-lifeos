@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 175  # V175 Card Rescheduling and Debt Payment Sync
+VERSION = 176  # V176 Card Rescheduling Production Schema Hotfix
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -3803,12 +3803,17 @@ CARD_PAYMENT_ITEMS = {
 
 
 def _ensure_card_balance_schema(con):
-    """V171: self-heal the columns/tables used by credit-card synchronization."""
+    """V176: self-heal every column/table used by card balance and rescheduling.
+    This must remain independent from historical migration markers because production
+    databases may already have V171 recorded before newer columns existed.
+    """
     for table, col, decl in (
         ('services', 'card_charge_from', "TEXT DEFAULT ''"),
         ('compras', 'source_type', "TEXT DEFAULT ''"),
         ('compras', 'source_id', 'INTEGER DEFAULT NULL'),
-        ('compras', 'source_month', "TEXT DEFAULT ''")):
+        ('compras', 'source_month', "TEXT DEFAULT ''"),
+        ('compras', 'refinance_baseline', 'INTEGER DEFAULT 0'),
+        ('detalle_items', 'check_offset', 'INTEGER DEFAULT 0')):
         try:
             con.execute(f'ALTER TABLE {table} ADD COLUMN {col} {decl}')
             con.commit()
