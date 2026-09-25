@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 178  # V178 English Focus Integration
+VERSION = 179  # V179 Canonical Financial Alignment
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -314,6 +314,114 @@ def close_db(_=None):
     d = g.pop('db', None)
     if d is not None:
         d.close()
+
+
+CARD_FINANCE_MAP = {
+    'Tarjeta DV': 'Tarjeta DV — Jefe Final',
+    'ADDI': 'ADDI',
+    'Codensa': 'Codensa',
+    'Banco de Bogotá': 'Banco de Bogotá',
+    'Tarjeta Nicole': 'Tarjeta Nicole',
+}
+
+
+def _raw_detail_principal(item):
+    """Outstanding principal explicitly represented by one legacy detail line.
+
+    Monthly checks are deliberately NOT inferred here. A calendar/check can define
+    what is due, but only persisted money (`pagadas`/`abonado_fijo`, which are also
+    mirrored to the boss through `abonos` when paid individually) can reduce this
+    raw item balance. Group-level historical differences are surfaced separately by
+    the canonical snapshot instead of silently inventing allocations.
+    """
+    total = int(item.get('total') or 0)
+    cuota = int(item.get('cuota') or 0)
+    if total <= 0 or cuota <= 0:
+        return 0
+    pagadas = max(0, min(int(item.get('pagadas') or 0), total))
+    abonado = max(0, int(item.get('abonado_fijo') or 0))
+    return max(cuota * (total - pagadas) - abonado, 0)
+
+
+def _finance_card_snapshots(con):
+    """Canonical balances for the five credit cards.
+
+    Invariant for non-Davivienda cards:
+        card balance = remaining legacy/base principal + remaining purchases.
+
+    `debts + abonos` is the monetary source of truth for the legacy/base principal;
+    `compras.valor - compras.abonado` is the monetary source for new purchases.
+    The detail table remains the explanatory schedule. Any historical mismatch is
+    reported as `detail_reconciliation` and never mutates old data automatically.
+    """
+    out = {}
+    for creditor, boss in CARD_FINANCE_MAP.items():
+        d = con.execute('SELECT id, initial FROM debts WHERE name=?', (boss,)).fetchone()
+        if not d:
+            continue
+        d = dict(d)
+        paid_row = con.execute(
+            'SELECT COALESCE(SUM(valor),0) AS s FROM abonos WHERE debt_id=?',
+            (d['id'],)
+        ).fetchone()
+        base_paid = max(0, int(dict(paid_row).get('s') or 0))
+        initial = max(0, int(d.get('initial') or 0))
+        base_balance = max(initial - base_paid, 0)
+        purchases = [dict(r) for r in con.execute(
+            'SELECT valor, abonado FROM compras WHERE creditor=?', (creditor,)
+        ).fetchall()]
+        purchase_total = sum(max(0, int(c.get('valor') or 0)) for c in purchases)
+        purchase_paid = sum(min(max(0, int(c.get('abonado') or 0)), max(0, int(c.get('valor') or 0))) for c in purchases)
+        purchase_balance = sum(max(int(c.get('valor') or 0) - int(c.get('abonado') or 0), 0) for c in purchases)
+        detail_rows = [dict(r) for r in con.execute(
+            'SELECT * FROM detalle_items WHERE grupo=? ORDER BY orden,id', (creditor,)
+        ).fetchall()]
+        detail_principal = sum(_raw_detail_principal(x) for x in detail_rows)
+        out[creditor] = {
+            'creditor': creditor, 'boss': boss, 'initial': initial,
+            'base_paid': base_paid, 'base_balance': base_balance,
+            'purchase_total': purchase_total, 'purchase_paid': purchase_paid,
+            'purchase_balance': purchase_balance,
+            'balance': base_balance + purchase_balance,
+            'detail_principal': detail_principal,
+            'detail_reconciliation': base_balance - detail_principal,
+        }
+    return out
+
+
+def _dav_current_principal(con):
+    """Current refinanced Davivienda principal using the same rules as the browser.
+
+    Monthly checks advance amortization; explicit capital prepayments live in
+    amort_dav.abonosExtra. Insurance/handling never reduce principal.
+    """
+    row = con.execute("SELECT value FROM study_profile WHERE key='amort_dav'").fetchone()
+    if not row:
+        return 0, None
+    try:
+        A = json.loads(dict(row)['value'])
+        capital = max(0.0, float(A.get('capital') or 0))
+        ea = max(0.0, float(A.get('ea') or 0))
+        cuotas = max(1, int(A.get('cuotas') or 1))
+        cuota = float(A.get('cuota') or 0)
+        if cuota <= 0:
+            r = (1 + ea / 100.0) ** (1 / 12.0) - 1
+            cuota = capital * r / (1 - (1 + r) ** (-cuotas)) if r > 0 else capital / cuotas
+        r = (1 + ea / 100.0) ** (1 / 12.0) - 1
+        checks = con.execute("SELECT COUNT(*) AS n FROM payment_checks WHERE item='Tarjeta DV'").fetchone()
+        pagadas = max(int(dict(checks).get('n') or 0) - int(A.get('paid_offset') or 0), 0)
+        bal = capital
+        for _ in range(pagadas):
+            if bal <= 0:
+                break
+            interest = bal * r
+            principal = max(min(cuota - interest, bal), 0)
+            bal -= principal
+        bal = max(bal - float(A.get('abonosExtra') or 0), 0)
+        return int(round(bal)), A
+    except Exception:
+        logger.exception('Invalid amort_dav while calculating current principal')
+        return 0, None
 
 
 def _consolidar_v2(con):
@@ -1939,7 +2047,8 @@ def state():
     for ed in extra_debts:
         ed['abonado'] = (ed.get('abonado') or 0) + historicos_extra.get(ed['id'], 0)
     core = [x[0] for x in _SEED['debts']]
-    return jsonify(dict(version=VERSION, core_debts=core, compras=compras, goals=goals, goal_checkpoints=goal_checkpoints, goal_logs=goal_logs, goal_strategy=goal_strategy, achievement_unlocks=achievement_unlocks, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, career_courses=career_courses, courses_done=courses_done, skills=skills, course_skills=course_skills, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits, habit_recoveries=habit_recoveries,
+    finance_cards = _finance_card_snapshots(d)
+    return jsonify(dict(version=VERSION, core_debts=core, finance_cards=finance_cards, compras=compras, goals=goals, goal_checkpoints=goal_checkpoints, goal_logs=goal_logs, goal_strategy=goal_strategy, achievement_unlocks=achievement_unlocks, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, career_courses=career_courses, courses_done=courses_done, skills=skills, course_skills=course_skills, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits, habit_recoveries=habit_recoveries,
                         marks=marks, history=history, dreams=dreams,
                         animes=animes, books=books, gym_sets=gym_sets,
                         servicios=services, fund=fund, piggy=piggy, piggy_moves=piggy_moves, shopping=shopping, todos=todos, detalle=_detalle_actual(d),
@@ -2687,16 +2796,30 @@ def card_pay():
             con.execute('UPDATE compras SET abonado=? WHERE id=?',
                         (min(nuevo, c['valor'] or 0), c['id']))
             restante -= aplica
-        # 2) lo que sobre baja la deuda base del jefe (registrada como abono)
+        # 2) lo que sobre baja el principal/base real. Davivienda owns that
+        # principal in amort_dav; the other cards own it in debts + abonos.
         if restante > 0:
-            row = con.execute('SELECT COALESCE(SUM(valor),0) AS s FROM abonos WHERE debt_id=?', (d['id'],)).fetchone()
-            ya_abonado = dict(row)['s'] if row else 0
-            base_saldo = max((d['initial'] or 0) - ya_abonado, 0)
-            aplica = min(restante, base_saldo)
-            if aplica > 0:
-                con.execute('INSERT INTO abonos (fecha, debt_id, valor) VALUES (?,?,?)',
-                             (date.today().isoformat(), d['id'], aplica))
-                restante -= aplica
+            if creditor == 'Tarjeta DV':
+                base_saldo, A = _dav_current_principal(con)
+                aplica = min(restante, base_saldo)
+                if aplica > 0 and A is not None:
+                    A['abonosExtra'] = int(A.get('abonosExtra') or 0) + aplica
+                    con.execute('INSERT OR REPLACE INTO study_profile (key,value) VALUES (?,?)',
+                                ('amort_dav', json.dumps(A, ensure_ascii=False)))
+                    # Keep a human audit trail without using this row as Davivienda's
+                    # principal source (the amortization tracker remains authoritative).
+                    con.execute('INSERT INTO abonos (fecha, debt_id, valor, nota) VALUES (?,?,?,?)',
+                                (date.today().isoformat(), d['id'], aplica, 'dav_extra:card_pay'))
+                    restante -= aplica
+            else:
+                row = con.execute('SELECT COALESCE(SUM(valor),0) AS s FROM abonos WHERE debt_id=?', (d['id'],)).fetchone()
+                ya_abonado = dict(row)['s'] if row else 0
+                base_saldo = max((d['initial'] or 0) - ya_abonado, 0)
+                aplica = min(restante, base_saldo)
+                if aplica > 0:
+                    con.execute('INSERT INTO abonos (fecha, debt_id, valor) VALUES (?,?,?)',
+                                 (date.today().isoformat(), d['id'], aplica))
+                    restante -= aplica
         con.commit()
     except Exception:
         con.rollback()
@@ -4611,16 +4734,15 @@ def detalle_redefer():
     saldo = monto if monto > 0 else (it['cuota'] or 0) * restantes
     if it['grupo'] in ('Codensa', 'Banco de Bogotá', 'ADDI'):
         _ensure_card_balance_schema(db())
-        # Individual rescheduling must work even after a full-card reschedule:
-        # previously checked months cannot consume the new installment schedule.
+        # V179: a monthly check/calendar position is not principal payment. Only
+        # money explicitly recorded on this line can reduce the amount refinanced.
+        saldo = monto if monto > 0 else _raw_detail_principal(it)
+        nueva_cuota = (saldo + nuevas - 1) // nuevas if saldo > 0 else 0
+        if saldo <= 0:
+            return jsonify(error='This line is already paid off'), 400
+        padding = nueva_cuota * nuevas - saldo
         checks = db().execute('SELECT COUNT(*) AS n FROM payment_checks WHERE item=?',
                               (it['grupo'],)).fetchone()['n']
-        since = _card_detail_paid_checks(db(), it)
-        restantes = max((it['total'] or 0) - (it['pagadas'] or 0) - since, 0)
-        saldo = monto if monto > 0 else max((it['cuota'] or 0) * restantes -
-                                           (it.get('abonado_fijo') or 0), 0)
-        nueva_cuota = (saldo + nuevas - 1) // nuevas
-        padding = nueva_cuota * nuevas - saldo
         db().execute('UPDATE detalle_items SET cuota=?, pagadas=0, total=?, '
                      'abonado_fijo=?, start_month=?, check_offset=? WHERE id=?',
                      (nueva_cuota, nuevas, padding, start, checks, iid))
@@ -4706,13 +4828,8 @@ def detalle_del(i):
         it = dict(row)
         # Credit card base balances already include their original breakdown lines.
         # Deleting a line cancels the outstanding obligation rather than recording a fictitious payment.
-        if it['grupo'] in ('Codensa', 'Banco de Bogotá', 'ADDI') and it.get('total'):
-            checks = con.execute('SELECT COUNT(*) AS n FROM payment_checks WHERE item=?',
-                                 (it['grupo'],)).fetchone()['n']
-            already = min(it['total'], max(0, it['pagadas'] or 0) +
-                          _card_detail_paid_checks(con, it))
-            remaining = max((it['cuota'] or 0) * (it['total'] - already) -
-                            (it.get('abonado_fijo') or 0), 0)
+        if it['grupo'] in ('Codensa', 'Banco de Bogotá', 'ADDI', 'Tarjeta Nicole') and it.get('total'):
+            remaining = _raw_detail_principal(it)
             boss = con.execute('SELECT id, initial FROM debts WHERE name=?',
                                (it['grupo'],)).fetchone()
             if boss and remaining:
@@ -4823,45 +4940,66 @@ def card_redefer_all():
         total = 0
         details = 0
         if creditor != 'Tarjeta DV':
-            for row in con.execute('SELECT * FROM detalle_items WHERE grupo=? AND total>0',
-                                   (creditor,)).fetchall():
-                item = dict(row)
-                completed = min(item['total'], max(0, item['pagadas'] or 0) +
-                                _card_detail_paid_checks(con, item))
-                remaining = max((item['cuota'] or 0) * (item['total'] - completed) -
-                                (item.get('abonado_fijo') or 0), 0)
+            snapshots = _finance_card_snapshots(con)
+            base_target = int((snapshots.get(creditor) or {}).get('base_balance') or 0)
+            rows = [dict(r) for r in con.execute(
+                'SELECT * FROM detalle_items WHERE grupo=? AND total>0 ORDER BY orden,id',
+                (creditor,)).fetchall()]
+            raw = [(_raw_detail_principal(item), item) for item in rows]
+            raw_total = sum(v for v, _ in raw)
+            eligible = [(v, item) for v, item in raw if v > 0]
+            allocations = []
+            if base_target <= raw_total and raw_total > 0:
+                # Historical payments were not allocated to individual lines. During a
+                # full-card refinance, distribute the REAL surviving base principal
+                # proportionally so every surviving line remains traceable and the sum
+                # is exact. This changes schedules, never payment history.
+                fractions = []
+                used = 0
+                for raw_remaining, item in eligible:
+                    exact = base_target * raw_remaining / raw_total
+                    share = int(exact)
+                    allocations.append([share, item])
+                    fractions.append((exact - share, len(allocations) - 1))
+                    used += share
+                for _, idx in sorted(fractions, reverse=True)[:max(base_target - used, 0)]:
+                    allocations[idx][0] += 1
+                remaining_target = 0
+            else:
+                allocations = [[raw_remaining, item] for raw_remaining, item in eligible]
+                remaining_target = max(base_target - raw_total, 0)
+
+            allocated_ids = set()
+            for remaining, item in allocations:
+                allocated_ids.add(item['id'])
                 if remaining <= 0:
+                    con.execute('UPDATE detalle_items SET pagadas=total, abonado_fijo=0 WHERE id=?',
+                                (item['id'],))
                     continue
-                # Original fixed fees (insurance, handling) are NEVER refinanced.
-                # Keep the precise principal even when the amount is not divisible by N:
-                # the last installment is capped to the outstanding balance in the UI.
+                nueva_cuota = (remaining + cuotas - 1) // cuotas
                 con.execute('UPDATE detalle_items SET cuota=?, pagadas=0, total=?, '
                             'abonado_fijo=?, start_month=?, check_offset=? WHERE id=?',
-                            ((remaining + cuotas - 1) // cuotas, cuotas,
-                             ((remaining + cuotas - 1) // cuotas) * cuotas - remaining,
+                            (nueva_cuota, cuotas, nueva_cuota * cuotas - remaining,
                              start, checks, item['id']))
                 total += remaining
                 details += 1
-            # If an old card balance is larger than its itemized remaining lines,
-            # preserve that REAL unitemized base debt instead of silently losing it.
-            # Example: older Banco de Bogotá seed has a small unmatched remainder.
-            boss = con.execute('SELECT id, initial FROM debts WHERE name=?', (creditor,)).fetchone()
-            if boss:
-                paid = con.execute('SELECT COALESCE(SUM(valor),0) AS paid FROM abonos WHERE debt_id=?',
-                                   (boss['id'],)).fetchone()['paid'] or 0
-                unitemized = max(int(boss['initial'] or 0) - int(paid) - total, 0)
-                if unitemized:
-                    # This line can also be edited/refinanced/deleted individually;
-                    # no alteration to the actual base balance or payment history.
-                    cuota_gap = (unitemized + cuotas - 1) // cuotas
-                    con.execute('INSERT INTO detalle_items '
-                                '(grupo,nombre,cuota,pagadas,total,fijo,orden,abonado_fijo,start_month,check_offset) '
-                                'VALUES (?,?,?,?,?,?,?,?,?,?)',
-                                (creditor, 'Saldo pendiente sin desglose (verificar extracto)',
-                                 cuota_gap, 0, cuotas, 0, 9999,
-                                 cuota_gap * cuotas - unitemized, start, checks))
-                    total += unitemized
-                    details += 1
+            # Any old line with no surviving principal is marked paid instead of being
+            # deleted, preserving its identity/history for audits.
+            if base_target <= raw_total:
+                for raw_remaining, item in raw:
+                    if raw_remaining > 0 and item['id'] not in allocated_ids:
+                        con.execute('UPDATE detalle_items SET pagadas=total, abonado_fijo=0 WHERE id=?',
+                                    (item['id'],))
+            if remaining_target > 0:
+                cuota_gap = (remaining_target + cuotas - 1) // cuotas
+                con.execute('INSERT INTO detalle_items '
+                            '(grupo,nombre,cuota,pagadas,total,fijo,orden,abonado_fijo,start_month,check_offset) '
+                            'VALUES (?,?,?,?,?,?,?,?,?,?)',
+                            (creditor, 'Saldo pendiente sin desglose (verificar extracto)',
+                             cuota_gap, 0, cuotas, 0, 9999,
+                             cuota_gap * cuotas - remaining_target, start, checks))
+                total += remaining_target
+                details += 1
             # Plan values are only a fallback: actual monthly card amounts come from detail.
             # An old static plan must never resurface after all detail lines were deleted.
             plan['creditors'][creditor] = [0] * len(plan['creditors'][creditor])
@@ -4969,15 +5107,11 @@ def compra_redefer():
     if not c or nuevas < 1:
         return jsonify(error='datos inválidos'), 400
     c = dict(c)
-    cuota_vieja = round(c['valor'] / c['cuotas']) if c['cuotas'] else 0
     monto = int(j.get('monto') or 0)
-    pagadas = max(0, min(pagadas, c['cuotas']))
-    if c.get('refinance_baseline'):
-        # A previously refinanced purchase has its own verified paid baseline.
-        # Moving its first due month again must NOT reintroduce those old payments.
-        saldo = monto if monto > 0 else max(c['valor'] - (c.get('abonado') or 0), 0)
-    else:
-        saldo = monto if monto > 0 else max(c['valor'] - cuota_vieja * pagadas, 0)
+    # V179 bank invariant: passing calendar months never pays principal.
+    # Rescheduling always uses the real monetary balance, regardless of which
+    # month the frontend is currently viewing.
+    saldo = monto if monto > 0 else max(c['valor'] - (c.get('abonado') or 0), 0)
     # Keep historical payments and any existing allocation references intact.
     # The refinanced principal excludes everything already paid.
     previous_paid = int(c.get('abonado') or 0)
