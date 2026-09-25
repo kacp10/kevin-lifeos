@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 179  # V179 Canonical Financial Alignment
+VERSION = 182  # V182 My Credit Cards Panel Visibility
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -343,16 +343,37 @@ def _raw_detail_principal(item):
     return max(cuota * (total - pagadas) - abonado, 0)
 
 
+def _effective_card_detail_principal(con, item):
+    """Outstanding detail principal using the same paid-check semantics as the UI."""
+    total = max(0, int(item.get('total') or 0))
+    cuota = max(0, int(item.get('cuota') or 0))
+    if total <= 0 or cuota <= 0:
+        return 0
+    pagadas = max(0, min(int(item.get('pagadas') or 0), total))
+    checks = [dict(r) for r in con.execute(
+        'SELECT month FROM payment_checks WHERE item=?', (item.get('grupo') or '',)).fetchall()]
+    check_count = len(checks)
+    # Rescheduled rows remember how many group checks existed before the new plan.
+    # This mirrors detallePagosDesdeRefinanciacion() in app.js.
+    if int(item.get('check_offset') or 0) > 0:
+        start = int(item.get('start_month') if item.get('start_month') is not None else -1)
+        prestart = sum(1 for r in checks if start >= 0 and 0 <= _plan_month_index(con, r.get('month')) < start)
+        check_count = max(check_count - max(int(item.get('check_offset') or 0), prestart), 0)
+    elapsed = min(pagadas + check_count, total)
+    abonado = max(0, int(item.get('abonado_fijo') or 0))
+    return max(cuota * (total - elapsed) - abonado, 0)
+
+
 def _finance_card_snapshots(con):
     """Canonical balances for the five credit cards.
 
     Invariant for non-Davivienda cards:
         card balance = remaining legacy/base principal + remaining purchases.
 
-    `debts + abonos` is the monetary source of truth for the legacy/base principal;
-    `compras.valor - compras.abonado` is the monetary source for new purchases.
-    The detail table remains the explanatory schedule. Any historical mismatch is
-    reported as `detail_reconciliation` and never mutates old data automatically.
+    V179 keeps the monetary base model for cards that are already aligned. V181 makes
+    Codensa use the visible Full debt breakdown as its base-principal source because
+    its historical unassigned-payment adjustment was lowering the header below the
+    obligations the user actually has. New purchases always use valor - abonado.
     """
     out = {}
     for creditor, boss in CARD_FINANCE_MAP.items():
@@ -376,7 +397,17 @@ def _finance_card_snapshots(con):
         detail_rows = [dict(r) for r in con.execute(
             'SELECT * FROM detalle_items WHERE grupo=? ORDER BY orden,id', (creditor,)
         ).fetchall()]
-        detail_principal = sum(_raw_detail_principal(x) for x in detail_rows)
+        detail_principal = sum(_effective_card_detail_principal(con, x) for x in detail_rows)
+        # V181: Codensa is aligned directly to the obligations visible in Full debt
+        # breakdown. The other cards keep their already-working V179 monetary model.
+        # This avoids changing cards the user already verified while removing Codensa's
+        # synthetic negative reconciliation.
+        if creditor == 'Codensa':
+            base_balance = detail_principal
+            base_paid = max(initial - base_balance, 0)
+            reconciliation = 0
+        else:
+            reconciliation = base_balance - detail_principal
         out[creditor] = {
             'creditor': creditor, 'boss': boss, 'initial': initial,
             'base_paid': base_paid, 'base_balance': base_balance,
@@ -384,7 +415,7 @@ def _finance_card_snapshots(con):
             'purchase_balance': purchase_balance,
             'balance': base_balance + purchase_balance,
             'detail_principal': detail_principal,
-            'detail_reconciliation': base_balance - detail_principal,
+            'detail_reconciliation': reconciliation,
         }
     return out
 
@@ -2812,14 +2843,23 @@ def card_pay():
                                 (date.today().isoformat(), d['id'], aplica, 'dav_extra:card_pay'))
                     restante -= aplica
             else:
-                row = con.execute('SELECT COALESCE(SUM(valor),0) AS s FROM abonos WHERE debt_id=?', (d['id'],)).fetchone()
-                ya_abonado = dict(row)['s'] if row else 0
-                base_saldo = max((d['initial'] or 0) - ya_abonado, 0)
-                aplica = min(restante, base_saldo)
-                if aplica > 0:
-                    con.execute('INSERT INTO abonos (fecha, debt_id, valor) VALUES (?,?,?)',
-                                 (date.today().isoformat(), d['id'], aplica))
-                    restante -= aplica
+                if creditor == 'Codensa':
+                    # V181: Codensa's card header is its visible breakdown, so an explicit
+                    # card payment must reduce those same obligations directly.
+                    aplica = _allocate_card_detail_payment(con, creditor, restante)
+                    if aplica > 0:
+                        con.execute('INSERT INTO abonos (fecha, debt_id, valor, nota) VALUES (?,?,?,?)',
+                                     (date.today().isoformat(), d['id'], aplica, 'card_pay:detail'))
+                        restante -= aplica
+                else:
+                    row = con.execute('SELECT COALESCE(SUM(valor),0) AS s FROM abonos WHERE debt_id=?', (d['id'],)).fetchone()
+                    ya_abonado = dict(row)['s'] if row else 0
+                    base_saldo = max((d['initial'] or 0) - ya_abonado, 0)
+                    aplica = min(restante, base_saldo)
+                    if aplica > 0:
+                        con.execute('INSERT INTO abonos (fecha, debt_id, valor) VALUES (?,?,?)',
+                                     (date.today().isoformat(), d['id'], aplica))
+                        restante -= aplica
         con.commit()
     except Exception:
         con.rollback()
@@ -4227,6 +4267,56 @@ def _reverse_card_check_allocations(con, item, due_month):
                         (new_paid, baseline, purchase['id']))
     con.execute('DELETE FROM card_payment_allocations WHERE item=? AND due_month=?', (item, due_month))
     return sum(int(x.get('amount') or 0) for x in rows)
+
+
+def _detail_paid_amount(item):
+    cuota = max(0, int(item.get('cuota') or 0))
+    total = max(0, int(item.get('total') or 0))
+    pagadas = max(0, min(int(item.get('pagadas') or 0), total))
+    abonado = max(0, int(item.get('abonado_fijo') or 0))
+    return min(cuota * pagadas + abonado, cuota * total)
+
+
+def _set_detail_paid_amount(con, item, paid_amount):
+    cuota = max(0, int(item.get('cuota') or 0))
+    total = max(0, int(item.get('total') or 0))
+    if cuota <= 0 or total <= 0:
+        return 0
+    cap = cuota * total
+    paid = max(0, min(int(paid_amount or 0), cap))
+    pagadas = min(paid // cuota, total)
+    abonado = 0 if pagadas >= total else paid - pagadas * cuota
+    con.execute('UPDATE detalle_items SET pagadas=?, abonado_fijo=? WHERE id=?',
+                (pagadas, abonado, item['id']))
+    return paid
+
+
+def _allocate_card_detail_payment(con, creditor, amount):
+    """Apply a direct card payment to the same visible legacy obligations.
+
+    Home monthly checks keep their existing check-driven installment flow. This
+    helper is only for explicit Pay this card money, which has no monthly check
+    and therefore must reduce detail_items directly.
+    """
+    remaining = max(0, int(amount or 0))
+    if remaining <= 0:
+        return 0
+    allocated = 0
+    rows = [dict(r) for r in con.execute(
+        'SELECT * FROM detalle_items WHERE grupo=? AND total>0 ORDER BY orden,id',
+        (creditor,)).fetchall()]
+    for item in rows:
+        if remaining <= 0:
+            break
+        outstanding = _effective_card_detail_principal(con, item)
+        if outstanding <= 0:
+            continue
+        apply = min(remaining, outstanding)
+        before_paid = _detail_paid_amount(item)
+        _set_detail_paid_amount(con, item, before_paid + apply)
+        allocated += apply
+        remaining -= apply
+    return allocated
 
 
 def _reconcile_legacy_card_checks_v171(con):
