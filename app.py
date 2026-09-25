@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 176  # V176 Card Rescheduling Production Schema Hotfix
+VERSION = 177  # V177 Focus-Driven Daily Missions & Recovery Dedup
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -2980,17 +2980,22 @@ def recovery_sync():
 
     expected_map = {}
     for raw in expected[:1500]:
-        try:
-            habit_id = int(raw.get('habit_id'))
-        except (TypeError, ValueError):
-            continue
+        raw_ids = raw.get('habit_ids') or [raw.get('habit_id')]
+        habit_ids = []
+        for value in raw_ids:
+            try:
+                hid = int(value)
+            except (TypeError, ValueError):
+                continue
+            if hid > 0 and hid not in habit_ids:
+                habit_ids.append(hid)
         day = str(raw.get('original_day') or '')[:10]
         activity = str(raw.get('activity') or '').strip()[:120]
         title = str(raw.get('title') or '').strip()[:180]
-        if habit_id and day and activity:
-            expected_map[(habit_id, day, activity)] = {
-                'habit_id': habit_id, 'original_day': day,
-                'activity': activity, 'title': title,
+        if habit_ids and day and activity:
+            expected_map[(day, activity)] = {
+                'habit_id': habit_ids[0], 'habit_ids': habit_ids,
+                'original_day': day, 'activity': activity, 'title': title,
             }
 
     # Repair only evidence created by the recovery system itself. Manual Habit
@@ -3024,34 +3029,70 @@ def recovery_sync():
         warnings.append('legacy_repair_skipped')
         logger.warning('Recovery legacy repair skipped: %s', exc)
 
-    # Insert each missing mission independently. A malformed old PostgreSQL row or
-    # constraint is reported as a warning while the remaining missions still sync.
+    # Consolidate legacy duplicates created when one activity fed several Habits.
+    # Keep a scheduled row when one exists so a mission already added to today is
+    # never silently unscheduled.
+    try:
+        open_rows = [dict(r) for r in d.execute("""
+            SELECT id,habit_id,original_day,activity,status,added_to_day
+            FROM habit_recoveries
+            WHERE status IN ('pending','scheduled','rest_exempt')
+            ORDER BY original_day,activity,
+                     CASE WHEN status='scheduled' THEN 0 ELSE 1 END,id
+        """).fetchall()]
+        grouped = {}
+        for rec in open_rows:
+            grouped.setdefault((rec.get('original_day'), rec.get('activity')), []).append(rec)
+        for same_activity in grouped.values():
+            if len(same_activity) <= 1:
+                continue
+            for duplicate in same_activity[1:]:
+                d.execute('DELETE FROM habit_recoveries WHERE id=?', (duplicate['id'],))
+        d.commit()
+    except Exception as exc:
+        try: d.rollback()
+        except Exception: pass
+        warnings.append('activity_dedup_skipped')
+        logger.warning('Recovery activity dedup skipped: %s', exc)
+
+    # Recovery is activity-level, not habit-level. One Life mission can feed several
+    # Habits, but it must appear only once in Pending Missions.
     for item in expected_map.values():
-        habit_id = item['habit_id']; day = item['original_day']; activity = item['activity']
+        habit_id = item['habit_id']; habit_ids = item['habit_ids']
+        day = item['original_day']; activity = item['activity']
         if day in rest_days:
             continue
         try:
-            if d.execute('SELECT 1 FROM habit_marks WHERE habit_id=? AND day=?',
-                         (habit_id, day)).fetchone():
-                continue
             if d.execute('SELECT 1 FROM routine_done WHERE day=? AND activity=?',
                          (day, activity)).fetchone():
                 continue
-            existing = d.execute("""
-                SELECT id,status FROM habit_recoveries
-                WHERE habit_id=? AND original_day=? AND activity=?
-                ORDER BY id LIMIT 1
-            """, (habit_id, day, activity)).fetchone()
-            if existing:
-                # A formerly REST-exempt row becomes pending only after REST was
-                # explicitly removed from that date.
-                ex = dict(existing)
-                if ex.get('status') == 'rest_exempt' and day not in rest_days:
+            marked = 0
+            for hid in habit_ids:
+                if d.execute('SELECT 1 FROM habit_marks WHERE habit_id=? AND day=?',
+                             (hid, day)).fetchone():
+                    marked += 1
+            if marked == len(habit_ids):
+                continue
+
+            existing_rows = [dict(r) for r in d.execute("""
+                SELECT id,status,added_to_day,habit_id FROM habit_recoveries
+                WHERE original_day=? AND activity=?
+                  AND status IN ('pending','scheduled','rest_exempt')
+                ORDER BY CASE WHEN status='scheduled' THEN 0 ELSE 1 END,id
+            """, (day, activity)).fetchall()]
+            if existing_rows:
+                keep = existing_rows[0]
+                d.execute('UPDATE habit_recoveries SET habit_id=?,title=?,updated_at=? WHERE id=?',
+                          (habit_id, item['title'], now, keep['id']))
+                for duplicate in existing_rows[1:]:
+                    d.execute('DELETE FROM habit_recoveries WHERE id=?', (duplicate['id'],))
+                if keep.get('status') == 'rest_exempt' and day not in rest_days:
                     d.execute("""UPDATE habit_recoveries
                                  SET status='pending',added_to_day='',updated_at=? WHERE id=?""",
-                              (now, ex['id']))
-                    d.commit()
+                              (now, keep['id']))
+                d.commit()
                 continue
+
             d.execute("""INSERT INTO habit_recoveries
                 (habit_id,original_day,activity,title,status,added_to_day,recovered_day,created_at,updated_at)
                 VALUES (?,?,?,?,?,?,?,?,?)""",
@@ -3165,12 +3206,24 @@ def recovery_complete(i):
         return jsonify(ok=True)
     if row.get('status') != 'scheduled' or row.get('added_to_day') != recovered_day:
         return jsonify(error='Mission must be scheduled for this day before completion'), 409
+    raw_ids = j.get('habit_ids') or [row['habit_id']]
+    habit_ids = []
+    for value in raw_ids:
+        try:
+            hid = int(value)
+        except (TypeError, ValueError):
+            continue
+        if hid > 0 and hid not in habit_ids:
+            habit_ids.append(hid)
+    if int(row['habit_id']) not in habit_ids:
+        habit_ids.insert(0, int(row['habit_id']))
     now = datetime.now().isoformat(timespec='seconds')
     try:
-        if not d.execute('SELECT 1 FROM habit_marks WHERE habit_id=? AND day=?',
-                         (row['habit_id'], row['original_day'])).fetchone():
-            d.execute('INSERT INTO habit_marks (habit_id,day) VALUES (?,?)',
-                      (row['habit_id'], row['original_day']))
+        for habit_id in habit_ids:
+            if not d.execute('SELECT 1 FROM habit_marks WHERE habit_id=? AND day=?',
+                             (habit_id, row['original_day'])).fetchone():
+                d.execute('INSERT INTO habit_marks (habit_id,day) VALUES (?,?)',
+                          (habit_id, row['original_day']))
         existing_done = d.execute('SELECT 1 FROM routine_done WHERE day=? AND activity=?',
                                   (row['original_day'], row['activity'])).fetchone()
         if existing_done:
@@ -3199,13 +3252,25 @@ def recovery_reopen(i):
     if row.get('status') != 'recovered':
         return jsonify(error='Only recovered missions can be reopened'), 409
 
+    j = request.get_json(silent=True) or {}
+    raw_ids = j.get('habit_ids') or [row.get('habit_id')]
+    habit_ids = []
+    for value in raw_ids:
+        try:
+            hid = int(value)
+        except (TypeError, ValueError):
+            continue
+        if hid > 0 and hid not in habit_ids:
+            habit_ids.append(hid)
+    if int(row.get('habit_id')) not in habit_ids:
+        habit_ids.insert(0, int(row.get('habit_id')))
     now = datetime.now().isoformat(timespec='seconds')
     try:
-        # The user explicitly requested a redo. Remove the mark that this recovery
-        # previously placed on the original Habit date. This query is portable in
-        # SQLite and PostgreSQL and does not depend on routine_done.note existing.
-        d.execute('DELETE FROM habit_marks WHERE habit_id=? AND day=?',
-                  (row.get('habit_id'), row.get('original_day')))
+        # Redo reverses the Habit evidence restored by the single activity-level
+        # recovery mission, even when that activity feeds several Habits.
+        for habit_id in habit_ids:
+            d.execute('DELETE FROM habit_marks WHERE habit_id=? AND day=?',
+                      (habit_id, row.get('original_day')))
 
         # Remove the matching Life completion row regardless of whether an older
         # Render schema has the optional note column.
@@ -3417,9 +3482,22 @@ def career_update():
         cid = int(j.get('id'))
     except (TypeError, ValueError):
         return jsonify(error='Invalid career id'), 400
-    if field == 'active':   # solo una activa a la vez
-        db().execute('UPDATE careers SET active=0')
-        db().execute('UPDATE careers SET active=1 WHERE id=?', (cid,))
+    if field == 'active':
+        try:
+            desired = 1 if int(j.get('value') or 0) else 0
+        except (TypeError, ValueError):
+            desired = 0
+        if desired:
+            current = db().execute('SELECT active FROM careers WHERE id=?', (cid,)).fetchone()
+            if not current:
+                return jsonify(error='Career not found'), 404
+            if not int(dict(current).get('active') or 0):
+                focused = db().execute('SELECT COUNT(*) AS n FROM careers WHERE active=1').fetchone()
+                if int(dict(focused).get('n') or 0) >= 2:
+                    return jsonify(error='Maximum 2 focus careers at the same time'), 409
+            db().execute('UPDATE careers SET active=1 WHERE id=?', (cid,))
+        else:
+            db().execute('UPDATE careers SET active=0 WHERE id=?', (cid,))
     else:
         val = int(j.get('value') or 0) if field in ('step', 'pct', 'bank') else j.get('value')
         if field == 'goal_id' and (val == '' or val is None):
