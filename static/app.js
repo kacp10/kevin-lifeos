@@ -115,8 +115,21 @@ const compradoEn = (debtName) => S.compras
   .reduce((s, c) => s + c.valor - (c.abonado || 0), 0);
 // V171: base-debt overpayments can never erase a later card purchase.
 // Math.max also preserves legacy detail payments without counting the same payment twice.
-const pagoBaseDeuda = (d) => Math.max(Number(d?.abonado || 0), Number(abonoDetalleDeUnJefe(d?.name || '') || 0));
-const saldoDeudaConCompras = (d) => Math.max((d?.initial || 0) - pagoBaseDeuda(d), 0) + compradoEn(d?.name || '');
+const financeCardByBoss = (boss) => Object.values(S.finance_cards || {}).find(c => c.boss === boss) || null;
+const financeCardByCreditor = (creditor) => (S.finance_cards || {})[creditor] || null;
+const pagoBaseDeuda = (d) => {
+  const fc = financeCardByBoss(d?.name || '');
+  if (fc && fc.creditor !== 'Tarjeta DV') return Number(fc.base_paid || 0);
+  return Math.max(Number(d?.abonado || 0), Number(abonoDetalleDeUnJefe(d?.name || '') || 0));
+};
+const saldoDeudaConCompras = (d) => {
+  const fc = financeCardByBoss(d?.name || '');
+  if (fc && fc.creditor !== 'Tarjeta DV') return Number(fc.balance || 0);
+  if (d?.name === 'Tarjeta DV — Jefe Final' && typeof amortState === 'function') {
+    return Number(amortState().saldoCapital || 0) + compradoEn(d.name);
+  }
+  return Math.max((d?.initial || 0) - pagoBaseDeuda(d), 0) + compradoEn(d?.name || '');
+};
 
 // Suma de abonos hechos a líneas del DESGLOSE ORIGINAL (detalle_items) cuyo grupo es un jefe.
 // Estas líneas ya están dentro del 'initial' del jefe, así que su abono = daño a ese jefe.
@@ -261,7 +274,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 178;
+const FRONT_V = 179;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -3919,23 +3932,37 @@ function amortState() {
 }
 // Filas del desglose para Davivienda en el mes i (avanzan con el filtro)
 function amortRowsMes(i) {
-  const A = getAmortDav();
-  const r = Math.pow(1 + A.ea / 100, 1 / 12) - 1;
-  const cuota = amortCuota(A);
-  let bal = A.capital;
-  for (let k = 0; k < Math.max(i - (A.start || 0), 0) && bal > 0; k++) { const it = bal * r; bal -= Math.min(cuota - it, bal); }
+  const st = amortState();
+  const A = st.A;
+  const r = st.r;
+  const cuota = st.cuota;
+  const currentBalance = st.saldoCapital;
   const rows = [];
-  if (bal > 0 && i >= (A.start || 0)) {
-    const interes = Math.round(bal * r), capital = Math.max(Math.min(cuota - interes, bal), 0);
-    rows.push({ label: `Crédito Davivienda · cuota ${i - (A.start || 0) + 1}/${A.cuotas} (capital ${fmt(capital)} · interés ${fmt(interes)})`,
-      cuota, saldo: Math.round(Math.max(bal - capital, 0)), done: false });
+  const start = A.start || 0;
+  const scheduledNum = i - start + 1;
+  if (currentBalance > 0 && i >= start && scheduledNum >= 1 && scheduledNum <= A.cuotas) {
+    // Interest/capital shown for the selected scheduled month is a projection,
+    // but the balance column remains the REAL current principal so it always
+    // reconciles with My Credit Cards and Debt Boss.
+    let projected = A.capital;
+    for (let k = 0; k < Math.max(i - start, 0) && projected > 0; k++) {
+      const it = projected * r;
+      projected -= Math.max(Math.min(cuota - it, projected), 0);
+    }
+    const interes = Math.round(Math.max(projected, 0) * r);
+    const capital = Math.max(Math.min(cuota - interes, Math.max(projected, 0)), 0);
+    rows.push({ label: `Crédito Davivienda · scheduled installment ${scheduledNum}/${A.cuotas} (capital ${fmt(capital)} · interest ${fmt(interes)})`,
+      cuota, saldo: currentBalance, done: false });
     if (A.seguro) rows.push({ label: 'Seguro + cuota de manejo (no baja deuda)', cuota: A.seguro, saldo: 0, done: false });
+  } else if (currentBalance > 0) {
+    rows.push({ label: i < start ? `Crédito Davivienda · starts ${S.plan.months[start]}` : 'Crédito Davivienda · current principal',
+      cuota: 0, saldo: currentBalance, done: false });
   }
   (A.extras || []).forEach(e => { if (i < (e.meses || 0)) rows.push({ label: `${e.name} · ${i + 1}/${e.meses}`, cuota: e.valor, saldo: 0, done: false }); });
-  if (!rows.length && bal > 0) rows.push({ label: `Crédito Davivienda · starts ${S.plan.months[A.start || 0]}`, cuota: 0, saldo: Math.round(bal), done: false });
-  if (!rows.length) rows.push({ label: 'Crédito pagado 🎉', cuota: 0, saldo: 0, done: true });
+  if (!rows.length) rows.push({ label: 'Crédito pagado', cuota: 0, saldo: 0, done: true });
   return rows;
 }
+
 function renderAmortDav() {
   const cont = document.getElementById('amortDav');
   if (!cont) return;
@@ -4005,6 +4032,12 @@ function renderMyCards() {
     let totalCard = bd ? (bd.initial || 0) + comprasBrutas : comprasBrutas;
     let pagado = basePagado + comprasPagadas;
     let saldo = baseSaldo + comprado;
+    const fc = financeCardByCreditor(t.creditor);
+    if (fc && t.key !== 'Tarjeta DV') {
+      saldo = Number(fc.balance || 0);
+      pagado = Number(fc.base_paid || 0) + Number(fc.purchase_paid || 0);
+      totalCard = Number(fc.initial || 0) + Number(fc.purchase_total || 0);
+    }
     if (t.key === 'Tarjeta DV') {
       // V171: Davivienda's refinanced capital and NEW card purchases share the
       // same real limit. The old tracker still owns the refinanced balance,
@@ -4329,12 +4362,8 @@ document.addEventListener('click', async (e) => {
   const pb = e.target.closest('.card-pay-btn');
   if (!pb) return;
   const boss = pb.dataset.boss, creditor = pb.dataset.creditor, saldo = +pb.dataset.saldo || 0;
-  if (boss === 'Tarjeta DV — Jefe Final') {
-    toast('For Davivienda use the payoff tracker below (it uses real amortization).');
-    return;
-  }
   const r = await modal({ icon: '💵', title: 'Pay this card',
-    text: `<b>${esc(boss)}</b> · balance ${fmt(saldo)}.<br><br>How much are you paying? It goes to your oldest installments first, then to the card's base debt — and shows up everywhere (card, boss, breakdown).`,
+    text: `<b>${esc(boss)}</b> · balance ${fmt(saldo)}.<br><br>How much are you paying? It goes to your oldest pending purchases first, then to the card's real base principal — and the same balance is reflected in the card, boss and breakdown.`,
     fields: [{ type: 'money', placeholder: `Amount (max ${fmt(saldo)})`, value: '' }],
     okText: 'Pay it', extraBtn: `Pay full ${fmt(saldo)}` });
   if (r === null) return;
@@ -4475,6 +4504,29 @@ function renderDesglose() {
     const pagados = checksPagadosDeGrupo(g);
     filas[g] = items.map(it => calcItem(it, i, { esNomina, pagados: it[8] ? detallePagosDesdeRefinanciacion(g, it) : pagados }));
   }
+  // V179: historical card data had two representations (boss money vs detail schedule).
+  // Do not rewrite old history. Instead, reconcile the detail group to the canonical
+  // monetary base balance with an explicit audit row. Positive = old balance not itemized;
+  // negative = real historical payments that were never assigned to one detail line.
+  for (const creditor of ['ADDI', 'Codensa', 'Banco de Bogotá', 'Tarjeta Nicole']) {
+    const fc = financeCardByCreditor(creditor);
+    if (!fc || !filas[creditor]) continue;
+    const target = Number(fc.base_balance || 0);
+    const current = filas[creditor].reduce((sum, row) => sum + Number(row.saldo || 0), 0);
+    const diff = target - current;
+    if (target <= 0) {
+      // The card base is fully paid. Old schedule rows remain in the database for
+      // history but disappear from the active breakdown; no fictitious negative row.
+      for (const row of filas[creditor]) {
+        if (row.saldo > 0) { row.saldo = 0; row.cuota = 0; row.done = true; }
+      }
+    } else if (diff !== 0) {
+      filas[creditor].push({
+        label: diff > 0 ? 'Base balance not itemized in the old breakdown' : 'Historical card payments not assigned to a specific old line',
+        cuota: 0, saldo: diff, done: false, adjustment: true
+      });
+    }
+  }
   if (filas['Tarjeta DV']) filas['Tarjeta DV'] = amortRowsMes(i);   // Davivienda = amortización (avanza sola)
   const grupoRedefer = {};   // grupo -> {type, id/name} para el botón de rediferir
   // deudas principales del plan (creditors): rediferibles por nombre
@@ -4521,35 +4573,35 @@ function renderDesglose() {
     const cuotaBase = cuotaDe(c);                              // cuota mensual original
     const abonado = Math.max((c.abonado || 0) - (c.refinance_baseline || 0), 0);
     const antesDeInicio = i < c.start;
-    const num = i - c.start + 1;                              // qué cuota toca en el mes elegido
-    const transcurridas = Math.min(Math.max(num - 1, 0), c.cuotas);
-    // cuotas cubiertas por el ABONO (pagos que hiciste), aparte de las del mes
+    const num = i - c.start + 1;                              // cuota programada para el mes elegido
+    // V179 bank invariant: changing/viewing months NEVER pays principal. Only
+    // c.abonado can reduce the real purchase balance. The month only changes
+    // which installment is due/scheduled.
     const cuotasAbonadas = cuotaBase > 0 ? Math.floor(abonado / cuotaBase) : 0;
-    const saldo = Math.max(c.valor - (c.abonado || 0) - cuotaBase * transcurridas, 0);
+    const saldo = Math.max(c.valor - (c.abonado || 0), 0);
     if (saldo <= 0) continue;                                 // saldado: no aparece
-    const cuotasQuedan = cuotaBase > 0 ? Math.ceil(saldo / cuotaBase) : 0;
-    const pagadasTotal = transcurridas + cuotasAbonadas;      // cuotas ya cubiertas en total
     const totalOrig = c.cuotas;
     const activa = saldo > 0;
     const inicioLabel = (S.plan.months && S.plan.months[c.start]) || 'later';
+    const scheduled = Math.min(Math.max(num, 1), totalOrig);
     (filas[g] = filas[g] || []).push({
       label: `💳 ${c.concepto}`
         + (antesDeInicio
           ? ` · installment ${Math.min(cuotasAbonadas + 1, totalOrig)}/${totalOrig} · starts ${inicioLabel}`
-          : (activa ? ` · installment ${Math.min(pagadasTotal + 1, totalOrig)}/${totalOrig}` : ''))
+          : (activa ? ` · scheduled installment ${scheduled}/${totalOrig}` : ''))
         + (cuotasAbonadas > 0 ? ` <small class="prepaid">✓ ${cuotasAbonadas} paid</small>` : ''),
-      cuota: activa && !antesDeInicio ? Math.min(cuotaBase, saldo) : 0,
+      cuota: activa && !antesDeInicio && num >= 1 && num <= totalOrig ? Math.min(cuotaBase, saldo) : 0,
       saldo,
       done: saldo <= 0,
       redefer: saldo > 0 ? { type: 'compra', id: c.id, cuotas: c.cuotas } : null
     });
   }
   let total = 0;
-  let html = `<p class="hint">Calculated for <b>${S.plan.months[i]}</b> — change it with the month selector in Home and watch installments advance on their own.</p>`;
+  let html = `<p class="hint">Calculated for <b>${S.plan.months[i]}</b> — the month selector changes what is due, while balances only fall when money is actually paid.</p>`;
   html += Object.entries(filas).map(([grupo, items]) => {
     // ocultar las filas ya terminadas (cuotas pagadas / deudas derrotadas)
-    const vivos = items.filter(it => !it.done);
-    const saldo = vivos.reduce((s, it) => s + it.saldo, 0);
+    const vivos = items.filter(it => !it.done || it.adjustment);
+    const saldo = vivos.reduce((s, it) => s + Number(it.saldo || 0), 0);
     if (vivos.length === 0) return '';            // grupo completamente derrotado -> fuera
     if (!grupo.startsWith('Nómina')) total += saldo;
     // El check de "Debt payments" SOLO marca visualmente que la cuota del mes ya se pagó.
@@ -4559,10 +4611,10 @@ function renderDesglose() {
     return `<details${pagadoEsteMes ? ' class="grp-paid"' : ''}><summary><span>${grupo}${paidTag}</span>
       <span class="sum-val">${saldo ? fmt(saldo) : 'cargos fijos'}</span></summary>
       <table class="table">
-      <tr><th>Item</th><th>This month</th><th>Balance after paying</th></tr>` +
+      <tr><th>Item</th><th>This month</th><th>Current balance</th></tr>` +
       vivos.map(it => {
-        const filaPagada = pagadoEsteMes && it.cuota > 0;   // cuota del mes ya pagada (visual)
-        return `<tr class="${filaPagada ? 'row-paid' : ''}"><td>${it.label}${it.redefer
+        const filaPagada = !it.adjustment && pagadoEsteMes && it.cuota > 0;   // cuota del mes ya pagada (visual)
+        return `<tr class="${filaPagada ? 'row-paid' : ''}${it.adjustment ? ' finance-reconcile-row' : ''}"><td>${it.label}${it.redefer
             ? ` <button class="redefer-btn mini" data-type="${it.redefer.type}" data-id="${it.redefer.id}" data-cuotas="${it.redefer.cuotas}" title="Reschedule">🔄</button>`
               + ` <button class="cuota-btn" data-act="abonar" data-rtype="${it.redefer.type}" data-id="${it.redefer.id}" title="Pay installments in advance">💵</button>`
               + ` <button class="del-x" data-type="${it.redefer.type === 'extra_debt' ? 'debt_extra' : it.redefer.type}" data-id="${it.redefer.id}" title="Remove this line">✕</button>`
@@ -4571,7 +4623,7 @@ function renderDesglose() {
                 + ` <button class="del-x" data-type="detalle" data-id="${it.fijoPay.id}" title="Remove this line">✕</button>`
               : '')}</td>
            <td class="num">${filaPagada ? '<span class="paid-chip">✓ paid</span>' : (it.cuota ? fmt(it.cuota) : '—')}</td>
-           <td class="num">${it.saldo ? fmt(it.saldo) : '—'}</td></tr>`;
+           <td class="num">${it.adjustment ? (it.saldo < 0 ? `−${fmt(Math.abs(it.saldo))}` : fmt(it.saldo)) : (it.saldo ? fmt(it.saldo) : '—')}</td></tr>`;
       }).join('') +
       '</table>' +
       (['Tarjeta DV', 'Codensa', 'Banco de Bogotá', 'ADDI'].includes(grupo)
@@ -5886,13 +5938,18 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 23. V176 Card Rescheduling Production Schema Hotfix: la autorreparación de esquema de tarjetas incluye refinance_baseline y check_offset sin depender del marcador histórico V171, permitiendo que bases PostgreSQL existentes redifieran sin error 500. Each debt, its own bar expone 🔄 directo para Davivienda, Codensa, Banco de Bogotá y ADDI, reutilizando el mismo flujo global; Full debt breakdown conserva rediferido individual por línea y cambio de mes.
 24. V177 Focus-Driven Daily Missions & Recovery Dedup: Life solo muestra la misión Study cuando existe al menos un Career en Focus y admite hasta dos Focus simultáneos. Quitar un Career de Focus lo elimina de la misión diaria sin fallback al primer Career. Recovery es una misión por actividad, no por hábito: Study puede seguir alimentando Study and hard work, Mathematic / Data y Writing, pero aparece una sola vez en Pending Missions y al completarse restaura todos sus hábitos vinculados.
 25. V178 English Focus Integration: English conserva exclusivamente su misión especializada de Language Hunter. Estar en Focus controla si la misión English aparece en Life, pero English nunca se convierte además en Study ni duplica tareas. Study se genera solo con Career Focus que no sean English; quitar English de Focus retira su misión diaria sin alterar conceptos, pasos, reportes ni progreso del módulo Language Hunter.
+26. V179 Canonical Financial Alignment: las cinco tarjetas personales deben usar saldo monetario real como fuente de verdad. My Credit Cards y Debt Boss muestran el mismo saldo vigente; Full debt breakdown explica ese saldo y cualquier diferencia histórica no atribuible a una línea se muestra como reconciliación explícita en vez de inventar pagos. Cambiar de mes solo cambia qué cuota vence o se proyecta y nunca reduce capital. Las compras bajan únicamente por abonado real; rediferir una compra usa su saldo monetario pendiente. Davivienda conserva amortización separada, pero pagos desde My Credit Cards reducen su capital real.
 
-ESTADO ACTUAL DEL PROYECTO - V178 ENGLISH FOCUS INTEGRATION:
+ESTADO ACTUAL DEL PROYECTO - V179 CANONICAL FINANCIAL ALIGNMENT:
+- V179 establece una fuente monetaria canónica para las cinco tarjetas: deuda base pendiente + compras pendientes. My Credit Cards y Debt Boss consumen ese mismo saldo.
+- Full debt breakdown mantiene las líneas históricas sin borrarlas ni reescribir pagos antiguos; cuando el historial viejo no permite atribuir con precisión un pago a una línea, muestra una fila de reconciliación explícita para que la suma del grupo coincida exactamente con el saldo real.
+- El selector de mes ya no paga capital por el simple paso del tiempo. Solo cambia qué cuota corresponde al mes; el saldo disminuye únicamente mediante abonos/pagos reales.
+- Rediferir una compra individual usa siempre valor pendiente real (valor - abonado), no meses transcurridos. El rediferido global preserva pagos históricos y distribuye únicamente el capital base realmente pendiente.
+- Davivienda conserva su motor de amortización; el saldo mostrado por tarjeta, Boss y desglose parte del mismo principal actual. Pay this card también puede abonar capital Davivienda sin saltarse el tracker.
 - V178 separa English de Study: English en Focus muestra únicamente la misión especializada English/Language Hunter; nunca genera una segunda misión Study. Quitar English de Focus retira esa misión diaria sin modificar la lógica interna de Language Hunter.
 - V177 mantiene el Focus real para Study: admite hasta dos Career Focus y Study se alimenta únicamente de Careers enfocados que no sean English.
 - Recovery se consolida por actividad: una misión Study pendiente aparece una sola vez aunque al completarse restaure varios Habits vinculados.
 - V176 mantiene compatibilidad de bases existentes para rediferido global y conserva rediferido total/individual de tarjetas.
-- Reglas financieras heredadas: no reconstruir pagos históricos; la refinanciación global es atómica y preserva allocations de V171. La refinanciación Davivienda continúa usando amortización separada con fecha y offset de checks.
 
 ESTADO HEREDADO - V174 HUNTER CODE:
 - Hunter Profile ahora incluye Hunter Code como panel compacto y desplegable con 41 leyes personales bilingües; debe seguir siendo responsive y no convertirse en un sistema de puntos o checks.
@@ -8155,7 +8212,7 @@ document.addEventListener('click', async (e) => {
   let pagadas = 0, actualesTxt = '';
   if (tipo === 'compra') {
     const c = (S.compras || []).find(x => x.id === +btn.dataset.id);
-    if (c) { pagadas = Math.max(0, Math.min(MES - c.start, c.cuotas)); actualesTxt = `${c.cuotas} installments`; }
+    if (c) { pagadas = 0; actualesTxt = `${c.cuotas} installments`; }
   } else if (tipo === 'extra_debt') {
     const d = (S.extra_debts || []).find(x => x.id === +btn.dataset.id);
     if (d) { pagadas = Math.max(0, Math.min(MES - d.start, d.cuotas)); actualesTxt = `${d.cuotas} installments`; }
