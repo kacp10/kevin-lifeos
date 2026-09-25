@@ -261,7 +261,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 177;
+const FRONT_V = 178;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -5885,9 +5885,11 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 22. V175 Card Rescheduling and Debt Payment Sync: Davivienda, Codensa, Banco de Bogotá y ADDI pueden rediferir juntas todas sus cuotas vigentes desde un mes elegido por el usuario y conservar 🔄 individual de cada línea. Los pagos históricos y sus referencias de reversión se conservan; seguros/manejo permanecen fuera del capital. Eliminar una línea original de estas tarjetas retira también su saldo pendiente del jefe, sin inventar un pago. Home Debt payments toma el detalle real, nunca plan estático residual para estas tarjetas.
 23. V176 Card Rescheduling Production Schema Hotfix: la autorreparación de esquema de tarjetas incluye refinance_baseline y check_offset sin depender del marcador histórico V171, permitiendo que bases PostgreSQL existentes redifieran sin error 500. Each debt, its own bar expone 🔄 directo para Davivienda, Codensa, Banco de Bogotá y ADDI, reutilizando el mismo flujo global; Full debt breakdown conserva rediferido individual por línea y cambio de mes.
 24. V177 Focus-Driven Daily Missions & Recovery Dedup: Life solo muestra la misión Study cuando existe al menos un Career en Focus y admite hasta dos Focus simultáneos. Quitar un Career de Focus lo elimina de la misión diaria sin fallback al primer Career. Recovery es una misión por actividad, no por hábito: Study puede seguir alimentando Study and hard work, Mathematic / Data y Writing, pero aparece una sola vez en Pending Missions y al completarse restaura todos sus hábitos vinculados.
+25. V178 English Focus Integration: English conserva exclusivamente su misión especializada de Language Hunter. Estar en Focus controla si la misión English aparece en Life, pero English nunca se convierte además en Study ni duplica tareas. Study se genera solo con Career Focus que no sean English; quitar English de Focus retira su misión diaria sin alterar conceptos, pasos, reportes ni progreso del módulo Language Hunter.
 
-ESTADO ACTUAL DEL PROYECTO - V177 FOCUS-DRIVEN DAILY MISSIONS & RECOVERY DEDUP:
-- V177 elimina el fallback de Study al primer Career: Life solo inyecta Study cuando hay Focus real, permite hasta dos Career Focus simultáneos y quitar Focus retira esa ruta de la misión diaria.
+ESTADO ACTUAL DEL PROYECTO - V178 ENGLISH FOCUS INTEGRATION:
+- V178 separa English de Study: English en Focus muestra únicamente la misión especializada English/Language Hunter; nunca genera una segunda misión Study. Quitar English de Focus retira esa misión diaria sin modificar la lógica interna de Language Hunter.
+- V177 mantiene el Focus real para Study: admite hasta dos Career Focus y Study se alimenta únicamente de Careers enfocados que no sean English.
 - Recovery se consolida por actividad: una misión Study pendiente aparece una sola vez aunque al completarse restaure varios Habits vinculados.
 - V176 mantiene compatibilidad de bases existentes para rediferido global y conserva rediferido total/individual de tarjetas.
 - Reglas financieras heredadas: no reconstruir pagos históricos; la refinanciación global es atómica y preserva allocations de V171. La refinanciación Davivienda continúa usando amortización separada con fecha y offset de checks.
@@ -7160,14 +7162,16 @@ function actividadesDelDia(wd, shiftKey, iso='') {
   const v170Active = !iso || iso >= V170_ACTIVITY_EFFECTIVE_DAY;
   const sh = SHIFTS[shiftKey] || SHIFTS.libre;
   const focused = (S.careers || []).filter(c => Number(c.active) === 1).slice(0, 2);
-  const focoLabel = focused.length
-    ? focused.map(c => `${c.icon || ''} ${c.name}`.trim()).join(' + ')
+  const englishFocused = focused.some(c => /ingl|english/i.test(String(c.name || '')));
+  const studyFocused = focused.filter(c => !/ingl|english/i.test(String(c.name || '')));
+  const focoLabel = studyFocused.length
+    ? studyFocused.map(c => `${c.icon || ''} ${c.name}`.trim()).join(' + ')
     : '';
   const _ingPlan = INGLES_PLAN[wd] || INGLES_PLAN[0];
   const ing = _ingPlan.title;                                   // ej: "🗣 Speaking day"
   const ingDesc = _ingPlan.steps.map((st, i) => `${i + 1}) ${st.s}`).join('  ');  // pasos cortos numerados
-  const studyDesc = focused.length
-    ? `Choose one active course from ${focused.map(c => c.name).join(' or ')}, advance it and take notes.`
+  const studyDesc = studyFocused.length
+    ? `Choose one active course from ${studyFocused.map(c => c.name).join(' or ')}, advance it and take notes.`
     : '';
 
   if (shiftKey === 'descanso') {
@@ -7179,7 +7183,7 @@ function actividadesDelDia(wd, shiftKey, iso='') {
     ];
     // Saturday study stays available even on Day off, but the rest date remains
     // neutral: ignoring this optional session never harms Habits or streaks.
-    if (wd === 5 && focused.length) restActs.splice(2, 0, {
+    if (wd === 5 && studyFocused.length) restActs.splice(2, 0, {
       t: 'Optional',
       title: `Study: ${focoLabel}`,
       d: `${studyDesc} Optional on Saturday Day off — skip it guilt-free; your streak stays protected.`,
@@ -7203,13 +7207,13 @@ function actividadesDelDia(wd, shiftKey, iso='') {
   if (sh.work && !esSabado) {
     const [ini, fin] = sh.work;
     if (ini >= 9) {
-      acts.push({ t: `6:40`, title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
-      if (ini >= 12 && focused.length) acts.push({ t: '8:30', title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' });
+      if (englishFocused) acts.push({ t: `6:40`, title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
+      if (ini >= 12 && studyFocused.length) acts.push({ t: '8:30', title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' });
     }
     acts.push({ t: `${ini}:00`, title: '💼 WORK (locked)', d: 'Work only — Softtek courses, or advance Coursera in free moments.', work: true, key: 'work' });
     let h = fin + 1;
-    if (ini < 9) { acts.push({ t: `${h}:00`, title: `English — ${ing}`, d: ingDesc, key: 'ingles' }); h += 1; }
-    if (focused.length) { acts.push({ t: `${h}:00`, title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' }); h += 1; }
+    if (ini < 9 && englishFocused) { acts.push({ t: `${h}:00`, title: `English — ${ing}`, d: ingDesc, key: 'ingles' }); h += 1; }
+    if (studyFocused.length) { acts.push({ t: `${h}:00`, title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' }); h += 1; }
     acts.push({ t: `${h}:00`, title: 'Gym 🏋️', d: 'Your iron hour. Don\'t negotiate it.', key: 'gym' }); h += 1;
     acts.push({ t: `${h}:30`, title: '📖 Read', d: 'Your pages for today. Advance the book you\'re reading. 📖', key: 'leer' });
     acts.push({ t: `${h}:45`, title: '🧴 Skincare PM', d: 'Night routine: cleanse, niacinamide serum, moisturizer. Close the day clean. 🧴', key: 'skincare' });
@@ -7218,10 +7222,10 @@ function actividadesDelDia(wd, shiftKey, iso='') {
       ? { t: 'Sleep', title: '🌙 Hunter Rest', d: 'Protect your sleep window and close the day. Recovery is part of the training.', key: 'dormir' }
       : { t: 'Sleep', title: 'Off to bed', d: 'Sleeping well is a habit on your list. Protect it like a payment.', key: 'dormir' });
   } else if (shiftKey === 'sabado' || shiftKey === 'sabado11') {
-    acts.push({ t: '8:00', title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
+    if (englishFocused) acts.push({ t: '8:00', title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
     const [si, sf] = sh.work || [10, 18];
     acts.push({ t: `${si}:00`, title: '💼 WORK Saturday (locked)', d: 'Saturday shift. Gym and Habit pressure stay disabled, but your professional study route remains available.', work: true, key: 'work' });
-    if (focused.length) acts.push({ t: `${sf + 1}:00`, title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' });
+    if (studyFocused.length) acts.push({ t: `${sf + 1}:00`, title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' });
     acts.push({ t: 'Night', title: '📖 Read', d: 'Calm close — advance your book.', key: 'leer' });
     acts.push({ t: 'Night', title: '🧴 Skincare PM', d: 'Night routine: cleanse + serum + moisturizer.', key: 'skincare' });
     if(v170Active){
@@ -7229,8 +7233,8 @@ function actividadesDelDia(wd, shiftKey, iso='') {
       acts.push({ t: 'Sleep', title: '🌙 Hunter Rest', d: 'Protect your sleep window and close the day. Recovery is part of the training.', key: 'dormir' });
     }
   } else {
-    acts.push({ t: '6:40', title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
-    if (focused.length) acts.push({ t: '8:00', title: `DEEP study: ${focoLabel}`, d: studyDesc + ' Take advantage: day off = long project session.', key: 'estudio' });
+    if (englishFocused) acts.push({ t: '6:40', title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
+    if (studyFocused.length) acts.push({ t: '8:00', title: `DEEP study: ${focoLabel}`, d: studyDesc + ' Take advantage: day off = long project session.', key: 'estudio' });
     acts.push({ t: '11:00', title: 'Gym 🏋️', d: 'Train calmly, you have time.', key: 'gym' });
     acts.push({ t: 'Afternoon', title: 'Project / portfolio', d: 'Advance your project or a practice room.', key: 'proyecto' });
     acts.push({ t: 'Night', title: '📖 Read', d: 'Advance your book. Close the day.', key: 'leer' });
@@ -7598,7 +7602,7 @@ document.addEventListener('click', async (e) => {
   const removeA = e.target.closest('.remove-focus');
   if (removeA && removeA.dataset.career) {
     await api('/api/career', { body: { id: +removeA.dataset.career, field: 'active', value: 0 } });
-    toast('Focus removed. It will no longer appear in today\'s Study mission.');
+    toast('Focus removed. Its Life mission will no longer appear today.');
     load();
     return;
   }
@@ -7922,7 +7926,7 @@ document.addEventListener('click', async (e) => {
     // V120: choose exactly which active course advanced. Course progress does not alter
     // the career/Goal stage percentage; only explicit stage conquest does that.
     if (act === 'estudio') {
-      const focused = (S.careers || []).filter(x => Number(x.active) === 1).slice(0, 2);
+      const focused = (S.careers || []).filter(x => Number(x.active) === 1 && !/ingl|english/i.test(String(x.name || ''))).slice(0, 2);
       if (!focused.length) {
         toast('This Study mission is no longer in Focus. Refreshing Life.');
         await load();
