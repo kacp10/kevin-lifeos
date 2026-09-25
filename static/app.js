@@ -274,7 +274,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 179;
+const FRONT_V = 182;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -1265,12 +1265,27 @@ function getCustomCards() {
     return Array.isArray(cards) ? cards.filter(c => c && c.key && c.label) : [];
   } catch (e) { return []; }
 }
-function getPayMethods() {
+function hiddenCreditCards() {
+  const raw = ((S || {}).profile || {}).hidden_credit_cards;
+  if (!raw) return new Set();
+  try {
+    const keys = JSON.parse(raw);
+    return new Set(Array.isArray(keys) ? keys.map(String) : []);
+  } catch (e) { return new Set(); }
+}
+function allPayMethods() {
   const custom = getCustomCards().map(c => ({ id: c.creditor || c.key, label: `${c.label} (credit)`, logo: '💳', card: true, creditor: c.creditor || c.key, boss: c.boss || c.key }));
   const seen = new Set();
   return [...PAY_METHODS, ...custom].filter(m => !seen.has(m.id) && seen.add(m.id));
 }
-const payMethod = (id) => getPayMethods().find(m => m.id === id) || PAY_METHODS[0];
+function getPayMethods() {
+  // V182: ocultar una tarjeta en My credit cards es solo una preferencia visual.
+  // La tarjeta continúa disponible para compras, servicios y demás flujos financieros.
+  return allPayMethods();
+}
+// Existing records must still resolve their original method even if a paid-off card
+// was retired from the selectable UI. This protects service/history rendering.
+const payMethod = (id) => allPayMethods().find(m => m.id === id) || PAY_METHODS[0];
 // Hunter Supply Request deliberately keeps its payment choice focused on the methods
 // requested for real shopping. Other Life/Services payment methods remain untouched.
 function shoppingPayMethods() {
@@ -2753,11 +2768,23 @@ function currentPaymentMonthKey() {
 }
 // V172: un servicio solo es realmente pendiente si requiere pago manual y
 // todavía NO fue marcado en el Monthly payment checklist del mes actual.
+function serviceCardPurchaseForMonth(service, monthKeyValue) {
+  if (!service || !monthKeyValue) return null;
+  return (S.compras || []).find(c =>
+    String(c.source_type || '') === 'service' &&
+    Number(c.source_id) === Number(service.id) &&
+    String(c.source_month || '') === String(monthKeyValue)
+  ) || null;
+}
+function serviceCardMethodForMonth(service, monthKeyValue) {
+  const purchase = serviceCardPurchaseForMonth(service, monthKeyValue);
+  if (!purchase) return null;
+  return getPayMethods().find(m => m.card && String(m.creditor || m.id) === String(purchase.creditor || '')) || null;
+}
 function servicePendingThisMonth(service, monthKeyValue = currentPaymentMonthKey()) {
   if (!service) return false;
   if (service.method === 'Fondo') return false;
-  const method = payMethod(service.method);
-  if (method.card) return false; // ya queda cubierto por la deuda real de la tarjeta
+  if (serviceCardPurchaseForMonth(service, monthKeyValue)) return false; // solo está cubierto si ESTE mes tiene cargo real
   const checks = new Set(S.checks || []);
   return !checks.has(`${service.name}|${monthKeyValue}`);
 }
@@ -3664,24 +3691,28 @@ function renderChecklist(i, deudas) {
   const checks = new Set(S.checks);
   // fila de servicio (editable): objeto {id,name,amount,method,payday}
   const svcRow = (s) => {
-    const m = payMethod(s.method);
-    // Servicio pagado con TARJETA DE CRÉDITO: ya está en la deuda de la tarjeta.
-    // Se muestra como "💳 en tarjeta" — cuenta como cubierto, no se marca a mano y NO toca el income.
-    if (m.card) {
+    const paid = checks.has(`${s.name}|${mk}`);
+    const monthCardMethod = serviceCardMethodForMonth(s, mk);
+    // V180: la tarjeta mostrada pertenece al MES, no a la configuración permanente
+    // del servicio. Un mes futuro sin cargo real debe verse completamente limpio.
+    if (monthCardMethod) {
       return `<div class="check-item on-card" data-item="${s.name}" data-mk="${mk}" data-oncard="1">
-        <div class="box card-box-mini" title="Paid on card — already in your card debt">💳</div>
+        <div class="box card-box-mini" title="Paid on card this month — already in your card debt">💳</div>
         <div class="cmid">
           <span class="cname">${esc(s.name)} <button class="svc-edit" data-id="${s.id}" title="Edit">✎</button></span>
-          <small>${m.logo} ${esc(s.method)} · on card <span class="oncard-tag">won't touch your salary</span></small>
+          <small>${monthCardMethod.logo} ${esc(monthCardMethod.label)} · on card this month <span class="oncard-tag">won't touch your salary</span></small>
         </div>
         <span class="cval">${fmt(s.amount)}</span></div>`;
     }
-    const paid = checks.has(`${s.name}|${mk}`);
+    const configured = payMethod(s.method);
+    const status = paid
+      ? (configured.card ? 'Paid this month' : `${configured.logo} ${esc(s.method || '')} · paid this month`)
+      : `Pending this month${s.payday ? ` · ${esc(s.payday)}` : ''}`;
     return `<div class="check-item ${paid ? 'paid' : ''}" data-item="${s.name}" data-mk="${mk}">
       <div class="box">${paid ? '✓' : ''}</div>
       <div class="cmid">
         <span class="cname">${esc(s.name)} <button class="svc-edit" data-id="${s.id}" title="Edit">✎</button></span>
-        <small>${m.logo} ${esc(s.method || '—')} · ${esc(s.payday || '')}</small>
+        <small>${status}</small>
       </div>
       <span class="cval">${fmt(s.amount)}</span></div>`;
   };
@@ -3725,9 +3756,9 @@ function renderChecklist(i, deudas) {
     })).join('')}</div>` : '';
   $('#checkDeudas').innerHTML = deudas.map(d => debtRow(d)).join('') + pendingHtml;
   const total = serviciosVisibles.length + deudas.length + pending.length;
-  // "pagados" = marcados con check + servicios en tarjeta (que cuentan como cubiertos solos)
+  // "pagados" = checks reales del mes + servicios que tienen un cargo de tarjeta REAL en ese mes.
   const marcados = [...checks].filter(c => c.endsWith('|' + mk)).length;
-  const enTarjeta = serviciosVisibles.filter(s => payMethod(s.method).card && !checks.has(`${s.name}|${mk}`)).length;
+  const enTarjeta = serviciosVisibles.filter(s => serviceCardPurchaseForMonth(s, mk) && !checks.has(`${s.name}|${mk}`)).length;
   const done = marcados + enTarjeta;
   $('#checkCount').textContent = `${done} / ${total} paid`;
 
@@ -3745,7 +3776,7 @@ function renderIncomeBar(i, mk, deudas) {
   let pagado = 0;
   for (const s of (S.servicios || [])) {
     if (s.method === 'Fondo') continue;
-    if (payMethod(s.method).card) continue;           // tarjeta de crédito: no toca el income
+    if (serviceCardPurchaseForMonth(s, mk)) continue; // solo un cargo real de ESTE mes queda fuera del income
     if (checks.has(`${s.name}|${mk}`)) pagado += s.amount;
   }
   for (const d of deudas) if (checks.has(`${d[0]}|${mk}`)) pagado += d[1];
@@ -3889,10 +3920,11 @@ const BASE_TARJETAS = [
   { key: 'Tarjeta Nicole', label: 'Tarjeta Nicole', boss: 'Tarjeta Nicole', creditor: 'Tarjeta Nicole', accent: 'violet', code: '0917' }
 ];
 function misTarjetas() {
+  const hidden = hiddenCreditCards();
   return [...BASE_TARJETAS, ...getCustomCards().map((c, i) => ({
     key: c.key, label: c.label, boss: c.boss || c.key, creditor: c.creditor || c.key,
     accent: c.accent || 'violet', code: String(6200 + i).slice(-4), custom: true
-  }))];
+  }))].filter(c => !hidden.has(String(c.key)));
 }
 // ===== DAVIVIENDA — TRACKER DE AMORTIZACIÓN REAL =====
 // Se guarda en profile (clave amort_dav) como JSON. No toca la lógica del jefe ni el desglose.
@@ -4069,7 +4101,8 @@ function renderMyCards() {
             <h3><span aria-hidden="true">💳</span> ${esc(t.label)}</h3></div>
           <div class="hunter-card-actions">
             <span class="hunter-card-risk">${riskLabel}</span>
-            <button class="card-cupo-edit" data-key="${esc(t.key)}" data-cupo="${cupo}" title="Set / raise the limit">✎</button>
+            <button class="card-cupo-edit" data-key="${esc(t.key)}" data-cupo="${cupo}" title="Set / raise the limit" aria-label="Edit ${esc(t.label)} limit">✎</button>
+            <button class="card-remove-btn" data-key="${esc(t.key)}" data-label="${esc(t.label)}" data-creditor="${esc(t.creditor)}" data-boss="${esc(t.boss)}" data-saldo="${saldo}" title="Remove card" aria-label="Remove ${esc(t.label)}">×</button>
           </div>
         </header>
         <div class="hunter-card-limit">${cupo ? `LIMIT <strong>${fmt(cupo)}</strong>` : 'SET YOUR LIMIT WITH ✎'}</div>
@@ -4340,6 +4373,27 @@ document.addEventListener('click', async (e) => {
   });
 });
 
+// V182: la X es únicamente una preferencia visual de My credit cards.
+// No desactiva la tarjeta, no toca saldo, compras, servicios, pagos ni opciones financieras.
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.card-remove-btn');
+  if (!btn) return;
+  const label = btn.dataset.label || btn.dataset.key || 'this card';
+  const key = String(btn.dataset.key || btn.dataset.creditor || '');
+  if (!key) return;
+  const ok = await confirmModal(
+    'Hide card from panel',
+    `<b>${esc(label)}</b> will be hidden only from My credit cards.<br><br>The card, its balance, purchases, services, payments, breakdown and history will keep working normally.`,
+    true
+  );
+  if (!ok) return;
+  const hidden = hiddenCreditCards();
+  hidden.add(key);
+  await api('/api/profile', { body: { key: 'hidden_credit_cards', value: JSON.stringify([...hidden]) } });
+  toast(`${label} hidden from My credit cards`);
+  await load();
+});
+
 // Editar / subir el cupo de una de TUS tarjetas
 document.addEventListener('click', async (e) => {
   const ed = e.target.closest('.card-cupo-edit');
@@ -4504,19 +4558,16 @@ function renderDesglose() {
     const pagados = checksPagadosDeGrupo(g);
     filas[g] = items.map(it => calcItem(it, i, { esNomina, pagados: it[8] ? detallePagosDesdeRefinanciacion(g, it) : pagados }));
   }
-  // V179: historical card data had two representations (boss money vs detail schedule).
-  // Do not rewrite old history. Instead, reconcile the detail group to the canonical
-  // monetary base balance with an explicit audit row. Positive = old balance not itemized;
-  // negative = real historical payments that were never assigned to one detail line.
-  for (const creditor of ['ADDI', 'Codensa', 'Banco de Bogotá', 'Tarjeta Nicole']) {
+  // V181: Codensa no longer uses a synthetic reconciliation row; its visible
+  // obligations are the balance shown above. Cards already verified as aligned keep
+  // the V179 reconciliation behavior to avoid changing working financial flows.
+  for (const creditor of ['ADDI', 'Banco de Bogotá', 'Tarjeta Nicole']) {
     const fc = financeCardByCreditor(creditor);
     if (!fc || !filas[creditor]) continue;
     const target = Number(fc.base_balance || 0);
     const current = filas[creditor].reduce((sum, row) => sum + Number(row.saldo || 0), 0);
     const diff = target - current;
     if (target <= 0) {
-      // The card base is fully paid. Old schedule rows remain in the database for
-      // history but disappear from the active breakdown; no fictitious negative row.
       for (const row of filas[creditor]) {
         if (row.saldo > 0) { row.saldo = 0; row.cuota = 0; row.done = true; }
       }
@@ -5939,8 +5990,14 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 24. V177 Focus-Driven Daily Missions & Recovery Dedup: Life solo muestra la misión Study cuando existe al menos un Career en Focus y admite hasta dos Focus simultáneos. Quitar un Career de Focus lo elimina de la misión diaria sin fallback al primer Career. Recovery es una misión por actividad, no por hábito: Study puede seguir alimentando Study and hard work, Mathematic / Data y Writing, pero aparece una sola vez en Pending Missions y al completarse restaura todos sus hábitos vinculados.
 25. V178 English Focus Integration: English conserva exclusivamente su misión especializada de Language Hunter. Estar en Focus controla si la misión English aparece en Life, pero English nunca se convierte además en Study ni duplica tareas. Study se genera solo con Career Focus que no sean English; quitar English de Focus retira su misión diaria sin alterar conceptos, pasos, reportes ni progreso del módulo Language Hunter.
 26. V179 Canonical Financial Alignment: las cinco tarjetas personales deben usar saldo monetario real como fuente de verdad. My Credit Cards y Debt Boss muestran el mismo saldo vigente; Full debt breakdown explica ese saldo y cualquier diferencia histórica no atribuible a una línea se muestra como reconciliación explícita en vez de inventar pagos. Cambiar de mes solo cambia qué cuota vence o se proyecta y nunca reduce capital. Las compras bajan únicamente por abonado real; rediferir una compra usa su saldo monetario pendiente. Davivienda conserva amortización separada, pero pagos desde My Credit Cards reducen su capital real.
+27. V180 Monthly Service Payment State: Life & services debe mostrar el estado de pago por mes, no reutilizar visualmente el método permanente del servicio. Una tarjeta solo aparece como pagada/cubierta cuando existe un cargo real de ese servicio para el mes seleccionado. Al cambiar a un mes sin check ni cargo, la fila queda pendiente y limpia, sin tarjeta arrastrada. La configuración del servicio y los cargos históricos se conservan; no se duplican compras.
+28. V181 Codensa Breakdown Alignment: Codensa toma como saldo superior exactamente las obligaciones activas visibles en Full debt breakdown más sus compras pendientes, sin la resta sintética de pagos históricos no asignados. X, abonos individuales, checks de Home, Pay this card y rediferidos deben reflejarse en ese mismo saldo y liberar cupo. ADDI, Banco de Bogotá, Tarjeta Nicole y Davivienda conservan sus flujos V179/V171 ya validados.
+29. V182 My Credit Cards Panel Visibility: la X de una tarjeta únicamente la oculta del panel My credit cards. No exige saldo cero, no desactiva la tarjeta y no altera compras, servicios, Home, Debt Boss, Full debt breakdown, pagos, rediferidos, historial ni disponibilidad como medio de pago.
 
-ESTADO ACTUAL DEL PROYECTO - V179 CANONICAL FINANCIAL ALIGNMENT:
+ESTADO ACTUAL DEL PROYECTO - V181 FINANCIAL BREAKDOWN ALIGNMENT & CARD RETIREMENT:
+- V181 elimina únicamente para Codensa la conciliación histórica sintética y hace que My credit cards / Debt Boss utilicen su suma pendiente real del desglose más compras pendientes. Las demás tarjetas conservan la lógica ya validada.
+- V182 redefine la X de My credit cards como una preferencia estrictamente visual: puede ocultar una tarjeta del panel aunque tenga saldo o servicios, sin modificar ninguna operación financiera ni quitarla de los medios de pago.
+- V180 desacopla la configuración permanente de un servicio del estado visual mensual: Life & services solo muestra una tarjeta si existe un cargo real de ese servicio en el mes seleccionado; meses sin check/cargo aparecen limpios y pendientes.
 - V179 establece una fuente monetaria canónica para las cinco tarjetas: deuda base pendiente + compras pendientes. My Credit Cards y Debt Boss consumen ese mismo saldo.
 - Full debt breakdown mantiene las líneas históricas sin borrarlas ni reescribir pagos antiguos; cuando el historial viejo no permite atribuir con precisión un pago a una línea, muestra una fila de reconciliación explícita para que la suma del grupo coincida exactamente con el saldo real.
 - El selector de mes ya no paga capital por el simple paso del tiempo. Solo cambia qué cuota corresponde al mes; el saldo disminuye únicamente mediante abonos/pagos reales.
