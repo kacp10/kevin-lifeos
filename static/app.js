@@ -261,7 +261,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 176;
+const FRONT_V = 177;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -5884,10 +5884,13 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 21. V174 Hunter Code: Hunter Profile incluye un botón desplegable HUNTER CODE · PERSONAL LAWS con 41 principios permanentes en español e inglés, agrupados por fe, dominio propio, familia/honor, carácter, relaciones, cuerpo/orden, propósito/trabajo y crecimiento. Son principios de referencia, no hábitos, checks, puntos ni progreso; no deben alterar Habits ni Routine.
 22. V175 Card Rescheduling and Debt Payment Sync: Davivienda, Codensa, Banco de Bogotá y ADDI pueden rediferir juntas todas sus cuotas vigentes desde un mes elegido por el usuario y conservar 🔄 individual de cada línea. Los pagos históricos y sus referencias de reversión se conservan; seguros/manejo permanecen fuera del capital. Eliminar una línea original de estas tarjetas retira también su saldo pendiente del jefe, sin inventar un pago. Home Debt payments toma el detalle real, nunca plan estático residual para estas tarjetas.
 23. V176 Card Rescheduling Production Schema Hotfix: la autorreparación de esquema de tarjetas incluye refinance_baseline y check_offset sin depender del marcador histórico V171, permitiendo que bases PostgreSQL existentes redifieran sin error 500. Each debt, its own bar expone 🔄 directo para Davivienda, Codensa, Banco de Bogotá y ADDI, reutilizando el mismo flujo global; Full debt breakdown conserva rediferido individual por línea y cambio de mes.
+24. V177 Focus-Driven Daily Missions & Recovery Dedup: Life solo muestra la misión Study cuando existe al menos un Career en Focus y admite hasta dos Focus simultáneos. Quitar un Career de Focus lo elimina de la misión diaria sin fallback al primer Career. Recovery es una misión por actividad, no por hábito: Study puede seguir alimentando Study and hard work, Mathematic / Data y Writing, pero aparece una sola vez en Pending Missions y al completarse restaura todos sus hábitos vinculados.
 
-ESTADO ACTUAL DEL PROYECTO - V176 CARD RESCHEDULING PRODUCTION SCHEMA HOTFIX:
-- V176 corrige compatibilidad de bases existentes para rediferido global, mantiene intacto el rediferido individual y añade acceso directo al rediferido total desde Each debt, its own bar en las cuatro tarjetas autorizadas.
-- Reglas: no reconstruir pagos históricos; la refinanciación global es atómica y preserva allocations de V171. La refinanciación Davivienda continúa usando amortización separada con fecha y offset de checks.
+ESTADO ACTUAL DEL PROYECTO - V177 FOCUS-DRIVEN DAILY MISSIONS & RECOVERY DEDUP:
+- V177 elimina el fallback de Study al primer Career: Life solo inyecta Study cuando hay Focus real, permite hasta dos Career Focus simultáneos y quitar Focus retira esa ruta de la misión diaria.
+- Recovery se consolida por actividad: una misión Study pendiente aparece una sola vez aunque al completarse restaure varios Habits vinculados.
+- V176 mantiene compatibilidad de bases existentes para rediferido global y conserva rediferido total/individual de tarjetas.
+- Reglas financieras heredadas: no reconstruir pagos históricos; la refinanciación global es atómica y preserva allocations de V171. La refinanciación Davivienda continúa usando amortización separada con fecha y offset de checks.
 
 ESTADO HEREDADO - V174 HUNTER CODE:
 - Hunter Profile ahora incluye Hunter Code como panel compacto y desplegable con 41 leyes personales bilingües; debe seguir siendo responsive y no convertirse en un sistema de puntos o checks.
@@ -6557,7 +6560,12 @@ let recoverySyncFailedFor = '';
 function recoveryRows() { return Array.isArray(S?.habit_recoveries) ? S.habit_recoveries : []; }
 function recoveryPending() { return recoveryRows().filter(x => x.status === 'pending' || x.status === 'scheduled'); }
 function recoveryOpenForHabit(habitId) {
-  return recoveryRows().filter(x => Number(x.habit_id) === Number(habitId) && (x.status === 'pending' || x.status === 'scheduled'));
+  const habit=(S.habits||[]).find(h=>Number(h.id)===Number(habitId));
+  return recoveryRows().filter(x => {
+    if (!(x.status === 'pending' || x.status === 'scheduled')) return false;
+    if (Number(x.habit_id) === Number(habitId)) return true;
+    return habit ? habitosDeActividad(x.activity, x.original_day).includes(habit.name) : false;
+  });
 }
 function recoveryDebtCount(habitId) {
   const rest = lifeRestDates();
@@ -6635,7 +6643,7 @@ function expectedRecoveryMissions(scanDays=7) {
     const iso=daysAgoISO(n), wd=weekdayFromISO(iso);
     const weekly=(S.shifts||{})[wd]||'libre';
     const shiftKey=isLifeRestDate(iso)?'descanso':weekly;
-    if(shiftKey==='descanso') continue; // REST is sacred: no obligations and no pending missions.
+    if(shiftKey==='descanso') continue;
     const plan=actividadesDelDia(wd,shiftKey,iso);
     if(plan.rest) continue;
     const acts=(plan.acts||[]).filter(a=>!hiddenWeek.has(`${wd}|${a.key}`)&&!hiddenDay.has(`${iso}|${a.key}`));
@@ -6643,13 +6651,13 @@ function expectedRecoveryMissions(scanDays=7) {
     extras.forEach(x=>acts.push({key:'extra_'+x.id,title:x.title||'Extra activity'}));
     const seen=new Set();
     for(const act of acts){
-      const names=habitosDeActividad(act.key, iso);
-      for(const habitName of names){
-        const habit=(S.habits||[]).find(h=>h.name===habitName); if(!habit) continue;
-        const sig=`${habit.id}|${iso}|${act.key}`; if(seen.has(sig)) continue; seen.add(sig);
-        if(marks.has(`${habit.id}|${iso}`)||done.has(`${iso}|${act.key}`)) continue;
-        out.push({habit_id:habit.id,original_day:iso,activity:act.key,title:act.title||habit.name});
-      }
+      if(done.has(`${iso}|${act.key}`)) continue;
+      const names=[...new Set(habitosDeActividad(act.key, iso))];
+      const habitIds=names.map(name=>(S.habits||[]).find(h=>h.name===name)?.id).filter(Boolean);
+      if(!habitIds.length) continue;
+      const sig=`${iso}|${act.key}`; if(seen.has(sig)) continue; seen.add(sig);
+      if(habitIds.every(id=>marks.has(`${id}|${iso}`))) continue;
+      out.push({habit_id:habitIds[0],habit_ids:habitIds,original_day:iso,activity:act.key,title:act.title||names[0]||'Habit mission'});
     }
   }
   return out;
@@ -7142,7 +7150,7 @@ function renderCareer() {
       <div class="peldano-row">${dots}</div>
       <div class="mini-bar green career-overall-bar"><i style="width:${prog}%"></i></div>
       ${esIngles ? `<section class="career-stage-head english-career-stage"><div><span>IMMERSION PATH</span><h3>${PELDANOS[step] || 'Professional'}</h3><p>Progress comes from completed English training days; CEFR level is verified through assessments.</p></div><a class="btn-ghost english-panel-link" href="#englishPanel">Open English mastery</a></section><div class="eng-auto">🔥 <b>${diasIng} days</b> of English practice logged · <b>${prog}%</b> training progress.</div>` : `<section class="career-stage-head"><div><span>STEP ${step + 1}</span><h3>${PELDANOS[step]}</h3><p>${STEP_DESC[step] || ''}</p></div><button class="advance-career-stage ${completedPath ? 'done' : ''}" data-advance-stage="${c.id}" ${completedPath ? 'disabled' : ''}>${completedPath ? '✓ Path conquered' : nextLabel}</button></section><section class="career-active-courses"><div class="career-section-title"><div><span>ACTIVE COURSES</span><b>${PELDANOS[step]} training · ${careerActiveCourses.length}/5</b></div><div class="career-route-actions"><button class="planned-courses-btn" data-planned-courses="${c.id}" title="Courses waiting in the route"><span class="planned-courses-icon" aria-hidden="true">▤</span><span>Planned</span>${plannedForCareer(c.id).length?`<b class="planned-courses-count">${plannedForCareer(c.id).length}</b>`:''}</button><button class="route-tutor-btn" data-route-tutor="${c.id}" title="Career Route Tutor">🧭 Tutor</button><button class="add-active-course" data-add-active-course="${c.id}" ${careerActiveCourses.length>=5?'disabled title="Maximum 5 active courses"':''}>＋ Add course</button></div></div>${activeHtml}</section>`}
-      <footer class="career-foot">${c.active ? '<span class="active-badge">★ Active focus</span>' : `<button class="set-active" data-career="${c.id}">Set as focus</button>`}<button class="del-x" data-type="career" data-id="${c.id}" title="Delete career">✕</button></footer>
+      <footer class="career-foot">${c.active ? `<button class="active-badge remove-focus" data-career="${c.id}" title="Remove from Life daily focus">★ Active focus · Remove</button>` : `<button class="set-active" data-career="${c.id}">Set as focus</button>`}<button class="del-x" data-type="career" data-id="${c.id}" title="Delete career">✕</button></footer>
       ${esIngles ? '' : `<section class="career-courses"><b class="mini-title">Finished courses</b>${finishedHtml}</section>`}
     </article>`;
   };
@@ -7151,14 +7159,16 @@ function renderCareer() {
 function actividadesDelDia(wd, shiftKey, iso='') {
   const v170Active = !iso || iso >= V170_ACTIVITY_EFFECTIVE_DAY;
   const sh = SHIFTS[shiftKey] || SHIFTS.libre;
-  const active = (S.careers || []).find(c => c.active) || (S.careers || [])[0];
-  const focoLabel = active ? `${active.icon || ''} ${active.name}` : 'Study';
+  const focused = (S.careers || []).filter(c => Number(c.active) === 1).slice(0, 2);
+  const focoLabel = focused.length
+    ? focused.map(c => `${c.icon || ''} ${c.name}`.trim()).join(' + ')
+    : '';
   const _ingPlan = INGLES_PLAN[wd] || INGLES_PLAN[0];
   const ing = _ingPlan.title;                                   // ej: "🗣 Speaking day"
   const ingDesc = _ingPlan.steps.map((st, i) => `${i + 1}) ${st.s}`).join('  ');  // pasos cortos numerados
-  const studyDesc = active
-    ? `Choose one active ${active.name} course, advance it and take notes.`
-    : 'Advance one active course + take notes.';
+  const studyDesc = focused.length
+    ? `Choose one active course from ${focused.map(c => c.name).join(' or ')}, advance it and take notes.`
+    : '';
 
   if (shiftKey === 'descanso') {
     const restActs = [
@@ -7169,7 +7179,7 @@ function actividadesDelDia(wd, shiftKey, iso='') {
     ];
     // Saturday study stays available even on Day off, but the rest date remains
     // neutral: ignoring this optional session never harms Habits or streaks.
-    if (wd === 5) restActs.splice(2, 0, {
+    if (wd === 5 && focused.length) restActs.splice(2, 0, {
       t: 'Optional',
       title: `Study: ${focoLabel}`,
       d: `${studyDesc} Optional on Saturday Day off — skip it guilt-free; your streak stays protected.`,
@@ -7194,12 +7204,12 @@ function actividadesDelDia(wd, shiftKey, iso='') {
     const [ini, fin] = sh.work;
     if (ini >= 9) {
       acts.push({ t: `6:40`, title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
-      if (ini >= 12) acts.push({ t: '8:30', title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' });
+      if (ini >= 12 && focused.length) acts.push({ t: '8:30', title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' });
     }
     acts.push({ t: `${ini}:00`, title: '💼 WORK (locked)', d: 'Work only — Softtek courses, or advance Coursera in free moments.', work: true, key: 'work' });
     let h = fin + 1;
     if (ini < 9) { acts.push({ t: `${h}:00`, title: `English — ${ing}`, d: ingDesc, key: 'ingles' }); h += 1; }
-    acts.push({ t: `${h}:00`, title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' }); h += 1;
+    if (focused.length) { acts.push({ t: `${h}:00`, title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' }); h += 1; }
     acts.push({ t: `${h}:00`, title: 'Gym 🏋️', d: 'Your iron hour. Don\'t negotiate it.', key: 'gym' }); h += 1;
     acts.push({ t: `${h}:30`, title: '📖 Read', d: 'Your pages for today. Advance the book you\'re reading. 📖', key: 'leer' });
     acts.push({ t: `${h}:45`, title: '🧴 Skincare PM', d: 'Night routine: cleanse, niacinamide serum, moisturizer. Close the day clean. 🧴', key: 'skincare' });
@@ -7211,7 +7221,7 @@ function actividadesDelDia(wd, shiftKey, iso='') {
     acts.push({ t: '8:00', title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
     const [si, sf] = sh.work || [10, 18];
     acts.push({ t: `${si}:00`, title: '💼 WORK Saturday (locked)', d: 'Saturday shift. Gym and Habit pressure stay disabled, but your professional study route remains available.', work: true, key: 'work' });
-    acts.push({ t: `${sf + 1}:00`, title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' });
+    if (focused.length) acts.push({ t: `${sf + 1}:00`, title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' });
     acts.push({ t: 'Night', title: '📖 Read', d: 'Calm close — advance your book.', key: 'leer' });
     acts.push({ t: 'Night', title: '🧴 Skincare PM', d: 'Night routine: cleanse + serum + moisturizer.', key: 'skincare' });
     if(v170Active){
@@ -7220,7 +7230,7 @@ function actividadesDelDia(wd, shiftKey, iso='') {
     }
   } else {
     acts.push({ t: '6:40', title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
-    acts.push({ t: '8:00', title: `DEEP study: ${focoLabel}`, d: studyDesc + ' Take advantage: day off = long project session.', key: 'estudio' });
+    if (focused.length) acts.push({ t: '8:00', title: `DEEP study: ${focoLabel}`, d: studyDesc + ' Take advantage: day off = long project session.', key: 'estudio' });
     acts.push({ t: '11:00', title: 'Gym 🏋️', d: 'Train calmly, you have time.', key: 'gym' });
     acts.push({ t: 'Afternoon', title: 'Project / portfolio', d: 'Advance your project or a practice room.', key: 'proyecto' });
     acts.push({ t: 'Night', title: '📖 Read', d: 'Advance your book. Close the day.', key: 'leer' });
@@ -7479,7 +7489,10 @@ function renderRoutineDay() {
   if(reopen){
     if(!await confirmModal('Redo this recovery correctly','Return this mission to Pending so you can add it to Life and complete its full normal modal flow? The automatic check created by the old recovery will be removed safely.')) return;
     try{
-      const r=await api(`/api/recovery/${reopen.dataset.recoveryReopen}/reopen`,{body:{}});
+      const targetRecovery=recoveryRows().find(x=>Number(x.id)===Number(reopen.dataset.recoveryReopen));
+      const recoveryHabitIds=targetRecovery ? habitosDeActividad(targetRecovery.activity,targetRecovery.original_day)
+        .map(name=>(S.habits||[]).find(h=>h.name===name)?.id).filter(Boolean) : [];
+      const r=await api(`/api/recovery/${reopen.dataset.recoveryReopen}/reopen`,{body:{habit_ids:recoveryHabitIds}});
       S.habit_recoveries = recoveryRows().map(x => Number(x.id)===Number(reopen.dataset.recoveryReopen) ? r.recovery : x);
       recoverySyncedFor='';
       toast('Mission returned to Pending. Use Recover today, then complete its full Life flow.');
@@ -7572,7 +7585,23 @@ document.addEventListener('change', async (e) => {
 // Carreras: set active, add career, add course
 document.addEventListener('click', async (e) => {
   const setA = e.target.closest('.set-active');
-  if (setA && setA.dataset.career) { await api('/api/career', { body: { id: +setA.dataset.career, field: 'active', value: 1 } }); toast('★ Focus updated'); load(); return; }
+  if (setA && setA.dataset.career) {
+    try {
+      await api('/api/career', { body: { id: +setA.dataset.career, field: 'active', value: 1 } });
+      toast('★ Added to Focus');
+      load();
+    } catch (err) {
+      toast(err.message || 'Could not update Focus.', 'err');
+    }
+    return;
+  }
+  const removeA = e.target.closest('.remove-focus');
+  if (removeA && removeA.dataset.career) {
+    await api('/api/career', { body: { id: +removeA.dataset.career, field: 'active', value: 0 } });
+    toast('Focus removed. It will no longer appear in today\'s Study mission.');
+    load();
+    return;
+  }
 
   if (e.target.id === 'addCareerBtn') {
     const r = await modal({ icon: '🚀', title: 'Add a career',
@@ -7893,26 +7922,37 @@ document.addEventListener('click', async (e) => {
     // V120: choose exactly which active course advanced. Course progress does not alter
     // the career/Goal stage percentage; only explicit stage conquest does that.
     if (act === 'estudio') {
-      const active = (S.careers || []).find(x => x.active) || (S.careers || [])[0];
-      const courses = active ? (S.career_courses || []).filter(x => String(x.career_id) === String(active.id)) : [];
-      if (active && courses.length) {
-        const options = courses.map(x => ({v:String(x.id),t:`${x.title} · ${x.platform || 'Other'} · ${x.pct || 0}%`}));
-        const pick = await modal({icon:active.icon||'📊',title:`Study: ${active.name}`,text:'Which course did you advance today?',fields:[{type:'select',label:'Active course',options}],okText:'Continue'});
+      const focused = (S.careers || []).filter(x => Number(x.active) === 1).slice(0, 2);
+      if (!focused.length) {
+        toast('This Study mission is no longer in Focus. Refreshing Life.');
+        await load();
+        return;
+      }
+      const focusIds = new Set(focused.map(x => String(x.id)));
+      const courses = (S.career_courses || []).filter(x => focusIds.has(String(x.career_id)));
+      if (courses.length) {
+        const careerById = new Map(focused.map(x => [String(x.id), x]));
+        const options = courses.map(x => {
+          const career = careerById.get(String(x.career_id));
+          return {v:String(x.id),t:`${career?.name || 'Focus'} · ${x.title} · ${x.platform || 'Other'} · ${x.pct || 0}%`};
+        });
+        const pick = await modal({icon:'🎯',title:`Study: ${focused.map(x=>x.name).join(' + ')}`,text:'Which focused course did you advance today?',fields:[{type:'select',label:'Active course',options}],okText:'Continue'});
         if (pick === null) return;
         const course = courses.find(x => String(x.id) === String(pick[0]));
         if (!course) return;
+        const active = careerById.get(String(course.career_id));
         const r = await modal({icon:'📈',title:course.title,text:`Current progress: <b>${course.pct || 0}%</b><br>What percentage is this course at now?`,fields:[{type:'number',label:'Course progress %',value:course.pct||0,min:0,max:100}],okText:'Save & check ✓'});
         if (r === null) return;
         const nv=Math.max(0,Math.min(100,parseInt(String(r[0]).replace(/[^0-9]/g,''),10)||0));
         await api('/api/career/course',{body:{id:course.id,field:'pct',value:nv}});
         toast(`📈 ${course.title} updated to ${nv}%. Career stage progress stays unchanged.`);
         await memoryCaptureStudySessionConcepts({
-          folder:memoryFolderFromCareer(active.name),
+          folder:memoryFolderFromCareer(active?.name || 'Study'),
           source:course.title,
-          tags:[active.name,course.title]
+          tags:[active?.name || 'Study',course.title]
         });
-      } else if (active) {
-        toast('Add an active course to this career before logging study progress.');
+      } else {
+        toast('Add an active course to one of your focused careers before logging study progress.');
         return;
       }
     }
@@ -7942,7 +7982,9 @@ document.addEventListener('click', async (e) => {
     if (recovery) {
       // The activity-specific flow above has really been completed. Only now
       // mark the ORIGINAL Habit date and preserve today as the recovery date.
-      await api(`/api/recovery/${recovery.id}/complete`, { body: { day, confirm_complete: true } });
+      const recoveryHabitIds=habitosDeActividad(recovery.activity, missionDay)
+        .map(name=>(S.habits||[]).find(h=>h.name===name)?.id).filter(Boolean);
+      await api(`/api/recovery/${recovery.id}/complete`, { body: { day, confirm_complete: true, habit_ids: recoveryHabitIds } });
       if (act === 'ingles') await saveLanguageSessionReport(missionWd);
       toast(`✓ Recovered ${recoveryDayLabel(missionDay)}. The original Habit check was restored.`);
       recoverySyncedFor = '';
