@@ -261,7 +261,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 175;
+const FRONT_V = 176;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -4122,10 +4122,20 @@ function renderBoss(animate) {
       const r = saldoDeudaConCompras(d);
       const w = tot ? (r / tot) * 100 : 0;
       const esTarjeta = TARJETAS_CREDITO.includes(d.name);
-      // las tarjetas/créditos se editan abajo (rediferir); los préstamos sí se editan/borran aquí
-      const botones = esTarjeta ? '' :
-        ` <button class="ed-core" data-id="${d.id}" title="Edit / adjust amount">✎</button>` +
-        ` <button class="del-x" data-type="debt" data-id="${d.id}" title="Borrar deuda">✕</button>`;
+      const redeferCreditor = ({
+        'Tarjeta DV — Jefe Final': 'Tarjeta DV',
+        'ADDI': 'ADDI',
+        'Codensa': 'Codensa',
+        'Banco de Bogotá': 'Banco de Bogotá'
+      })[d.name] || '';
+      // Estas cuatro tarjetas pueden rediferirse desde el boss y también conservar
+      // el control individual por línea en Full debt breakdown.
+      const botones = esTarjeta
+        ? (redeferCreditor
+          ? ` <button class="redefer-btn mini" data-type="card_all" data-name="${esc(redeferCreditor)}" title="Reschedule all outstanding installments">🔄</button>`
+          : '')
+        : ` <button class="ed-core" data-id="${d.id}" title="Edit / adjust amount">✎</button>` +
+          ` <button class="del-x" data-type="debt" data-id="${d.id}" title="Borrar deuda">✕</button>`;
       const banner = bossBanner(d.name);   // 🖼️ slot de imagen del jefe (si la subiste)
       // aura de haki: entre más cerca de derrotarlo (menos vida), más intensa el aura
       const hakiClass = w <= 15 ? 'haki-max' : (w <= 40 ? 'haki-mid' : '');
@@ -5873,9 +5883,10 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 20. V173 Language Hunter Flexible Import: el importador de LANGUAGE HUNTER SESSION REPORT debe aceptar tanto el formato legacy como reportes naturales con MAIN ISSUE, CORRECTIONS, USEFUL PHRASES, NEW WORDS FOR WORD HUNTER, HOMEWORK y APP LOG; encabezados con o sin dos puntos; correcciones separadas por →, ->, => o |; y bullets o numeración. Nunca debe perder Main issue o Corrections por diferencias triviales de formato.
 21. V174 Hunter Code: Hunter Profile incluye un botón desplegable HUNTER CODE · PERSONAL LAWS con 41 principios permanentes en español e inglés, agrupados por fe, dominio propio, familia/honor, carácter, relaciones, cuerpo/orden, propósito/trabajo y crecimiento. Son principios de referencia, no hábitos, checks, puntos ni progreso; no deben alterar Habits ni Routine.
 22. V175 Card Rescheduling and Debt Payment Sync: Davivienda, Codensa, Banco de Bogotá y ADDI pueden rediferir juntas todas sus cuotas vigentes desde un mes elegido por el usuario y conservar 🔄 individual de cada línea. Los pagos históricos y sus referencias de reversión se conservan; seguros/manejo permanecen fuera del capital. Eliminar una línea original de estas tarjetas retira también su saldo pendiente del jefe, sin inventar un pago. Home Debt payments toma el detalle real, nunca plan estático residual para estas tarjetas.
+23. V176 Card Rescheduling Production Schema Hotfix: la autorreparación de esquema de tarjetas incluye refinance_baseline y check_offset sin depender del marcador histórico V171, permitiendo que bases PostgreSQL existentes redifieran sin error 500. Each debt, its own bar expone 🔄 directo para Davivienda, Codensa, Banco de Bogotá y ADDI, reutilizando el mismo flujo global; Full debt breakdown conserva rediferido individual por línea y cambio de mes.
 
-ESTADO ACTUAL DEL PROYECTO - V175 CARD RESCHEDULING AND DEBT PAYMENT SYNC:
-- V175 agrega refinanciación global de cuatro tarjetas y conserva refinanciación por compra/cuota, selección de mes, pagos, cuotas de manejo y seguro sin duplicaciones. Home depende del detalle vigente. Un saldo real de la tarjeta superior a las líneas identificadas se conserva como fila separada para contrastarlo con el extracto.
+ESTADO ACTUAL DEL PROYECTO - V176 CARD RESCHEDULING PRODUCTION SCHEMA HOTFIX:
+- V176 corrige compatibilidad de bases existentes para rediferido global, mantiene intacto el rediferido individual y añade acceso directo al rediferido total desde Each debt, its own bar en las cuatro tarjetas autorizadas.
 - Reglas: no reconstruir pagos históricos; la refinanciación global es atómica y preserva allocations de V171. La refinanciación Davivienda continúa usando amortización separada con fecha y offset de checks.
 
 ESTADO HEREDADO - V174 HUNTER CODE:
