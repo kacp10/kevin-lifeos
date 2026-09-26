@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 182  # V182 My Credit Cards Panel Visibility
+VERSION = 183  # V183 Engineering Learning Focus
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -882,6 +882,43 @@ def init_db():
                 con.rollback()
             except Exception:
                 pass
+
+    # V183: recurring custom Life activities need a real activation boundary.
+    # Older rows never stored creation/effective date, which allowed a newly added
+    # activity to be projected backward and create Recovery debt for days before it existed.
+    try:
+        con.execute("ALTER TABLE routine_extra ADD COLUMN effective_from TEXT DEFAULT ''")
+        con.commit()
+    except Exception:
+        try:
+            con.rollback()
+        except Exception:
+            pass
+    try:
+        rows = con.execute("SELECT id,weekday,day,effective_from FROM routine_extra").fetchall()
+        today_key = date.today().isoformat()
+        for raw in rows:
+            row = dict(raw)
+            if str(row.get('effective_from') or '').strip():
+                continue
+            rid = int(row['id'])
+            explicit_day = str(row.get('day') or '').strip()[:10]
+            if explicit_day:
+                effective = explicit_day
+            else:
+                evidence = con.execute(
+                    "SELECT MIN(day) AS first_day FROM routine_done WHERE activity=?",
+                    (f'extra_{rid}',)
+                ).fetchone()
+                first_day = str((dict(evidence).get('first_day') if evidence else '') or '').strip()[:10]
+                effective = first_day or today_key
+            con.execute("UPDATE routine_extra SET effective_from=? WHERE id=?", (effective, rid))
+        con.commit()
+    except Exception:
+        try:
+            con.rollback()
+        except Exception:
+            pass
 
     apply_migration(
         con, 'v145_recovery_state_repair',
@@ -3218,6 +3255,29 @@ def recovery_sync():
         warnings.append('activity_dedup_skipped')
         logger.warning('Recovery activity dedup skipped: %s', exc)
 
+    # V183: a custom activity cannot owe Recovery for a day before it existed.
+    # This also repairs legacy ghost rows caused by recurring activities being
+    # projected backward immediately after creation.
+    try:
+        custom_open = [dict(r) for r in d.execute("""
+            SELECT hr.id,hr.original_day,hr.activity,re.effective_from
+            FROM habit_recoveries hr
+            JOIN routine_extra re
+              ON hr.activity=('extra_' || CAST(re.id AS TEXT))
+            WHERE hr.status IN ('pending','scheduled','rest_exempt')
+        """).fetchall()]
+        for rec in custom_open:
+            effective = str(rec.get('effective_from') or '')[:10]
+            original = str(rec.get('original_day') or '')[:10]
+            if effective and original and original < effective:
+                d.execute('DELETE FROM habit_recoveries WHERE id=?', (rec['id'],))
+        d.commit()
+    except Exception as exc:
+        try: d.rollback()
+        except Exception: pass
+        warnings.append('custom_effective_date_repair_skipped')
+        logger.warning('Recovery custom effective-date repair skipped: %s', exc)
+
     # Recovery is activity-level, not habit-level. One Life mission can feed several
     # Habits, but it must appear only once in Pending Missions.
     for item in expected_map.values():
@@ -3941,10 +4001,12 @@ def routine_hide():
 @app.post('/api/routine_extra/new')
 def routine_extra_new():
     j = request.json
-    db().execute('INSERT INTO routine_extra (time, title, descr, weekday, day, habit, scheduled) VALUES (?,?,?,?,?,?,?)',
+    explicit_day = str(j.get('day') or '').strip()[:10]
+    effective_from = str(j.get('effective_from') or explicit_day or date.today().isoformat()).strip()[:10]
+    db().execute('INSERT INTO routine_extra (time, title, descr, weekday, day, habit, scheduled, effective_from) VALUES (?,?,?,?,?,?,?,?)',
                  (j.get('time', ''), j['title'].strip(), j.get('descr', ''),
-                  int(j.get('weekday', -1)), j.get('day', ''), j.get('habit', ''),
-                  1 if j.get('scheduled') else 0))
+                  int(j.get('weekday', -1)), explicit_day, j.get('habit', ''),
+                  1 if j.get('scheduled') else 0, effective_from))
     db().commit()
     return jsonify(ok=True)
 
