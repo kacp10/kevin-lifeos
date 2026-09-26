@@ -274,7 +274,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 182;
+const FRONT_V = 183;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -1489,7 +1489,7 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
     }
 
     // Nested dialogs must always render above the modal that opened them.
-    // This covers Memory Forge import/export previews, Expedition previews,
+    // This covers legacy study-source import/export previews, Expedition previews,
     // Language Hunter dialogs and any future modal opened from another modal.
     const openModalBacks = [...document.querySelectorAll('.modal-back.show')];
     if (openModalBacks.length) {
@@ -1499,7 +1499,7 @@ function modal({ icon = '⚔', title = '', text = '', fields = [], okText = 'Con
         return Number.isFinite(z) ? Math.max(highest, z) : highest;
       }, 1000);
       // .modal-back-stacked has an !important z-index in the stylesheet, so a
-      // normal inline assignment can still remain below Memory Forge (z-index 12000).
+      // normal inline assignment can still remain below the study bridge (z-index 12000).
       // Set the dynamic value as !important so every child dialog is truly on top.
       back.style.setProperty('z-index', String(highestZ + 20), 'important');
     } else if (document.querySelector('.language-mission-back')) {
@@ -4958,7 +4958,7 @@ $('#closeMonth').addEventListener('click', async (e) => {
 });
 
 
-/* ====== V152 · MEMORY FORGE & AI BRIDGE ====== */
+/* ====== V183 · NOTEBOOKLM STUDY BRIDGE (legacy storage key preserved) ====== */
 function memoryForgeRead() {
   try {
     const raw = JSON.parse((S.profile || {}).memory_forge_v1 || '{}');
@@ -4996,13 +4996,15 @@ function memoryDeckFor(folder='General') {
 }
 function memoryFolderFromCareer(name='') {
   const v=String(name||'').toLowerCase();
-  if(v.includes('data')||v.includes('anal')) return 'Data Analytics';
-  if(v.includes('program')||v.includes('software')||v.includes('developer')) return 'Programming';
+  if(v.includes('data')||v.includes('anal')) return 'Data & Analytics';
+  if(v.includes('backend')) return 'Backend';
+  if(v.includes('frontend')||v.includes('full stack')||v.includes('fullstack')) return 'Frontend';
+  if(v.includes('program')||v.includes('software')||v.includes('developer')) return 'Software Engineering';
   if(v.includes('cyber')||v.includes('ciber')||v.includes('security')) return 'Cybersecurity';
   return String(name||'Study').trim() || 'Study';
 }
 async function memoryCaptureConcept(prefill={}) {
-  const folders=['Data Analytics','Programming','Cybersecurity','Hunter Skill Academy','English','Other'];
+  const folders=['Software Engineering','Backend','Frontend','Data & Analytics','Databases','Cloud & DevOps','Cybersecurity','AI & ML','Hunter Skill Academy','English','Other'];
   const selected=folders.includes(prefill.folder)?prefill.folder:'Other';
   const r=await modal({icon:'🧠',title:'Save concept',text:'Capture only what is worth remembering. You can refine it later with the AI Bridge.',fields:[
     {type:'text',label:'Concept',value:prefill.concept||'',placeholder:'Example: Primary key'},
@@ -5025,7 +5027,7 @@ async function memoryCaptureConcept(prefill={}) {
     created_at:hoyLocal(), status:'raw'
   });
   await memoryForgeSave(state);
-  toast('🧠 Concept saved to Memory Forge.');
+  toast('Concept saved for NotebookLM.');
   return true;
 }
 
@@ -5033,14 +5035,14 @@ async function memoryCaptureStudySessionConcepts(prefill={}) {
   const start = await modal({
     icon:'🧠',
     title:'Save concepts from this session?',
-    text:'Optional. Add every concept worth remembering, one by one. Memory Forge will keep each concept as a separate study item.',
+    text:'Optional. Add every concept worth preserving, one by one. Kevin LifeOS will prepare them as structured NotebookLM source material.',
     okText:'＋ Add concepts',
     cancelText:'No concepts'
   });
   if (!start) return { saved:0, skipped:true };
 
   const pending=[];
-  const folders=['Data Analytics','Programming','Cybersecurity','Hunter Skill Academy','English','Other'];
+  const folders=['Software Engineering','Backend','Frontend','Data & Analytics','Databases','Cloud & DevOps','Cybersecurity','AI & ML','Hunter Skill Academy','English','Other'];
   const selected=folders.includes(prefill.folder)?prefill.folder:'Other';
 
   while (true) {
@@ -5114,7 +5116,7 @@ async function memoryCaptureStudySessionConcepts(prefill={}) {
     saved++;
   }
   if (saved) await memoryForgeSave(state);
-  toast(saved ? `🧠 ${saved} concept${saved===1?'':'s'} saved to Memory Forge.` : 'Those concepts were already saved.');
+  toast(saved ? `${saved} concept${saved===1?'':'s'} saved for NotebookLM.` : 'Those concepts were already saved.');
   return { saved, skipped:false };
 }
 
@@ -5158,112 +5160,71 @@ function memoryBridgePayload() {
   })).filter(x=>!processed.has(x.source_id)).slice(-180);
   return {
     generated_at:hoyLocal(),
-    folders:['English','Data Analytics','Programming','Cybersecurity','Hunter Skill Academy'],
+    folders:['English','Software Engineering','Backend','Frontend','Data & Analytics','Databases','Cloud & DevOps','Cybersecurity','AI & ML','Hunter Skill Academy'],
     english:memoryEnglishSources().filter(x=>!processed.has(x.source_id)),
     concepts,
     academy:memoryAcademySources().filter(x=>!processed.has(x.source_id))
   };
 }
-function memoryBridgePrompt() {
+function memoryNotebookSource() {
   const payload=memoryBridgePayload();
-  return `You are the Kevin LifeOS Memory Forge Bridge.
-
-GOAL
-Create extremely concise flashcards for AlgoApp. Preserve the learner's real errors and concepts. Never add long lessons.
-
-MANDATORY CARD TYPES
-
-1. ENGLISH ERROR
-Use when kind = "error".
-Front: the learner's exact incorrect sentence.
-Back: only the corrected sentence.
-Do not add a grammar explanation, label, heading, example, translation or note.
-Example:
-Front: In the next two days, I will watch a one video in English and work three sentences.
-Back: In the next two days, I will watch a short video in English and write three sentences.
-
-2. ENGLISH PHRASE
-Use when kind = "phrase".
-Front: the complete useful phrase exactly as it should be memorized.
-Back: one very short explanation of its meaning or use, maximum 12 words.
-Do not repeat the phrase. Do not add another example.
-Example:
-Front: In the next two days, I will watch a short video in English and write three sentences.
-Back: Use it to state a specific plan for the near future.
-
-3. ENGLISH WORD
-Use when kind = "word".
-Front: the English word, then its simple pronunciation on a second line.
-Back: only the concise Spanish meaning.
-No example, grammar note, part of speech, synonym or extra explanation.
-Example:
-Front: join\n/join/
-Back: unirse
-
-4. TECHNICAL OR HUNTER SKILL CONCEPT
-Use for Data Analytics, Programming, Cybersecurity and Hunter Skill Academy.
-Front: only the concept or one direct question about it.
-Back: only its shortest correct meaning, normally one sentence.
-No history, introduction, conclusion, extra example or list unless essential.
-Example:
-Front: Training data
-Back: Information used to teach a model patterns from examples.
-
-GLOBAL RULES
-- Create exactly ONE idea per card.
-- Keep the learner's original incorrect sentence unchanged on error-card fronts.
-- Never merge an error, phrase and vocabulary word into one card.
-- Never turn a whole conversation into a card.
-- Front maximum: 140 characters.
-- Back maximum: 140 characters.
-- Back normally one sentence; words use only a Spanish meaning.
-- Never use headings inside Front or Back such as "Correction:", "Meaning:", "Explanation:" or "Answer:".
-- Never repeat the Front in the Back.
-- Never invent missing facts, pronunciation or meaning. Skip unsupported cards.
-- Reject vague cards such as "Explain this" or "What did I learn?".
-- Split broad technical material into separate atomic cards.
-- Use only these decks: Kevin LifeOS::English, Kevin LifeOS::Data Analytics, Kevin LifeOS::Programming, Kevin LifeOS::Cybersecurity, Kevin LifeOS::Hunter Skill Academy.
-- Preserve every source_id used in source_ids.
-- Return VALID JSON ONLY. No markdown or commentary.
-
-OUTPUT SCHEMA
-{
-  "type":"memory_forge_import",
-  "cards":[{
-    "card_type":"error|phrase|word|concept",
-    "deck":"Kevin LifeOS::English",
-    "folder":"English",
-    "front":"",
-    "back":"",
-    "pronunciation":"",
-    "source":"",
-    "tags":[],
-    "source_ids":[]
-  }]
-}
-
-FINAL CHECK
-Delete any card when:
-1. It contains more than one idea.
-2. It adds information not present in the source.
-3. It exceeds 140 characters on either side.
-4. An error card contains anything besides the wrong sentence and correction.
-5. A word card contains anything besides word, pronunciation and Spanish meaning.
-6. A technical card can be stated more simply.
-
-INPUT
-${JSON.stringify(payload,null,2)}`;
+  const lines=[
+    '# Kevin LifeOS — NotebookLM Study Source',
+    '',
+    `Generated: ${payload.generated_at}`,
+    '',
+    '## Purpose',
+    'This document contains learning evidence captured in Kevin LifeOS. Use it as source material in NotebookLM for flashcards, quizzes, study guides, audio overviews and review. Preserve the learner\'s wording when it represents a real mistake or personal explanation; do not invent experience.',
+    '',
+    '## English signals'
+  ];
+  if(!payload.english.length) lines.push('No new English signals.');
+  payload.english.forEach((x,i)=>{
+    lines.push('',`### English ${i+1} · ${x.kind||'signal'}`);
+    if(x.word) lines.push(`- Word: ${x.word}`);
+    if(x.wrong) lines.push(`- Learner error: ${x.wrong}`);
+    if(x.correct) lines.push(`- Correction: ${x.correct}`);
+    if(x.phrase) lines.push(`- Phrase: ${x.phrase}`);
+    if(x.meaning) lines.push(`- Meaning: ${x.meaning}`);
+    if(x.rule) lines.push(`- Rule/context: ${x.rule}`);
+    if(x.example) lines.push(`- Example: ${x.example}`);
+    if(x.source) lines.push(`- Source: ${x.source}`);
+  });
+  lines.push('','## Technical concepts');
+  if(!payload.concepts.length) lines.push('No new captured concepts.');
+  payload.concepts.forEach((x,i)=>{
+    lines.push('',`### Concept ${i+1} · ${x.concept||'Untitled'}`);
+    if(x.explanation) lines.push(`- My understanding: ${x.explanation}`);
+    if(x.folder) lines.push(`- Area: ${x.folder}`);
+    if(x.source) lines.push(`- Source: ${x.source}`);
+    if((x.tags||[]).length) lines.push(`- Tags: ${(x.tags||[]).join(', ')}`);
+  });
+  lines.push('','## Hunter Skill Academy evidence');
+  if(!payload.academy.length) lines.push('No new Academy practice notes.');
+  payload.academy.forEach((x,i)=>{
+    lines.push('',`### Academy ${i+1} · ${x.topic||'Topic'}`);
+    if(x.subcategory) lines.push(`- Area: ${x.subcategory}`);
+    if(x.note) lines.push(`- What I understood: ${x.note}`);
+    if(x.date) lines.push(`- Date: ${x.date}`);
+  });
+  lines.push('','## NotebookLM instructions','Use this document as a source. Build review material from what is actually present here. When creating flashcards, keep one idea per card. When creating quizzes, mix definitions, scenarios, troubleshooting and trade-offs. When summarizing technical concepts, distinguish facts captured here from any outside knowledge.');
+  return lines.join('\n');
 }
 async function copyMemoryBridgePrompt(){
   const payload=memoryBridgePayload();
   const ids=[...payload.english,...payload.concepts,...payload.academy].map(x=>x.source_id).filter(Boolean);
-  if(!ids.length){toast('No new learning material is waiting for cards.');return;}
-  const txt=memoryBridgePrompt();
-  const state=memoryForgeRead();
-  state.pending_prompt_sources=ids;
-  await memoryForgeSave(state);
-  try{await navigator.clipboard.writeText(txt);toast(`✨ AI Bridge copied with ${ids.length} new source${ids.length===1?'':'s'}.`);}
-  catch(_){prompt('Copy this prompt:',txt);}
+  if(!ids.length){toast('No new learning material is waiting for NotebookLM.');return;}
+  const txt=memoryNotebookSource();
+  try{await navigator.clipboard.writeText(txt);toast(`NotebookLM source copied with ${ids.length} learning item${ids.length===1?'':'s'}.`);}
+  catch(_){prompt('Copy this NotebookLM source:',txt);}
+}
+async function exportNotebookLMSource(){
+  const payload=memoryBridgePayload();
+  const count=payload.english.length+payload.concepts.length+payload.academy.length;
+  if(!count){toast('No new learning material is waiting for NotebookLM.');return false;}
+  downloadTextFile(`Kevin_LifeOS_NotebookLM_${hoyLocal()}.md`,memoryNotebookSource(),'text/markdown;charset=utf-8');
+  toast(`NotebookLM source exported · ${count} learning item${count===1?'':'s'}.`);
+  return true;
 }
 function memoryCompactText(value='',limit=140){
   let text=String(value||'').replace(/\s+/g,' ').trim();
@@ -5347,8 +5308,8 @@ async function importMemoryForgeJSON() {
 }
 function csvCell(v){return `"${String(v??'').replace(/"/g,'""')}"`;}
 function memoryAlgoDeckName(card={}) {
-  const raw=String(card.folder||card.deck||'Memory Forge').replace(/^Kevin LifeOS::/i,'').trim()||'Memory Forge';
-  return raw.replace(/[\\/:*?"<>|]+/g,' - ').replace(/\s+/g,' ').trim().slice(0,70)||'Memory Forge';
+  const raw=String(card.folder||card.deck||'NotebookLM Bridge').replace(/^Kevin LifeOS::/i,'').trim()||'NotebookLM Bridge';
+  return raw.replace(/[\\/:*?"<>|]+/g,' - ').replace(/\s+/g,' ').trim().slice(0,70)||'NotebookLM Bridge';
 }
 function memoryAlgoBack(card={}) {
   const parts=[String(card.back||'').trim()];
@@ -5387,7 +5348,7 @@ async function exportMemoryForgeCards(){
     {type:'select',label:'Action',value:'export',options:[{v:'export',t:'Export cards'},{v:'repair_english',t:'Mark previous English export · no download'}]},
     {type:'select',label:'Deck to export',value:deckNames[0]||'__all__',options},
     {type:'select',label:'Cards',value:'new',options:[{v:'new',t:'New cards only · recommended'},{v:'all',t:'Re-export all cards'}]},
-    {type:'select',label:'Format',value:'algo',options:[{v:'algo',t:'AlgoApp CSV · Front / Back'},{v:'universal',t:'Universal CSV · Deck / Front / Back'},{v:'json',t:'JSON backup'}]}
+    {type:'select',label:'Format',value:'universal',options:[{v:'universal',t:'Legacy CSV · Deck / Front / Back'},{v:'json',t:'Legacy JSON backup'}]}
   ],okText:'Continue',cancelText:'Cancel'});
   if(!r)return false;
   const action=String(r[0]||'export');
@@ -5396,7 +5357,7 @@ async function exportMemoryForgeCards(){
   let rows=selected==='__all__'?allCards:allCards.filter(c=>memoryAlgoDeckName(c)===selected);
   if(scope==='new')rows=rows.filter(c=>c.status!=='exported');
   if(!rows.length){toast(scope==='new'?'This deck has no new cards to export.':'No cards found in that deck.');return false;}
-  const safeName=(selected==='__all__'?'Kevin LifeOS Memory Forge':selected).replace(/[\\/:*?"<>|]+/g,' - ').replace(/\s+/g,' ').trim();
+  const safeName=(selected==='__all__'?'Kevin LifeOS NotebookLM Bridge':selected).replace(/[\\/:*?"<>|]+/g,' - ').replace(/\s+/g,' ').trim();
 
   // Persist first. On iPhone the download/share handoff can interrupt later async work.
   if(scope==='new'){
@@ -5409,10 +5370,10 @@ async function exportMemoryForgeCards(){
   if(format==='json'){
     downloadTextFile(`${safeName}_${scope}_${hoyLocal()}.json`,JSON.stringify({type:'kevin_lifeos_cards_backup',exported_at:hoyLocal(),scope,cards:rows},null,2),'application/json;charset=utf-8');
   }else{
-    const header=format==='algo'?['Front','Back']:['Deck','Front','Back'];
+    const header=['Deck','Front','Back'];
     const lines=[header.map(csvCell).join(',')];
     rows.forEach(c=>{
-      const line=format==='algo'?[c.front,memoryAlgoBack(c)]:[memoryAlgoDeckName(c),c.front,memoryAlgoBack(c)];
+      const line=[memoryAlgoDeckName(c),c.front,memoryAlgoBack(c)];
       lines.push(line.map(csvCell).join(','));
     });
     downloadTextFile(`${safeName}_${scope}_${hoyLocal()}.csv`,lines.join('\r\n'),'text/csv;charset=utf-8');
@@ -5423,33 +5384,35 @@ async function exportMemoryForgeCards(){
 function openMemoryForge() {
   const previous=document.activeElement,back=document.createElement('div');back.className='modal-back memory-forge-back';
   const close=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();},240)};
-  const draw=()=>{const st=memoryForgeRead(),payload=memoryBridgePayload();back.innerHTML=`<div class="modal-card memory-forge-card"><div class="memory-forge-head"><div><span>MEMORY FORGE</span><h3>Knowledge bridge</h3><p>Kevin LifeOS organizes. ChatGPT improves. AlgoApp helps you review.</p></div><button type="button" data-memory-close>✕</button></div><div class="memory-forge-stats"><div><b>${payload.english.length}</b><span>English signals</span></div><div><b>${payload.concepts.length}</b><span>saved concepts</span></div><div><b>${payload.academy.length}</b><span>Academy practices</span></div><div><b>${st.cards.filter(x=>x.status!=='exported').length}</b><span>new cards</span><small>${st.cards.filter(x=>x.status==='exported').length} exported</small></div></div><div class="memory-forge-actions"><button data-memory-capture>＋ Capture</button><button data-memory-copy>✨ Copy AI Bridge</button><button data-memory-import>📥 Import JSON</button><button data-memory-export>📤 Export cards</button></div><div class="memory-forge-foot"><button data-memory-help>?</button><span>English is collected automatically. Technical concepts are optional and stay editable before AI processing.</span></div></div>`;bind();};
-  const bind=()=>{back.querySelector('[data-memory-close]').onclick=close;back.querySelector('[data-memory-capture]').onclick=async()=>{await memoryCaptureConcept();draw();};back.querySelector('[data-memory-copy]').onclick=copyMemoryBridgePrompt;back.querySelector('[data-memory-import]').onclick=async()=>{await importMemoryForgeJSON();draw();};back.querySelector('[data-memory-export]').onclick=async()=>{const changed=await exportMemoryForgeCards();if(changed)draw();};back.querySelector('[data-memory-help]').onclick=()=>modal({icon:'?',title:'Memory Forge',text:'Only active, unprocessed English signals and study concepts enter the next AI prompt. Imported sources are remembered, and exported cards are excluded from the next normal download. Use Re-export all only when you intentionally need every card again.',okText:'Understood'});};
+  const draw=()=>{const payload=memoryBridgePayload(),total=payload.english.length+payload.concepts.length+payload.academy.length;back.innerHTML=`<div class="modal-card memory-forge-card"><div class="memory-forge-head"><div><span>NOTEBOOKLM BRIDGE</span><h3>Study source hub</h3><p>Kevin LifeOS captures. NotebookLM turns your material into flashcards, quizzes, study guides and review.</p></div><button type="button" data-memory-close>✕</button></div><div class="memory-forge-stats"><div><b>${payload.english.length}</b><span>English signals</span></div><div><b>${payload.concepts.length}</b><span>technical concepts</span></div><div><b>${payload.academy.length}</b><span>Academy notes</span></div><div><b>${total}</b><span>source items ready</span><small>for NotebookLM</small></div></div><div class="memory-forge-actions"><button data-memory-capture>＋ Capture concept</button><button data-memory-copy>Copy NotebookLM source</button><button data-memory-export>Export .md source</button></div><div class="memory-forge-foot"><button data-memory-help>?</button><span>Kevin LifeOS stores learning evidence; NotebookLM is now responsible for generating flashcards and other review material.</span></div></div>`;bind();};
+  const bind=()=>{back.querySelector('[data-memory-close]').onclick=close;back.querySelector('[data-memory-capture]').onclick=async()=>{await memoryCaptureConcept();draw();};back.querySelector('[data-memory-copy]').onclick=copyMemoryBridgePrompt;back.querySelector('[data-memory-export]').onclick=async()=>{await exportNotebookLMSource();draw();};back.querySelector('[data-memory-help]').onclick=()=>modal({icon:'?',title:'NotebookLM Bridge',text:'Capture concepts in Kevin LifeOS, then copy or export the generated Markdown source into NotebookLM. NotebookLM can create flashcards, quizzes, audio summaries and study guides from that source. Legacy card data is preserved internally but is no longer part of the active workflow.',okText:'Understood'});};
   document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));
 }
+
 function expeditionBridgePrompt(goal){
   const checkpoints=(S.goal_checkpoints||[]).filter(x=>String(x.goal_id)===String(goal.id));
   const logs=(S.goal_logs||[]).filter(x=>String(x.goal_id)===String(goal.id)).slice(0,12);
   const strategy=(S.goal_strategy||[]).find(x=>String(x.goal_id)===String(goal.id))||{};
   const payload={id:goal.id,name:goal.name,progress:+goal.pct||0,status:goal.status||'',next_step:goal.next_step||'',target:goal.target||'',checkpoints,threat_analysis:strategy,field_logs:logs,connected_signals:goalLifeSignals(goal)};
-  return `You are the Kevin LifeOS Expedition AI Bridge.\n\nHelp me convert this expedition into clear field execution and useful memory cards. Do not invent completed work. Keep objectives concrete, measurable and realistic.\n\nRETURN VALID JSON ONLY:\n{\n "type":"expedition_update",\n "expedition_id":${goal.id},\n "checkpoints":[{"title":""}],\n "threat_analysis":{"primary_obstacle":"","threat_level":"Stable|Under watch|High risk|Critical","countermeasure":"","next_field_action":""},\n "field_note":{"note":""},\n "memory_cards":[{"folder":"Expeditions","deck":"Kevin LifeOS::Expeditions","front":"","back":"","example":"","source":"${String(goal.name||'Expedition').replace(/"/g,'')} ","tags":["expedition"]}]\n}\n\nRULES\n- Add at most 6 checkpoints.\n- Do not duplicate existing checkpoints.\n- A checkpoint must describe visible proof of completion.\n- The field note must summarize what is known, not pretend progress happened.\n- Cards should preserve concepts learned through this expedition.\n\nEXPEDITION DATA\n${JSON.stringify(payload,null,2)}`;
+  return `You are the Kevin LifeOS Expedition AI Bridge.\n\nHelp me convert this expedition into clear field execution and useful study concepts. Do not invent completed work. Keep objectives concrete, measurable and realistic.\n\nRETURN VALID JSON ONLY:\n{\n "type":"expedition_update",\n "expedition_id":${goal.id},\n "checkpoints":[{"title":""}],\n "threat_analysis":{"primary_obstacle":"","threat_level":"Stable|Under watch|High risk|Critical","countermeasure":"","next_field_action":""},\n "field_note":{"note":""},\n "study_concepts":[{"concept":"","explanation":"","source":"${String(goal.name||'Expedition').replace(/"/g,'')}","tags":["expedition"]}]\n}\n\nRULES\n- Add at most 6 checkpoints.\n- Do not duplicate existing checkpoints.\n- A checkpoint must describe visible proof of completion.\n- The field note must summarize what is known, not pretend progress happened.\n- Study concepts must preserve concepts actually learned through this expedition; NotebookLM will create flashcards later.\n\nEXPEDITION DATA\n${JSON.stringify(payload,null,2)}`;
 }
+
 async function importExpeditionJSON(goal){
   const r=await modal({icon:'✨',title:`AI Bridge · ${goal.name}`,text:'Paste the JSON returned by ChatGPT. You will review the detected changes before applying them.',fields:[{type:'textarea',rows:14,placeholder:'Paste expedition_update JSON'}],okText:'Preview',cancelText:'Cancel'});if(!r)return;
   let data;try{data=JSON.parse(r[0]);}catch(_){toast('Invalid JSON.');return;}
   const cps=Array.isArray(data.checkpoints)?data.checkpoints.map(x=>String(x.title||x).trim()).filter(Boolean).slice(0,6):[];
-  const th=data.threat_analysis||{};const note=String(data.field_note?.note||data.field_note||'').trim();const cards=(Array.isArray(data.memory_cards)?data.memory_cards:[]).map(normalizeMemoryCard).filter(Boolean).slice(0,80);
-  if(!cps.length&&!Object.keys(th).length&&!note&&!cards.length){toast('No expedition changes detected.');return;}
-  const preview=`<div class="expedition-ai-preview"><b>${cps.length} checkpoints · ${cards.length} cards</b><span>${note?'1 field note · ':''}${Object.keys(th).length?'strategy included':'no strategy'}</span><ul>${cps.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
+  const th=data.threat_analysis||{};const note=String(data.field_note?.note||data.field_note||'').trim();const concepts=(Array.isArray(data.study_concepts)?data.study_concepts:[]).map((x,i)=>({id:`concept-exp-${Date.now()}-${i}`,concept:String(x.concept||'').trim(),explanation:String(x.explanation||'').trim(),folder:'Software Engineering',source:String(x.source||goal.name||'Expedition').trim(),tags:Array.isArray(x.tags)?x.tags.map(String).slice(0,12):['expedition'],created_at:hoyLocal(),status:'raw'})).filter(x=>x.concept).slice(0,80);
+  if(!cps.length&&!Object.keys(th).length&&!note&&!concepts.length){toast('No expedition changes detected.');return;}
+  const preview=`<div class="expedition-ai-preview"><b>${cps.length} checkpoints · ${concepts.length} study concepts</b><span>${note?'1 field note · ':''}${Object.keys(th).length?'strategy included':'no strategy'}</span><ul>${cps.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`;
   const ok=await modal({icon:'✓',title:'Expedition import preview',text:preview,okText:'Apply selected package',cancelText:'Cancel'});if(!ok)return;
   for(const title of cps)await api('/api/goal/checkpoint',{body:{goal_id:+goal.id,title}});
   if(Object.keys(th).length)await api('/api/goal/strategy',{body:{goal_id:+goal.id,obstacle:th.primary_obstacle||'',threat:th.threat_level||'Stable',strategy:th.countermeasure||'',next_action:th.next_field_action||''}});
   if(note)await api('/api/goal/log',{body:{goal_id:+goal.id,note}});
-  if(cards.length){const st=memoryForgeRead(),seen=new Set(st.cards.map(x=>`${x.deck.toLowerCase()}|${x.front.toLowerCase()}`));cards.forEach(c=>{const k=`${c.deck.toLowerCase()}|${c.front.toLowerCase()}`;if(!seen.has(k)){seen.add(k);st.cards.push(c);}});await memoryForgeSave(st);}
+  if(concepts.length){const st=memoryForgeRead(),seen=new Set((st.concepts||[]).map(x=>`${String(x.concept||'').toLowerCase()}|${String(x.source||'').toLowerCase()}`));concepts.forEach(c=>{const k=`${c.concept.toLowerCase()}|${c.source.toLowerCase()}`;if(!seen.has(k)){seen.add(k);st.concepts.push(c);}});await memoryForgeSave(st);}
   await load();toast('✨ Expedition AI package applied.');
 }
 async function openExpeditionBridge(goal){
-  const choice=await modal({icon:'✨',title:`AI Bridge · ${goal.name}`,text:'Use ChatGPT to propose checkpoints, threat strategy, a field note and optional memory cards. Nothing is applied without an import preview.',okText:'Import JSON',extraBtn:'Copy AI prompt',cancelText:'Close'});
+  const choice=await modal({icon:'✨',title:`AI Bridge · ${goal.name}`,text:'Use ChatGPT to propose checkpoints, threat strategy, a field note and optional study concepts for NotebookLM. Nothing is applied without an import preview.',okText:'Import JSON',extraBtn:'Copy AI prompt',cancelText:'Close'});
   if(choice==='EXTRA'){const txt=expeditionBridgePrompt(goal);try{await navigator.clipboard.writeText(txt);toast('✨ Expedition prompt copied.');}catch(_){prompt('Copy this prompt:',txt)}return;}
   if(choice)await importExpeditionJSON(goal);
 }
@@ -5712,70 +5675,82 @@ document.addEventListener('click', async (event) => {
 });
 
 const ACADEMY_DOMAINS = [
-  {key:'mind',name:'Mind',icon:'◉',subcategories:['Psychology','Neuroscience'],topics:[
-    ['mind-bystander','Bystander effect','Psychology','Why people may fail to help when others are present.',['What is diffusion of responsibility?','Which factors make intervention more likely?','How should a person act in a real emergency?'],['The Lucifer Effect — Philip Zimbardo','The Social Animal — Elliot Aronson']],
-    ['mind-lovebombing','Love bombing','Psychology','How excessive early attention can become a control tactic.',['How is affection different from manipulation?','What warning signs matter?','How can boundaries be communicated safely?'],['The Gift of Fear — Gavin de Becker']],
-    ['mind-confirmation','Confirmation bias','Psychology','Why the mind favors evidence that supports existing beliefs.',['How does it affect daily decisions?','How can opposing evidence be tested fairly?','What role do social networks play?'],['Thinking, Fast and Slow — Daniel Kahneman']],
-    ['mind-dopamine','Dopamine and overstimulation','Neuroscience','Understand reward, motivation and the limits of “dopamine detox” claims.',['What does dopamine actually do?','Which claims are exaggerated?','How can stimulation be managed realistically?'],['Dopamine Nation — Anna Lembke']],
-    ['mind-neurodiversity','Neurodiversity','Neuroscience','A framework for understanding neurological differences without reducing people to labels.',['What does neurodiversity mean?','How is it different from diagnosis?','Which accommodations can help?'],[]],
-    ['mind-phantom','Phantom limb syndrome','Neuroscience','Why sensations can persist after a limb is lost.',['How does the brain map the body?','What is mirror therapy?','What does this reveal about perception?'],['The Brain That Changes Itself — Norman Doidge']]
+  {key:'fundamentals',name:'Systems Fundamentals',icon:'SYS',subcategories:['Computer Science','Operating Systems','Networking','Algorithms'],topics:[
+    ['eng-computation','How a program executes','Computer Science','Connect source code, compilation or interpretation, runtime, memory and the operating system.',['What happens between source code and execution?','What is a process?','What are stack and heap conceptually?'],['Code — Charles Petzold']],
+    ['eng-complexity','Algorithms and complexity','Algorithms','Reason about time, space and trade-offs instead of choosing algorithms by habit.',['What does Big O communicate?','Why can two O(n) solutions behave differently?','When does memory matter as much as time?'],[]],
+    ['eng-processes','Processes, threads and concurrency','Operating Systems','Understand independent processes, threads, shared state and race conditions.',['How do processes and threads differ?','What creates a race condition?','Why are locks useful and dangerous?'],['Operating Systems: Three Easy Pieces']],
+    ['eng-memory','Memory and resource management','Operating Systems','Understand allocation, garbage collection, leaks and resource lifetime.',['What is virtual memory?','What is a memory leak?','How does garbage collection change developer responsibilities?'],[]],
+    ['eng-network','TCP/IP, DNS and HTTP','Networking','Follow a request from a hostname through DNS, transport and HTTP.',['What does DNS resolve?','What does TCP provide?','What changes with HTTPS?'],[]],
+    ['eng-linux','Linux and the terminal','Operating Systems','Use processes, files, permissions, environment variables and shell tools with confidence.',['What are stdin/stdout?','How do permissions work?','Why are environment variables common in deployments?'],[]]
   ]},
-  {key:'character',name:'Character',icon:'◆',subcategories:['Philosophy','Discipline'],topics:[
-    ['char-stoicism','Stoicism in adversity','Philosophy','Use control, judgment and action instead of empty motivational slogans.',['What is the dichotomy of control?','What did Stoics mean by virtue?','How can it be applied without suppressing emotion?'],['Meditations — Marcus Aurelius','Discourses — Epictetus']],
-    ['char-amorfati','Amor fati','Philosophy','Examine the idea of accepting reality while still acting to improve it.',['What does acceptance not mean?','How is it different from resignation?','How could it guide a difficult decision?'],['The Daily Stoic — Ryan Holiday']],
-    ['char-discipline','Discipline over motivation','Discipline','Build systems that continue when enthusiasm disappears.',['How do environment and friction shape behavior?','What makes a minimum viable habit?','How should failure be reviewed?'],['Atomic Habits — James Clear']],
-    ['char-resilience','Resilience without denial','Discipline','Respond firmly to adversity while acknowledging real emotions and limits.',['What is adaptive coping?','When is asking for help a strength?','How can setbacks produce useful feedback?'],['Man’s Search for Meaning — Viktor Frankl']]
+  {key:'backend',name:'Backend Engineering',icon:'API',subcategories:['Java & Spring','C# & .NET','APIs','Distributed Backends'],topics:[
+    ['be-java','Java, JVM and object model','Java & Spring','Understand Java execution, types, memory, exceptions and the JVM before framework abstractions.',['What compiles Java source?','What does the JVM provide?','Checked versus unchecked exceptions?'],[]],
+    ['be-spring','Spring Boot request lifecycle','Java & Spring','Trace an HTTP request through controller, service, repository and database.',['What does dependency injection solve?','What belongs in each layer?','How are errors translated to HTTP responses?'],[]],
+    ['be-jpa','JPA and Hibernate','Java & Spring','Understand ORM mapping, persistence context, lazy loading and why generated SQL still matters.',['What is JPA versus Hibernate?','What is the N+1 problem?','When should SQL be written directly?'],[]],
+    ['be-dotnet','C# and ASP.NET Core','C# & .NET','Understand the .NET runtime, dependency injection, middleware and API controllers.',['What is middleware?','How does DI work in ASP.NET Core?','What is async/await protecting?'],[]],
+    ['be-rest','REST API design','APIs','Design resources, methods, status codes, validation, pagination and idempotent operations.',['What makes an operation idempotent?','PUT versus PATCH?','How should API errors be structured?'],[]],
+    ['be-integrations','REST, SOAP, GraphQL and gRPC','APIs','Choose an integration style based on contract, latency, compatibility and client needs.',['When is SOAP still useful?','What trade-off does GraphQL introduce?','Why is gRPC common internally?'],[]],
+    ['be-async','Synchronous versus asynchronous processing','Distributed Backends','Decide when work belongs in the request and when it should move to a queue or background worker.',['What should remain synchronous?','Why use a queue?','How do retries create duplicate-work risk?'],[]]
   ]},
-  {key:'world',name:'World',icon:'◎',subcategories:['International relations','Countries & cultures','History'],topics:[
-    ['world-state','State, nation and government','International relations','Distinguish concepts often mixed together in political discussion.',['What defines a sovereign state?','Can a nation exist without a state?','How does a government differ from the state?'],[]],
-    ['world-un','How the United Nations works','International relations','Understand its main bodies, powers and limitations.',['What can the Security Council do?','What is the General Assembly for?','Why can the UN fail to stop conflicts?'],[]],
-    ['world-culture','Cultural dimensions','Countries & cultures','Explore how communication, hierarchy and time differ across societies.',['What are the limits of cultural generalizations?','How can context prevent stereotypes?','How do norms affect business and travel?'],['The Culture Map — Erin Meyer']],
-    ['world-geopolitics','Geopolitics basics','International relations','Study how geography, resources and alliances influence states.',['What makes a chokepoint important?','How do energy and trade routes affect power?','Why should deterministic explanations be avoided?'],['Prisoners of Geography — Tim Marshall']]
+  {key:'frontend',name:'Frontend & Full Stack',icon:'WEB',subcategories:['JavaScript','TypeScript','Angular','React','Web Platform'],topics:[
+    ['fe-js','JavaScript runtime and event loop','JavaScript','Understand execution, promises, tasks and asynchronous browser behavior.',['What is the call stack?','How do promises reach the microtask queue?','Why can long tasks freeze the UI?'],[]],
+    ['fe-ts','TypeScript as a type system','TypeScript','Use types to model contracts and detect invalid states before runtime.',['What disappears at runtime?','Interface versus type?','Why avoid any?'],[]],
+    ['fe-angular','Angular architecture','Angular','Understand components, services, dependency injection, routing, guards and RxJS.',['What belongs in a service?','What problem do observables solve?','What is a route guard not sufficient for?'],[]],
+    ['fe-react','React component and state model','React','Understand declarative rendering, state, effects and component boundaries.',['What triggers a render?','When is an effect appropriate?','What causes stale state?'],[]],
+    ['fe-http','Browser networking and API clients','Web Platform','Understand CORS, cookies, tokens, caching and client-side error handling.',['Why does CORS exist?','Cookie versus Authorization header?','What should an interceptor do?'],[]],
+    ['fe-performance','Frontend performance and accessibility','Web Platform','Build interfaces that load quickly, remain responsive and work with assistive technology.',['What are Core Web Vitals conceptually?','Why lazy-load?','What makes HTML semantic?'],[]]
   ]},
-  {key:'wealth',name:'Wealth',icon:'◇',subcategories:['Personal finance','Economics'],topics:[
-    ['wealth-interest','Compound interest','Personal finance','See how time, rate and recurring contributions interact.',['What is the difference between nominal and effective rate?','How do fees change results?','Why does debt compound too?'],['The Psychology of Money — Morgan Housel']],
-    ['wealth-inflation','Inflation in daily life','Economics','Understand why prices rise and how purchasing power changes.',['How is inflation measured?','Why do personal experiences differ from the index?','How do interest rates interact with inflation?'],[]],
-    ['wealth-credit','How credit really works','Personal finance','Study interest, utilization, minimum payments and total cost.',['What is effective annual rate?','Why can minimum payments be dangerous?','How does utilization affect financial flexibility?'],[]],
-    ['wealth-risk','Risk and diversification','Personal finance','Learn why concentration can amplify both gains and losses.',['What risks cannot be diversified away?','Why is time horizon important?','How do liquidity and volatility differ?'],['A Random Walk Down Wall Street — Burton Malkiel']]
+  {key:'data',name:'Data & Databases',icon:'DATA',subcategories:['SQL','PostgreSQL','Data Analytics','Data Engineering','BI'],topics:[
+    ['data-sql','SQL foundations to advanced queries','SQL','Query relational data with joins, aggregation, subqueries, CTEs and window functions.',['INNER versus LEFT JOIN?','When are window functions useful?','How can a query duplicate rows unexpectedly?'],[]],
+    ['data-model','Relational modeling and normalization','PostgreSQL','Design tables, keys, relationships and constraints that preserve data integrity.',['What is a primary key?','Why normalize?','When can denormalization be justified?'],[]],
+    ['data-index','Indexes and query plans','PostgreSQL','Understand how indexes accelerate reads, cost writes and interact with query planners.',['Why can an index be ignored?','What is a composite index?','How do you read EXPLAIN conceptually?'],[]],
+    ['data-acid','Transactions, ACID and isolation','PostgreSQL','Protect consistency across multi-step operations and understand concurrent updates.',['What makes a transaction atomic?','What is a lost update?','What do isolation levels trade?'],[]],
+    ['data-analytics','Data analysis workflow','Data Analytics','Move from business question through cleaning, exploration, KPIs, visualization and communication.',['What makes a KPI useful?','How do you validate data quality?','Correlation versus causation?'],[]],
+    ['data-powerbi','Power BI, DAX and semantic models','BI','Build trustworthy analytical models and measures instead of only visual dashboards.',['Measure versus calculated column?','What is filter context?','Why use a star schema?'],[]],
+    ['data-pipeline','ETL, ELT and data pipelines','Data Engineering','Move data reliably through ingestion, transformation, quality controls and storage.',['ETL versus ELT?','Batch versus incremental?','What is data lineage?'],['Fundamentals of Data Engineering — Joe Reis & Matt Housley']]
   ]},
-  {key:'technology',name:'Technology',icon:'⬡',subcategories:['AI & Data','Programming','Cloud & DevOps','Cybersecurity','Hardware & Software'],topics:[
-    ['tech-ai','How modern AI works','AI & Data','Understand training data, models, inference and limitations.',['What is the difference between training and inference?','Why can models hallucinate?','What are tokens and context windows?'],['Artificial Intelligence: A Guide for Thinking Humans — Melanie Mitchell']],
-    ['tech-ml','Machine learning foundations','AI & Data','Learn features, labels, training, validation and overfitting.',['How does supervised learning differ from unsupervised learning?','What is overfitting?','Why is a test set protected?'],['Hands-On Machine Learning — Aurélien Géron']],
-    ['tech-data','Data pipelines','AI & Data','Follow data from collection through transformation, storage and use.',['What is ETL versus ELT?','Why does data quality matter?','What is lineage?'],['Fundamentals of Data Engineering — Joe Reis & Matt Housley']],
-    ['tech-code','How programs execute','Programming','Connect source code, runtime, memory and operating systems.',['What does a compiler or interpreter do?','What is a process?','How do stack and heap differ at a high level?'],['Code — Charles Petzold']],
-    ['tech-api','APIs and HTTP','Programming','Understand requests, responses, methods, status codes and authentication.',['What makes an API RESTful?','When are GET and POST appropriate?','How are tokens protected?'],[]],
-    ['tech-docker','Docker containers','Cloud & DevOps','Understand images, containers, isolation and reproducible environments.',['How is a container different from a virtual machine?','What is an image layer?','Why are volumes needed?'],['Docker Deep Dive — Nigel Poulton']],
-    ['tech-azure','Azure cloud foundations','Cloud & DevOps','Study regions, compute, storage, networking and shared responsibility.',['What is IaaS, PaaS and SaaS?','What is a resource group?','What remains the customer’s security responsibility?'],[]],
-    ['tech-cyber','Defense in depth','Cybersecurity','Learn why security depends on multiple independent controls.',['What are preventive, detective and corrective controls?','Why is least privilege important?','How do backups support resilience?'],['Security Engineering — Ross Anderson']],
-    ['tech-phishing','Phishing and social engineering','Cybersecurity','Recognize manipulation techniques used to bypass technical defenses.',['Which urgency signals are common?','How should links and domains be verified?','What should happen after a suspected click?'],[]],
-    ['tech-hardware','CPU, RAM and storage','Hardware & Software','Understand how the main computer components cooperate.',['What does the CPU execute?','Why is RAM temporary?','How do SSDs differ from hard drives?'],['But How Do It Know? — J. Clark Scott']],
-    ['tech-os','Operating systems','Hardware & Software','Study how an OS manages processes, memory, files and devices.',['What is a kernel?','How does virtual memory help?','What is a file system?'],['Operating Systems: Three Easy Pieces — Remzi & Andrea Arpaci-Dusseau']]
+  {key:'security',name:'Security Engineering',icon:'SEC',subcategories:['Application Security','Identity','API Security','Defensive Security'],topics:[
+    ['sec-auth','Authentication versus authorization','Identity','Separate identity verification from permission decisions and understand sessions, JWT and OAuth.',['Authentication versus authorization?','When use sessions?','What problem does OAuth 2.0 solve?'],[]],
+    ['sec-rbac','RBAC and least privilege','Identity','Grant only the permissions required and model roles without trusting the frontend.',['What is least privilege?','Where must authorization be enforced?','How can role explosion occur?'],[]],
+    ['sec-web','OWASP web risks','Application Security','Recognize injection, XSS, CSRF, broken access control and insecure design.',['How does SQL injection happen?','Stored versus reflected XSS?','Why is broken access control severe?'],['OWASP Top 10']],
+    ['sec-secrets','Secrets, hashing and encryption','Application Security','Store credentials and sensitive information using the correct cryptographic primitive.',['Hashing versus encryption?','Why salt passwords?','Where should application secrets live?'],[]],
+    ['sec-api','API security','API Security','Protect APIs with validation, authorization, rate limits, TLS and safe error handling.',['Why validate server-side?','What does rate limiting protect?','Why avoid sensitive error details?'],[]],
+    ['sec-defense','Defense in depth and incident response','Defensive Security','Layer preventive, detective and recovery controls and know how to respond when one fails.',['Preventive versus detective controls?','Why are backups security controls?','What belongs in an incident timeline?'],[]]
   ]},
-  {key:'science',name:'Science',icon:'✦',subcategories:['Physics','Chemistry','Real-life mathematics'],topics:[
-    ['science-electricity','Electricity at home','Physics','Understand voltage, current, power and household energy use.',['How do volts, amps and watts differ?','Why do breakers trip?','How is appliance energy cost estimated?'],['The Feynman Lectures on Physics — selected introductory chapters']],
-    ['science-motion','Motion and braking distance','Physics','Connect speed, reaction time, friction and stopping distance.',['Why does stopping distance grow faster than speed?','How do rain and tires change friction?','What part is human reaction time?'],[]],
-    ['science-heat','Heat transfer in daily life','Physics','Study conduction, convection and radiation through familiar examples.',['Why does metal feel colder than wood?','How does insulation work?','Why do dark surfaces heat differently?'],[]],
-    ['science-acid','Acids, bases and pH','Chemistry','Understand pH in food, cleaning and the human body without unsafe mixing.',['What does the pH scale represent?','Why should household cleaners never be mixed casually?','How do buffers work?'],['Stuff Matters — Mark Miodownik']],
-    ['science-battery','Battery chemistry','Chemistry','Explore how chemical reactions store and release electrical energy.',['What are anode, cathode and electrolyte?','Why do batteries degrade?','Why can heat be dangerous?'],[]],
-    ['science-percent','Percentages and rates','Real-life mathematics','Use percentages correctly in discounts, interest, risk and change.',['What is the difference between percentage points and percent change?','How are successive discounts combined?','How can base-rate neglect mislead?'],['How Not to Be Wrong — Jordan Ellenberg']],
-    ['science-probability','Probability in real decisions','Real-life mathematics','Reason about uncertainty, conditional probability and expected value.',['Why are rare-event tests often misunderstood?','What is expected value?','How does sample size affect confidence?'],['The Art of Statistics — David Spiegelhalter']]
+  {key:'devops',name:'Cloud, DevOps & Delivery',icon:'OPS',subcategories:['Git','CI/CD','Containers','Cloud','Observability','Infrastructure'],topics:[
+    ['ops-git','Git, branching and code review','Git','Use version control to preserve history, collaborate and review change safely.',['Commit versus branch?','Merge versus rebase?','What should a pull request prove?'],[]],
+    ['ops-ci','CI/CD pipelines','CI/CD','Automate build, test, analysis and deployment with controlled promotion between environments.',['CI versus Continuous Delivery?','What should block a pipeline?','How do secrets enter a pipeline safely?'],[]],
+    ['ops-docker','Docker images and containers','Containers','Package applications reproducibly while understanding isolation, networking and persistent data.',['Image versus container?','Why use volumes?','Container versus VM?'],['Docker Deep Dive — Nigel Poulton']],
+    ['ops-cloud','Cloud service models and architecture','Cloud','Choose compute, storage, networking and managed services based on system requirements.',['IaaS versus PaaS versus SaaS?','What is shared responsibility?','Region versus availability zone?'],[]],
+    ['ops-k8s','Kubernetes foundations','Containers','Understand when orchestration solves a real deployment problem and when it adds unnecessary complexity.',['What is a pod?','Deployment versus Service?','When is Kubernetes overkill?'],[]],
+    ['ops-observe','Logs, metrics, traces and alerting','Observability','Diagnose production using correlated evidence instead of guessing from symptoms.',['Log versus metric versus trace?','What makes an alert actionable?','Why use correlation IDs?'],[]],
+    ['ops-iac','Infrastructure as Code and Terraform','Infrastructure','Version infrastructure changes and make environments reproducible.',['What problem does IaC solve?','What is Terraform state?','Why review infrastructure changes?'],[]],
+    ['ops-release','Rollback and deployment strategies','CI/CD','Release safely using health checks, rollback plans and controlled rollout patterns.',['Blue-green versus canary?','What makes rollback difficult?','Why separate deployment from release?'],[]]
   ]},
-  {key:'learning',name:'Learning',icon:'▣',subcategories:['Study techniques','Critical research'],topics:[
-    ['learn-recall','Active recall','Study techniques','Strengthen memory by retrieving instead of rereading.',['How should questions be created?','Why is retrieval effort useful?','How can feedback repair gaps?'],['Make It Stick — Brown, Roediger & McDaniel']],
-    ['learn-spacing','Spaced repetition','Study techniques','Schedule reviews near the point of forgetting.',['Why is cramming fragile?','How should intervals expand?','What material benefits most?'],['Make It Stick — Brown, Roediger & McDaniel']],
-    ['learn-feynman','Feynman technique','Study techniques','Expose gaps by explaining an idea simply and accurately.',['Why is simplification not the same as distortion?','How do you identify hidden jargon?','When should you return to sources?'],[]],
-    ['learn-sources','Evaluate sources','Critical research','Check authority, evidence, date, incentives and corroboration.',['What is a primary source?','How can publication date matter?','What evidence would contradict the claim?'],['Calling Bullshit — Carl Bergstrom & Jevin West']]
+  {key:'architecture',name:'Software Architecture',icon:'ARCH',subcategories:['Design','Distributed Systems','Reliability','System Design'],topics:[
+    ['arch-layered','Layered and modular architecture','Design','Separate responsibilities without creating accidental coupling.',['What belongs in controller/service/repository?','What is a modular monolith?','How can layers become leaky?'],[]],
+    ['arch-solid','SOLID, coupling and cohesion','Design','Use design principles as reasoning tools, not rigid rules.',['What is dependency inversion?','Why prefer high cohesion?','When can abstraction become overengineering?'],[]],
+    ['arch-monolith','Monolith versus microservices','System Design','Choose boundaries from organizational and operational needs rather than fashion.',['What benefits does a monolith provide?','What costs do microservices add?','When would you split a service?'],[]],
+    ['arch-scale','Scaling and load balancing','Distributed Systems','Reason about vertical/horizontal scaling, stateless services and bottlenecks.',['Vertical versus horizontal scaling?','Why does statelessness help?','Where can the database become the bottleneck?'],[]],
+    ['arch-resilience','Timeouts, retries and circuit breakers','Reliability','Design calls so downstream failure does not cascade through the system.',['Why can retries amplify outages?','Why set timeouts?','What does a circuit breaker protect?'],[]],
+    ['arch-idempotency','Idempotency and duplicate requests','Distributed Systems','Make repeated operations safe where networks can retry or users can double-submit.',['Which HTTP methods are idempotent conceptually?','How do idempotency keys work?','What data must be persisted?'],[]],
+    ['arch-consistency','Consistency in distributed systems','Distributed Systems','Understand transactions, eventual consistency and trade-offs across service boundaries.',['Why can distributed transactions be difficult?','What is eventual consistency?','What is an outbox pattern?'],[]],
+    ['arch-systemdesign','System design from requirements','System Design','Start with functional and non-functional requirements before choosing technologies.',['What are the main actors?','What are scale and availability targets?','Where are the failure modes?'],[]]
   ]},
-  {key:'culture',name:'Culture',icon:'◈',subcategories:['History','Arts & literature','General knowledge'],topics:[
-    ['culture-renaissance','Why the Renaissance mattered','History','Investigate changes in art, knowledge, trade and political power.',['Why is the periodization debated?','How did printing accelerate change?','Which earlier cultures influenced it?'],['The Swerve — Stephen Greenblatt']],
-    ['culture-science','Scientific revolutions','History','Study how evidence and institutions changed accepted explanations.',['What made a scientific revolution possible?','How did instruments affect discovery?','Why does science remain revisable?'],['The Structure of Scientific Revolutions — Thomas Kuhn']],
-    ['culture-literature','Why read classic literature?','Arts & literature','Explore how fiction develops historical context, empathy and language.',['What makes a work a classic?','How should outdated values be examined?','What changes across translations?'],[]]
+  {key:'ai',name:'AI & Machine Learning',icon:'AI',subcategories:['Machine Learning','LLMs','MLOps','AI Engineering'],topics:[
+    ['ai-ml','Machine learning foundations','Machine Learning','Understand features, labels, training, validation, testing and overfitting.',['Supervised versus unsupervised learning?','What is overfitting?','Why protect the test set?'],['Hands-On Machine Learning — Aurélien Géron']],
+    ['ai-metrics','Model evaluation','Machine Learning','Choose metrics that reflect the cost of mistakes and the problem being solved.',['Precision versus recall?','When is accuracy misleading?','What is cross-validation?'],[]],
+    ['ai-llm','How LLMs work conceptually','LLMs','Understand tokens, context, training, inference and probabilistic generation.',['Training versus inference?','What is a context window?','Why can hallucinations occur?'],[]],
+    ['ai-rag','Retrieval-Augmented Generation','AI Engineering','Ground model responses in retrieved documents while understanding retrieval and citation limits.',['What does retrieval add?','Embedding versus keyword search?','What can still go wrong after retrieval?'],[]],
+    ['ai-agents','AI agents and tool use','AI Engineering','Understand planning, tool calls, state and guardrails without assuming autonomy guarantees correctness.',['What makes a tool call risky?','Where should permissions be enforced?','How do you evaluate an agent?'],[]],
+    ['ai-mlops','MLOps and model lifecycle','MLOps','Track data, experiments, models, deployment and monitoring across the ML lifecycle.',['What causes model drift?','What should be versioned?','How is model monitoring different from API monitoring?'],[]],
+    ['ai-responsible','AI evaluation and responsible use','AI Engineering','Validate outputs, protect sensitive data and define human review for high-impact decisions.',['How do you test hallucination risk?','What data should not enter a model?','Where is human review required?'],[]]
   ]}
 ];
 const ACADEMY_TARGET = 7;
 function academyBuiltinSkills(){return ACADEMY_DOMAINS.flatMap(d=>d.topics.map(t=>({domain:d,id:t[0],name:t[1],subcategory:t[2],summary:t[3],questions:t[4],books:t[5],source:'built-in',practices:[`Research ${t[1]} and answer the guiding questions.`]})));}
 function academyReadState(){
-  const raw=(S?.profile||{}).hunter_academy_state;let st={activeSkillId:'',sessions:0,doneDates:[],mastered:[],startedOn:hoyLocal(),domain:'mind',history:[],saved:[],intelLang:'en',customTopics:[],importedPacks:[]};
+  const raw=(S?.profile||{}).hunter_academy_state;let st={activeSkillId:'',sessions:0,doneDates:[],mastered:[],startedOn:hoyLocal(),domain:'fundamentals',history:[],saved:[],intelLang:'en',customTopics:[],importedPacks:[]};
   if(raw){try{st={...st,...JSON.parse(raw)}}catch(_e){}}
   st.history=Array.isArray(st.history)?st.history:[];st.saved=Array.isArray(st.saved)?st.saved:[];st.mastered=Array.isArray(st.mastered)?st.mastered:[];st.doneDates=Array.isArray(st.doneDates)?st.doneDates:[];st.customTopics=Array.isArray(st.customTopics)?st.customTopics:[];st.importedPacks=Array.isArray(st.importedPacks)?st.importedPacks:[];
   const all=academyAllSkills(st);if(!all.some(x=>x.id===st.activeSkillId)){const first=academyRecommendationFromState(st,all);st.activeSkillId=first?.id||'';st.domain=first?.domain?.key||st.domain;}
@@ -5783,31 +5758,29 @@ function academyReadState(){
 }
 function academyDomainFor(key,name){return ACADEMY_DOMAINS.find(d=>d.key===key)||{key:key||'custom',name:name||'Custom',icon:'✦',subcategories:[]};}
 function academyNormalizeCustom(raw,index=0){
-  const domainKey=String(raw.domainKey||raw.category_key||raw.category||'culture').toLowerCase().replace(/[^a-z0-9]+/g,'-');
+  const domainKey=String(raw.domainKey||raw.category_key||raw.category||'fundamentals').toLowerCase().replace(/[^a-z0-9]+/g,'-');
   const known=ACADEMY_DOMAINS.find(d=>d.key===domainKey||d.name.toLowerCase()===String(raw.category||'').toLowerCase());
   const domain=known||academyDomainFor(domainKey,String(raw.category||'Custom'));
   const title=String(raw.name||raw.title||'').trim();
   return {id:String(raw.id||`custom-${Date.now()}-${index}-${Math.random().toString(36).slice(2,7)}`),name:title,domain,subcategory:String(raw.subcategory||'General').trim()||'General',summary:String(raw.summary||raw.why_it_matters||`Investigate ${title} and connect it with real life.`).trim(),questions:(Array.isArray(raw.questions)?raw.questions:Array.isArray(raw.research_questions)?raw.research_questions:[]).map(String).filter(Boolean).slice(0,8),books:(Array.isArray(raw.books)?raw.books:Array.isArray(raw.resources)?raw.resources.map(r=>typeof r==='string'?r:[r.title,r.author_or_source].filter(Boolean).join(' — ')):[]).map(String).filter(Boolean).slice(0,10),studyPrompt:String(raw.studyPrompt||raw.study_prompt||'').trim(),source:String(raw.source||'custom'),order:Number(raw.order||0),prerequisites:Array.isArray(raw.prerequisites)?raw.prerequisites.map(String):[]};
 }
-function academyAllSkills(st=null){st=st||academyReadState();return [...academyBuiltinSkills(),...(st.customTopics||[]).map(academyNormalizeCustom)].filter(x=>x.name);}
+function academyAllSkills(st=null){st=st||academyReadState();const allowed=new Set(ACADEMY_DOMAINS.map(d=>d.key));const custom=(st.customTopics||[]).map(academyNormalizeCustom).filter(x=>allowed.has(x.domain.key));return [...academyBuiltinSkills(),...custom].filter(x=>x.name);}
 async function academySaveState(st){S.profile=S.profile||{};S.profile.hunter_academy_state=JSON.stringify(st);await api('/api/profile',{body:{key:'hunter_academy_state',value:S.profile.hunter_academy_state},quiet:true});}
 function academyCompletedIds(st){return new Set((st.mastered||[]).concat((st.history||[]).map(x=>x.topicId)).filter(Boolean));}
 function academyRecommendationFromState(st,all=academyAllSkills(st)){const done=academyCompletedIds(st),domainPending=all.filter(x=>x.domain.key===st.domain&&!done.has(x.id));return domainPending.sort((a,b)=>(a.order||0)-(b.order||0))[0]||all.filter(x=>!done.has(x.id)).sort((a,b)=>(a.order||0)-(b.order||0))[0]||null;}
 function academyRecommendationV2(){const st=academyReadState();return academyRecommendationFromState(st,academyAllSkills(st));}
 function academyDayNumber(){const d=new Date(),start=new Date(d.getFullYear(),0,0);return Math.floor((d-start)/86400000);}
 const ACADEMY_DAILY_INTEL = [
-  {domain:'Mind',icon:'◉',en:'A strong feeling is information, not an automatic command. Pause before turning emotion into action.',es:'Una emoción intensa es información, no una orden automática. Haz una pausa antes de convertirla en acción.'},
-  {domain:'Technology',icon:'⬡',en:'An API is a defined agreement that lets software systems exchange requests and responses.',es:'Una API es un acuerdo definido que permite a sistemas de software intercambiar solicitudes y respuestas.'},
-  {domain:'Wealth',icon:'◇',en:'Keep money for short-term expenses separate from money intended for long-term investment.',es:'Mantén separado el dinero de gastos a corto plazo del dinero destinado a inversiones de largo plazo.'},
-  {domain:'Learning',icon:'▣',en:'Trying to recall an idea strengthens memory more than simply reading the same explanation again.',es:'Intentar recordar una idea fortalece más la memoria que volver a leer la misma explicación.'},
-  {domain:'World',icon:'◎',en:'A country, a state, a nation and a government are related concepts, but they are not interchangeable.',es:'Un país, un Estado, una nación y un gobierno son conceptos relacionados, pero no son intercambiables.'},
-  {domain:'Science',icon:'✧',en:'Percentage change always depends on the original value; the same number of points can represent very different changes.',es:'El cambio porcentual siempre depende del valor original; la misma cantidad de puntos puede representar cambios muy diferentes.'},
-  {domain:'Character',icon:'◆',en:'Stoic control means choosing your judgment and action; it does not mean pretending that pain is absent.',es:'El control estoico significa elegir tu juicio y tu acción; no significa fingir que el dolor no existe.'},
-  {domain:'Cybersecurity',icon:'⬡',en:'Never approve a login request that you did not initiate, even when the notification looks legitimate.',es:'Nunca apruebes una solicitud de inicio de sesión que no hayas iniciado, aunque la notificación parezca legítima.'},
-  {domain:'Neuroscience',icon:'◉',en:'Dopamine is involved in motivation and learning; it is not a toxin that can be removed through a literal detox.',es:'La dopamina participa en la motivación y el aprendizaje; no es una toxina que pueda eliminarse mediante una desintoxicación literal.'},
-  {domain:'Critical thinking',icon:'▣',en:'Before accepting a claim, ask what evidence would prove it wrong and whether that evidence was actually sought.',es:'Antes de aceptar una afirmación, pregunta qué evidencia la refutaría y si realmente se buscó esa evidencia.'},
-  {domain:'Programming',icon:'⬡',en:'Readable code reduces future mistakes because software is maintained more often than it is written from scratch.',es:'El código legible reduce errores futuros porque el software se mantiene con más frecuencia de la que se escribe desde cero.'},
-  {domain:'Culture',icon:'◈',en:'Learning historical context helps separate present-day assumptions from the values of another time and place.',es:'Aprender contexto histórico ayuda a separar las suposiciones actuales de los valores de otro tiempo y lugar.'}
+  {domain:'Software Engineering',icon:'SYS',en:'Start with the problem and constraints; a technology choice is an implementation decision, not the requirement.',es:'Empieza por el problema y las restricciones; elegir tecnología es una decisión de implementación, no el requisito.'},
+  {domain:'Backend',icon:'API',en:'A controller should coordinate HTTP concerns; business rules belong deeper in the application.',es:'Un controlador coordina asuntos HTTP; las reglas de negocio deben vivir más adentro de la aplicación.'},
+  {domain:'Databases',icon:'DATA',en:'A transaction protects a business operation that must succeed or fail as one unit.',es:'Una transacción protege una operación de negocio que debe completarse o fallar como una sola unidad.'},
+  {domain:'Security',icon:'SEC',en:'Authentication answers who you are; authorization answers what you are allowed to do.',es:'Autenticación responde quién eres; autorización responde qué puedes hacer.'},
+  {domain:'DevOps',icon:'OPS',en:'A deployment is not finished when files are copied; health checks, observability and rollback complete the delivery path.',es:'Un despliegue no termina al copiar archivos; health checks, observabilidad y rollback completan la entrega.'},
+  {domain:'Architecture',icon:'ARCH',en:'Microservices trade local simplicity for distributed-system complexity; use them only when the boundary earns that cost.',es:'Los microservicios cambian simplicidad local por complejidad distribuida; úsalos solo cuando el límite justifique ese costo.'},
+  {domain:'Data',icon:'DATA',en:'A dashboard is only trustworthy when the metric definition, source and transformation path are also trustworthy.',es:'Un dashboard solo es confiable si también lo son la definición de la métrica, la fuente y su transformación.'},
+  {domain:'AI',icon:'AI',en:'A model output is evidence to evaluate, not a fact to trust automatically.',es:'La salida de un modelo es evidencia que debes evaluar, no un hecho que debas confiar automáticamente.'},
+  {domain:'Networking',icon:'SYS',en:'When an API fails, separate DNS, transport, TLS, HTTP and application errors before guessing at the cause.',es:'Cuando falla una API, separa DNS, transporte, TLS, HTTP y aplicación antes de adivinar la causa.'},
+  {domain:'Testing',icon:'SYS',en:'A test is useful when it protects a behavior or risk, not merely when it increases a coverage percentage.',es:'Una prueba es útil cuando protege un comportamiento o riesgo, no solo cuando aumenta un porcentaje de cobertura.'}
 ];
 function academyDailyIntel(){return {...ACADEMY_DAILY_INTEL[academyDayNumber()%ACADEMY_DAILY_INTEL.length]};}
 function academyResearchPrompt(topic){if(topic.studyPrompt)return topic.studyPrompt;return `Act as my external Hunter instructor for: ${topic.name}.\n\nTeach me clearly and accurately. Cover these questions one at a time:\n${(topic.questions.length?topic.questions:['What is it?','Why does it matter?','How is it applied in real life?']).map((q,i)=>`${i+1}. ${q}`).join('\n')}\n\nUse practical examples, distinguish facts from disputed claims, and recommend reliable current sources. Finish with a concise summary, five concepts to remember and three questions I should be able to answer.`;}
@@ -5818,9 +5791,9 @@ function renderSkillAcademy(){
   const domainTabs=ACADEMY_DOMAINS.map(d=>`<button class="academy-domain-tab ${d.key===st.domain?'active':''}" data-academy-domain="${d.key}"><span>${d.icon}</span>${esc(d.name)}</button>`).join('');
   const pending=academyPendingForDomain(st,st.domain);const catalogue=pending.slice(0,12).map((x,i)=>`<button class="academy-skill-option ${active&&x.id===active.id?'current':''}" data-academy-skill="${x.id}"><span>${active&&x.id===active.id?'→':'◇'}</span><div><b>${esc(x.name)}</b><small>${esc(x.subcategory)}${i===0?' · Recommended next':''}</small></div></button>`).join('');
   const intel=academyDailyIntel(),intelText=st.intelLang==='es'?intel.es:intel.en;const empty=!active;
-  host.innerHTML=`<section class="academy-command-card academy-knowledge-card"><div class="academy-command-top"><div><span>DAILY HUNTER TRAINING</span><h3>${empty?'Route completed':esc(active.name)}</h3><p>${empty?'There are no pending topics. Import a new pack, add a custom topic or open your archive.':esc(active.summary)}</p></div><button class="academy-help" data-academy-help title="How it works">?</button></div><div class="academy-meta"><span>${active?active.domain.icon:'◆'} ${esc(active?.domain?.name||'Knowledge')}</span><span>${esc(active?.subcategory||'Archive ready')}</span><span>${completed} practices archived</span></div><div class="academy-actions">${active?'<button class="btn-ghost" data-academy-explore>Explore</button><button class="btn-ghost academy-book-btn" data-academy-books aria-label="Recommended reading">📚</button><button class="btn academy-complete-btn" data-academy-complete>LOG PRACTICE</button>':''}<button class="btn-ghost" data-academy-add>＋ Add</button><button class="btn-ghost" data-academy-import>Import</button></div></section><section class="academy-intel academy-intel-card"><div><span>◆ DAILY INTEL · ${esc(intel.domain)}</span><strong>${esc(intelText)}</strong></div><div class="academy-intel-actions"><button class="btn-ghost academy-intel-translate" data-academy-intel-lang>🔄 ${st.intelLang==='es'?'English':'Español'}</button><button class="academy-help" data-academy-intel-help>?</button></div><small>A daily concept or field note. It does not award progress or duplicate your training.</small></section><div class="academy-catalogue"><div class="academy-catalogue-head"><div><span>KNOWLEDGE PATHS</span><b>Pending topics</b></div><em>${pending.length} remaining</em></div><div class="academy-domain-tabs">${domainTabs}</div><div class="academy-skill-list">${catalogue||'<div class="academy-empty-route">Route completed · add or import more topics.</div>'}</div></div>`;
+  host.innerHTML=`<section class="academy-command-card academy-knowledge-card"><div class="academy-command-top"><div><span>SOFTWARE ENGINEERING TRAINING</span><h3>${empty?'Route completed':esc(active.name)}</h3><p>${empty?'There are no pending topics. Import a new pack, add a custom topic or open your archive.':esc(active.summary)}</p></div><button class="academy-help" data-academy-help title="How it works">?</button></div><div class="academy-meta"><span>${active?active.domain.icon:'◆'} ${esc(active?.domain?.name||'Knowledge')}</span><span>${esc(active?.subcategory||'Archive ready')}</span><span>${completed} practices archived</span></div><div class="academy-actions">${active?'<button class="btn-ghost" data-academy-explore>Explore</button><button class="btn-ghost academy-book-btn" data-academy-books aria-label="Recommended reading">📚</button><button class="btn academy-complete-btn" data-academy-complete>LOG PRACTICE</button>':''}<button class="btn-ghost" data-academy-add>＋ Add</button><button class="btn-ghost" data-academy-import>Import</button></div></section><section class="academy-intel academy-intel-card"><div><span>◆ DAILY INTEL · ${esc(intel.domain)}</span><strong>${esc(intelText)}</strong></div><div class="academy-intel-actions"><button class="btn-ghost academy-intel-translate" data-academy-intel-lang>🔄 ${st.intelLang==='es'?'English':'Español'}</button><button class="academy-help" data-academy-intel-help>?</button></div><small>A daily concept or field note. It does not award progress or duplicate your training.</small></section><div class="academy-catalogue"><div class="academy-catalogue-head"><div><span>ENGINEERING PATHS</span><b>Pending topics</b></div><em>${pending.length} remaining</em></div><div class="academy-domain-tabs">${domainTabs}</div><div class="academy-skill-list">${catalogue||'<div class="academy-empty-route">Route completed · add or import more topics.</div>'}</div></div>`;
 }
-async function academyAddCustom(){const domains=ACADEMY_DOMAINS.map(d=>({v:d.key,t:d.name}));const r=await modal({icon:'＋',title:'Add custom topic',text:'Add only the topic now. Kevin LifeOS will build a safe general research prompt; details are optional.',fields:[{label:'Topic',placeholder:'Example: Retrieval-Augmented Generation'},{label:'Category',type:'select',options:domains},{label:'Subcategory',placeholder:'Example: AI & Data'},{label:'Why learn it? · Optional',type:'textarea',rows:3,placeholder:'Short context or goal'}],okText:'Add topic'});if(!r)return;const [title,domainKey,subcategory,summary]=r.map(x=>String(x||'').trim());if(!title)return toast('Topic name required');const st=academyReadState(),all=academyAllSkills(st);if(all.some(x=>x.name.toLowerCase()===title.toLowerCase()))return toast('That topic already exists');const domain=ACADEMY_DOMAINS.find(d=>d.key===domainKey)||ACADEMY_DOMAINS[0];const topic=academyNormalizeCustom({title,domainKey:domain.key,category:domain.name,subcategory:subcategory||domain.subcategories[0]||'General',summary:summary||`Investigate ${title} and connect it with real life.`,questions:[`What is ${title}?`,`Why does it matter?`,`How is it applied in real life?`],source:'custom'});st.customTopics.push(topic);st.activeSkillId=topic.id;st.domain=domain.key;await academySaveState(st);renderSkillAcademy();toast('Custom topic added');}
+async function academyAddCustom(){const domains=ACADEMY_DOMAINS.map(d=>({v:d.key,t:d.name}));const r=await modal({icon:'＋',title:'Add custom topic',text:'Add only the topic now. Kevin LifeOS will build a safe general research prompt; details are optional.',fields:[{label:'Topic',placeholder:'Example: Retrieval-Augmented Generation'},{label:'Category',type:'select',options:domains},{label:'Subcategory',placeholder:'Example: AI & Data'},{label:'Why learn it? · Optional',type:'textarea',rows:3,placeholder:'Short context or goal'}],okText:'Add topic'});if(!r)return;const [title,domainKey,subcategory,summary]=r.map(x=>String(x||'').trim());if(!title)return toast('Topic name required');const st=academyReadState(),all=academyAllSkills(st);if(all.some(x=>x.name.toLowerCase()===title.toLowerCase()))return toast('That topic already exists');const domain=ACADEMY_DOMAINS.find(d=>d.key===domainKey)||ACADEMY_DOMAINS[0];const topic=academyNormalizeCustom({title,domainKey:domain.key,category:domain.name,subcategory:subcategory||domain.subcategories[0]||'General',summary:summary||`Investigate ${title}, why it matters in engineering and where it is applied.`,questions:[`What is ${title}?`,`What engineering problem does it solve?`,`What alternatives and trade-offs exist?`],source:'custom'});st.customTopics.push(topic);st.activeSkillId=topic.id;st.domain=domain.key;await academySaveState(st);renderSkillAcademy();toast('Custom topic added');}
 async function academyImportPack(){const st=academyReadState(),domain=ACADEMY_DOMAINS.find(d=>d.key===st.domain)||ACADEMY_DOMAINS[0];const choice=await modal({icon:'⬡',title:'Import topic pack',text:'Copy the generation prompt to GPT, then return and paste the JSON package. Nothing is added before validation.',okText:'Paste JSON',extraBtn:'Copy generation prompt',cancelText:'Cancel'});if(choice==='extra'){const txt=academyPackPrompt(st,domain);try{await navigator.clipboard.writeText(txt);toast('Generation prompt copied')}catch(_){prompt('Copy this prompt:',txt)}return;}if(!choice)return;const r=await modal({icon:'⬡',title:'Paste topic pack',fields:[{type:'textarea',rows:14,placeholder:'Paste valid JSON here'}],okText:'Validate'});if(!r)return;let pack;try{pack=JSON.parse(r[0])}catch(_){return toast('Invalid JSON')};if(!pack||!Array.isArray(pack.topics)||!pack.topics.length)return toast('No topics detected');const existing=new Set(academyAllSkills(st).map(x=>x.name.toLowerCase()));const valid=[],dupes=[];pack.topics.slice(0,30).forEach((raw,i)=>{const t=academyNormalizeCustom({...raw,category_key:pack.category_key||domain.key,category:pack.category||domain.name,source:'ai-import'},i);if(!t.name)return;if(existing.has(t.name.toLowerCase())||valid.some(x=>x.name.toLowerCase()===t.name.toLowerCase()))dupes.push(t.name);else valid.push(t)});const preview=`<b>${esc(pack.pack_name||'Topic pack')}</b><p>${valid.length} valid topic${valid.length===1?'':'s'} · ${dupes.length} duplicate${dupes.length===1?'':'s'} skipped.</p><ul>${valid.slice(0,10).map(x=>`<li>${esc(x.name)} <small>· ${esc(x.subcategory)}</small></li>`).join('')}</ul>${valid.length>10?`<p>+ ${valid.length-10} more</p>`:''}`;const ok=await modal({icon:'✓',title:'Import preview',text:preview,okText:`Import ${valid.length}`,cancelText:'Cancel'});if(!ok||!valid.length)return;st.customTopics.push(...valid);st.importedPacks.push({name:String(pack.pack_name||'Imported pack'),date:hoyLocal(),count:valid.length,domain:domain.key});const next=valid.sort((a,b)=>(a.order||0)-(b.order||0))[0];st.activeSkillId=next.id;st.domain=next.domain.key;await academySaveState(st);renderSkillAcademy();toast(`${valid.length} topics imported`);}
 function academyArchiveHTML(){const st=academyReadState(),all=new Map(academyAllSkills(st).map(x=>[x.id,x]));const rows=[...st.history].sort((a,b)=>String(b.date).localeCompare(String(a.date)));if(!rows.length)return '<div class="profile-empty">No concepts archived yet.</div>';const grouped={};rows.forEach(h=>{const topic=all.get(h.topicId);const key=h.domain||topic?.domain?.name||'Knowledge';(grouped[key]||(grouped[key]=[])).push({...h,topic})});return Object.entries(grouped).map(([domain,items])=>`<section class="knowledge-archive-group"><header><b>${esc(domain)}</b><span>${items.length}</span></header>${items.map(x=>`<article><div><strong>✓ ${esc(x.name||x.topic?.name||'Archived concept')}</strong><small>${esc(x.subcategory||x.topic?.subcategory||'')} · ${esc(x.date||'')}</small></div>${x.note?`<p>${esc(x.note)}</p>`:''}</article>`).join('')}</section>`).join('');}
 async function openKnowledgeArchive(){await modal({icon:'◈',title:'Hunter Knowledge Archive',text:`<div class="knowledge-archive-modal">${academyArchiveHTML()}</div>`,okText:'Close'});}
@@ -5830,13 +5803,13 @@ document.addEventListener('click',async(e)=>{
   const stNow=academyReadState(),active=academyAllSkills(stNow).find(x=>x.id===stNow.activeSkillId);
   if(e.target.closest('[data-academy-intel-lang]')){stNow.intelLang=stNow.intelLang==='es'?'en':'es';await academySaveState(stNow);renderSkillAcademy();return;}
   if(e.target.closest('[data-academy-intel-help]')){await modal({icon:'◆',title:'Daily Intel',text:'A short concept or real-life field note shown mainly in English. It never grants progress, streaks or achievements.',okText:'Understood'});return;}
-  if(e.target.closest('[data-academy-help]')){await modal({icon:'?',title:'Hunter Skill Academy',text:'Study at your own pace. There is no streak, deadline or penalty. Log a topic only when you consider that you understand it; then it leaves the pending catalogue and enters your permanent Knowledge Archive.',okText:'Understood'});return;}
+  if(e.target.closest('[data-academy-help]')){await modal({icon:'?',title:'Hunter Skill Academy',text:'This Academy is now dedicated to software engineering, systems, data, AI, security, cloud and delivery. Study at your own pace; log a topic only when you can explain the concept and its trade-offs.',okText:'Understood'});return;}
   if(e.target.closest('[data-academy-add]')){await academyAddCustom();return;}
   if(e.target.closest('[data-academy-import]')){await academyImportPack();return;}
   if(e.target.closest('[data-open-knowledge-archive]')){await openKnowledgeArchive();return;}
   if(e.target.closest('[data-academy-explore]')&&active){const text=`<b>${esc(active.name)}</b><br><small>${esc(active.domain.name)} · ${esc(active.subcategory)}</small><p>${esc(active.summary)}</p><b>Investigate</b><ol>${(active.questions.length?active.questions:['What is it?','Why does it matter?','How is it applied?']).map(q=>`<li>${esc(q)}</li>`).join('')}</ol>`;const r=await modal({icon:active.domain.icon,title:'Research mission',text,okText:'Copy AI prompt',cancelText:'Close'});if(r){const p=academyResearchPrompt(active);try{await navigator.clipboard.writeText(p);toast('Research prompt copied')}catch(_){prompt('Copy this prompt:',p)}}return;}
   if(e.target.closest('[data-academy-books]')&&active){const books=active.books.length?active.books.map(b=>`<li>${esc(b)}${active.source==='ai-import'?' <small>· AI-suggested, verify before use</small>':''}</li>`).join(''):'<li>No verified reading saved. Prefer official documentation, universities or recognized institutions.</li>';await modal({icon:'📚',title:'Recommended reading',text:`<b>${esc(active.name)}</b><ul>${books}</ul><p class="hint">Resources are optional and never award progress.</p>`,okText:'Close'});return;}
-  if(e.target.closest('[data-academy-complete]')&&active){const st=academyReadState();const r=await modal({icon:'◆',title:'Archive learned concept',text:`Register <b>${esc(active.name)}</b> only when you feel you understand it. There is no deadline or streak.`,fields:[{type:'text',label:'What did you understand? · optional',placeholder:'Short evidence in your own words'},{type:'select',label:'Memory Forge',value:'yes',options:[{v:'yes',t:'Also save it for future study cards'},{v:'no',t:'Archive only'}]}],okText:'Archive concept',cancelText:'Keep studying'});if(r===null)return;const today=hoyLocal(),note=String(r[0]||'').trim().slice(0,300);st.sessions=(Number(st.sessions)||0)+1;st.history.push({topicId:active.id,name:active.name,domain:active.domain.name,domainKey:active.domain.key,subcategory:active.subcategory,date:today,note,source:active.source||'built-in'});if(!st.mastered.includes(active.id))st.mastered.push(active.id);if(!st.doneDates.includes(today))st.doneDates.push(today);const next=academyRecommendationFromState(st,academyAllSkills(st));st.activeSkillId=next?.id||'';if(next)st.domain=next.domain.key;await academySaveState(st);if(r[1]==='yes'){const mf=memoryForgeRead();mf.concepts.push({id:`concept-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,concept:active.name,explanation:note||active.summary||'',folder:'Hunter Skill Academy',source:`${active.domain.name} · ${active.subcategory}`,tags:[active.domain.key,active.subcategory].filter(Boolean),created_at:today,status:'raw'});await memoryForgeSave(mf);}renderSkillAcademy();toast(r[1]==='yes'?'Concept archived and sent to Memory Forge':'Concept moved to Knowledge Archive');return;}
+  if(e.target.closest('[data-academy-complete]')&&active){const st=academyReadState();const r=await modal({icon:'◆',title:'Archive learned concept',text:`Register <b>${esc(active.name)}</b> only when you feel you understand it. There is no deadline or streak.`,fields:[{type:'text',label:'What did you understand? · optional',placeholder:'Short evidence in your own words'},{type:'select',label:'NotebookLM source',value:'yes',options:[{v:'yes',t:'Also save it as NotebookLM study material'},{v:'no',t:'Archive only'}]}],okText:'Archive concept',cancelText:'Keep studying'});if(r===null)return;const today=hoyLocal(),note=String(r[0]||'').trim().slice(0,300);st.sessions=(Number(st.sessions)||0)+1;st.history.push({topicId:active.id,name:active.name,domain:active.domain.name,domainKey:active.domain.key,subcategory:active.subcategory,date:today,note,source:active.source||'built-in'});if(!st.mastered.includes(active.id))st.mastered.push(active.id);if(!st.doneDates.includes(today))st.doneDates.push(today);const next=academyRecommendationFromState(st,academyAllSkills(st));st.activeSkillId=next?.id||'';if(next)st.domain=next.domain.key;await academySaveState(st);if(r[1]==='yes'){const mf=memoryForgeRead();mf.concepts.push({id:`concept-${Date.now()}-${Math.random().toString(36).slice(2,7)}`,concept:active.name,explanation:note||active.summary||'',folder:'Hunter Skill Academy',source:`${active.domain.name} · ${active.subcategory}`,tags:[active.domain.key,active.subcategory].filter(Boolean),created_at:today,status:'raw'});await memoryForgeSave(mf);}renderSkillAcademy();toast(r[1]==='yes'?'Concept archived and added to NotebookLM source':'Concept moved to Knowledge Archive');return;}
 });
 
 
@@ -5993,8 +5966,10 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 27. V180 Monthly Service Payment State: Life & services debe mostrar el estado de pago por mes, no reutilizar visualmente el método permanente del servicio. Una tarjeta solo aparece como pagada/cubierta cuando existe un cargo real de ese servicio para el mes seleccionado. Al cambiar a un mes sin check ni cargo, la fila queda pendiente y limpia, sin tarjeta arrastrada. La configuración del servicio y los cargos históricos se conservan; no se duplican compras.
 28. V181 Codensa Breakdown Alignment: Codensa toma como saldo superior exactamente las obligaciones activas visibles en Full debt breakdown más sus compras pendientes, sin la resta sintética de pagos históricos no asignados. X, abonos individuales, checks de Home, Pay this card y rediferidos deben reflejarse en ese mismo saldo y liberar cupo. ADDI, Banco de Bogotá, Tarjeta Nicole y Davivienda conservan sus flujos V179/V171 ya validados.
 29. V182 My Credit Cards Panel Visibility: la X de una tarjeta únicamente la oculta del panel My credit cards. No exige saldo cero, no desactiva la tarjeta y no altera compras, servicios, Home, Debt Boss, Full debt breakdown, pagos, rediferidos, historial ni disponibilidad como medio de pago.
+30. V183 Engineering Learning Focus: Memory Forge se convierte en NotebookLM Bridge; Kevin LifeOS captura evidencia y conceptos, y NotebookLM genera flashcards, quizzes, audio y material de repaso. Hunter Skill Academy queda dedicada únicamente a ingeniería de software/sistemas, backend, frontend/full stack, datos/bases de datos, seguridad, cloud/DevOps, arquitectura e IA/ML. Gym no aparece sábados ni domingos. Las actividades personalizadas recurrentes tienen effective_from y nunca generan Recovery retroactivo anterior a su fecha real de activación.
 
-ESTADO ACTUAL DEL PROYECTO - V181 FINANCIAL BREAKDOWN ALIGNMENT & CARD RETIREMENT:
+ESTADO ACTUAL DEL PROYECTO - V183 ENGINEERING LEARNING FOCUS:
+- V183 convierte Memory Forge en NotebookLM Bridge, restringe Hunter Skill Academy a ingeniería/tecnología, elimina Gym del fin de semana y evita Recovery retroactivo de nuevas actividades recurrentes.
 - V181 elimina únicamente para Codensa la conciliación histórica sintética y hace que My credit cards / Debt Boss utilicen su suma pendiente real del desglose más compras pendientes. Las demás tarjetas conservan la lógica ya validada.
 - V182 redefine la X de My credit cards como una preferencia estrictamente visual: puede ocultar una tarjeta del panel aunque tenga saldo o servicios, sin modificar ninguna operación financiera ni quitarla de los medios de pago.
 - V180 desacopla la configuración permanente de un servicio del estado visual mensual: Life & services solo muestra una tarjeta si existe un cargo real de ese servicio en el mes seleccionado; meses sin check/cargo aparecen limpios y pendientes.
@@ -6011,7 +5986,7 @@ ESTADO ACTUAL DEL PROYECTO - V181 FINANCIAL BREAKDOWN ALIGNMENT & CARD RETIREMEN
 ESTADO HEREDADO - V174 HUNTER CODE:
 - Hunter Profile ahora incluye Hunter Code como panel compacto y desplegable con 41 leyes personales bilingües; debe seguir siendo responsive y no convertirse en un sistema de puntos o checks.
 - Life administra vida, hábitos, rutina, turnos, metas y sistemas personales existentes. No traslades módulos de Life a Work.
-- Hunter Skill Academy es un gimnasio mental libre para aprender temas y evitar perder tiempo. No debe aumentar automáticamente carreras, proyectos ni habilidades profesionales.
+- Hunter Skill Academy es un gimnasio técnico enfocado exclusivamente en ingeniería de software/sistemas, programación, full stack/backend/frontend, bases de datos/datos, seguridad, cloud/DevOps, arquitectura e IA/ML. No debe aumentar automáticamente carreras, proyectos ni habilidades profesionales.
 - Work Mode es una pantalla independiente abierta desde Life, similar a Hunter Profile. Contiene entrenamiento profesional sin saturar ni reemplazar la aplicación principal.
 - Work Mode tiene cuatro contextos persistentes: Data Analyst, Software Developer, Cyber Defense y Machine Learning. Cambiar de rol no borra el progreso de los demás.
 - V161 creó roles, tickets y sesiones persistentes. V162 añadió el Command Center. V163 convirtió el backlog en un Mission System. V164 añadió AI Review Bridge. V165 añade Skills & Level Coach: las revisiones aprobadas generan evidencia profesional, la preparación se calcula sin usar cursos como dominio, las evaluaciones son estrictas y el ascenso siempre requiere una acción manual del usuario.
@@ -6763,7 +6738,7 @@ function expectedRecoveryMissions(scanDays=7) {
     const plan=actividadesDelDia(wd,shiftKey,iso);
     if(plan.rest) continue;
     const acts=(plan.acts||[]).filter(a=>!hiddenWeek.has(`${wd}|${a.key}`)&&!hiddenDay.has(`${iso}|${a.key}`));
-    const extras=(S.routine_extra||[]).filter(x=>(x.day&&x.day===iso)||(!x.day&&(x.weekday===-1||(x.weekday===-2&&wd<=4)||x.weekday===wd)));
+    const extras=(S.routine_extra||[]).filter(x=>{const effective=String(x.effective_from||'').slice(0,10);if(effective&&iso<effective)return false;return (x.day&&x.day===iso)||(!x.day&&(x.weekday===-1||(x.weekday===-2&&wd<=4)||x.weekday===wd));});
     extras.forEach(x=>acts.push({key:'extra_'+x.id,title:x.title||'Extra activity'}));
     const seen=new Set();
     for(const act of acts){
@@ -7273,6 +7248,7 @@ function renderCareer() {
   wrap.innerHTML = careers.map(card).join('') + `<button class="btn-gold add-career-btn" id="addCareerBtn">+ Add a career to learn</button>`;
 }
 function actividadesDelDia(wd, shiftKey, iso='') {
+  const isWeekend = wd === 5 || wd === 6;
   const v170Active = !iso || iso >= V170_ACTIVITY_EFFECTIVE_DAY;
   const sh = SHIFTS[shiftKey] || SHIFTS.libre;
   const focused = (S.careers || []).filter(c => Number(c.active) === 1).slice(0, 2);
@@ -7328,7 +7304,7 @@ function actividadesDelDia(wd, shiftKey, iso='') {
     let h = fin + 1;
     if (ini < 9 && englishFocused) { acts.push({ t: `${h}:00`, title: `English — ${ing}`, d: ingDesc, key: 'ingles' }); h += 1; }
     if (studyFocused.length) { acts.push({ t: `${h}:00`, title: `Study: ${focoLabel}`, d: studyDesc, key: 'estudio' }); h += 1; }
-    acts.push({ t: `${h}:00`, title: 'Gym 🏋️', d: 'Your iron hour. Don\'t negotiate it.', key: 'gym' }); h += 1;
+    if (!isWeekend) { acts.push({ t: `${h}:00`, title: 'Gym 🏋️', d: 'Your iron hour. Don\'t negotiate it.', key: 'gym' }); h += 1; }
     acts.push({ t: `${h}:30`, title: '📖 Read', d: 'Your pages for today. Advance the book you\'re reading. 📖', key: 'leer' });
     acts.push({ t: `${h}:45`, title: '🧴 Skincare PM', d: 'Night routine: cleanse, niacinamide serum, moisturizer. Close the day clean. 🧴', key: 'skincare' });
     if(v170Active) acts.push({ t: `${h}:55`, title: '🙏 Gratitude', d: 'Close the day by naming something you are grateful for and reconnecting with what matters.', key: 'gratitude' });
@@ -7349,7 +7325,7 @@ function actividadesDelDia(wd, shiftKey, iso='') {
   } else {
     if (englishFocused) acts.push({ t: '6:40', title: `English — ${ing}`, d: ingDesc, key: 'ingles' });
     if (studyFocused.length) acts.push({ t: '8:00', title: `DEEP study: ${focoLabel}`, d: studyDesc + ' Take advantage: day off = long project session.', key: 'estudio' });
-    acts.push({ t: '11:00', title: 'Gym 🏋️', d: 'Train calmly, you have time.', key: 'gym' });
+    if (!isWeekend) acts.push({ t: '11:00', title: 'Gym 🏋️', d: 'Train calmly, you have time.', key: 'gym' });
     acts.push({ t: 'Afternoon', title: 'Project / portfolio', d: 'Advance your project or a practice room.', key: 'proyecto' });
     acts.push({ t: 'Night', title: '📖 Read', d: 'Advance your book. Close the day.', key: 'leer' });
     acts.push({ t: 'Night', title: '🧴 Skincare PM', d: 'Night routine: cleanse + serum + moisturizer.', key: 'skincare' });
@@ -7426,6 +7402,20 @@ async function restoreDefaultLifeActivity(item) {
   }
 }
 
+function nextLifeActivityEffectiveDate(scope, wd, selectedIso='') {
+  const today=hoyLocal();
+  if(scope==='day') return selectedIso || today;
+  const d=new Date(`${today}T12:00:00`);
+  if(scope==='mf') {
+    do { d.setDate(d.getDate()+1); } while ([0,6].includes(d.getDay()));
+    return localISO(d);
+  }
+  const target=((Number(wd)||0)+1)%7;
+  do { d.setDate(d.getDate()+1); } while (d.getDay()!==target);
+  const next=localISO(d);
+  return selectedIso && selectedIso>today ? selectedIso : next;
+}
+
 async function openCustomLifeActivityModal({iso, wd, sugerencia}) {
   const dayName = DIAS[wd];
   const habitOpts = [{ v: '', t: '— Free (no habit)' }]
@@ -7449,6 +7439,7 @@ async function openCustomLifeActivityModal({iso, wd, sugerencia}) {
   if (scopeAdd === 'week') body.weekday = wd;
   else if (scopeAdd === 'mf') body.weekday = -2;
   else body.day = iso;
+  body.effective_from = nextLifeActivityEffectiveDate(scopeAdd, wd, iso);
   await api('/api/routine_extra/new', { body });
   toast(scopeAdd === 'week' ? `➕ Added every ${dayName}` : scopeAdd === 'mf' ? '➕ Added Monday to Friday' : '➕ Added for this day only');
   await load();
@@ -7934,6 +7925,7 @@ document.addEventListener('click', async (e) => {
       if (scope === 'week') body.weekday = wd;
       else if (scope === 'mf') body.weekday = -2;
       else body.day = iso;
+      body.effective_from = nextLifeActivityEffectiveDate(scope, wd, iso);
       await api('/api/routine_extra/new', { body });
       toast('✏️ Activity replaced');
     } else {
@@ -7966,7 +7958,7 @@ document.addEventListener('click', async (e) => {
     if (!r || !r[1].trim()) return;
     await api('/api/routine_extra/new', { body: {
       time: r[0], title: r[1], descr: r[2], habit: r[3] || '',
-      day: fecha, scheduled: 1 } });
+      day: fecha, scheduled: 1, effective_from: fecha } });
     toast('📅 Scheduled for ' + fmtFecha(fecha));
     load();
     return;
