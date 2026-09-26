@@ -274,7 +274,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 183;
+const FRONT_V = 184;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -5210,20 +5210,44 @@ function memoryNotebookSource() {
   lines.push('','## NotebookLM instructions','Use this document as a source. Build review material from what is actually present here. When creating flashcards, keep one idea per card. When creating quizzes, mix definitions, scenarios, troubleshooting and trade-offs. When summarizing technical concepts, distinguish facts captured here from any outside knowledge.');
   return lines.join('\n');
 }
+function memoryBridgeSourceIds(payload=memoryBridgePayload()) {
+  return [...(payload.english||[]),...(payload.concepts||[]),...(payload.academy||[])]
+    .map(x=>x.source_id).filter(Boolean);
+}
+async function memoryMarkNotebookLMSent(payload,reason='notebooklm_export') {
+  const ids=memoryBridgeSourceIds(payload);
+  if(!ids.length)return 0;
+  const state=memoryForgeRead(),sent=new Set(ids),stamp=hoyLocal();
+  state.processed_sources=[...new Set([...(state.processed_sources||[]),...ids])];
+  state.concepts=(state.concepts||[]).map(x=>{
+    const sid=x.source_id||memorySourceId('concept',x.id||'',x.concept||'',x.created_at||'');
+    return sent.has(sid)?{...x,source_id:sid,status:'processed',processed_at:stamp,processed_via:reason}:x;
+  });
+  state.imports=(state.imports||[]).concat([{date:stamp,count:ids.length,summary:`NotebookLM source sent · ${reason}`}]);
+  await memoryForgeSave(state);
+  return ids.length;
+}
 async function copyMemoryBridgePrompt(){
   const payload=memoryBridgePayload();
   const ids=[...payload.english,...payload.concepts,...payload.academy].map(x=>x.source_id).filter(Boolean);
   if(!ids.length){toast('No new learning material is waiting for NotebookLM.');return;}
   const txt=memoryNotebookSource();
-  try{await navigator.clipboard.writeText(txt);toast(`NotebookLM source copied with ${ids.length} learning item${ids.length===1?'':'s'}.`);}
-  catch(_){prompt('Copy this NotebookLM source:',txt);}
+  try{
+    await navigator.clipboard.writeText(txt);
+    await memoryMarkNotebookLMSent(payload,'clipboard');
+    toast(`NotebookLM source copied · ${ids.length} item${ids.length===1?'':'s'} moved out of the pending queue.`);
+  }catch(_){
+    prompt('Copy this NotebookLM source:',txt);
+    toast('Source opened for manual copy. It remains pending until you export or copy successfully.');
+  }
 }
 async function exportNotebookLMSource(){
   const payload=memoryBridgePayload();
   const count=payload.english.length+payload.concepts.length+payload.academy.length;
   if(!count){toast('No new learning material is waiting for NotebookLM.');return false;}
   downloadTextFile(`Kevin_LifeOS_NotebookLM_${hoyLocal()}.md`,memoryNotebookSource(),'text/markdown;charset=utf-8');
-  toast(`NotebookLM source exported · ${count} learning item${count===1?'':'s'}.`);
+  await memoryMarkNotebookLMSent(payload,'markdown_export');
+  toast(`NotebookLM source exported · ${count} item${count===1?'':'s'} moved out of the pending queue.`);
   return true;
 }
 function memoryCompactText(value='',limit=140){
@@ -5384,8 +5408,8 @@ async function exportMemoryForgeCards(){
 function openMemoryForge() {
   const previous=document.activeElement,back=document.createElement('div');back.className='modal-back memory-forge-back';
   const close=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();},240)};
-  const draw=()=>{const payload=memoryBridgePayload(),total=payload.english.length+payload.concepts.length+payload.academy.length;back.innerHTML=`<div class="modal-card memory-forge-card"><div class="memory-forge-head"><div><span>NOTEBOOKLM BRIDGE</span><h3>Study source hub</h3><p>Kevin LifeOS captures. NotebookLM turns your material into flashcards, quizzes, study guides and review.</p></div><button type="button" data-memory-close>✕</button></div><div class="memory-forge-stats"><div><b>${payload.english.length}</b><span>English signals</span></div><div><b>${payload.concepts.length}</b><span>technical concepts</span></div><div><b>${payload.academy.length}</b><span>Academy notes</span></div><div><b>${total}</b><span>source items ready</span><small>for NotebookLM</small></div></div><div class="memory-forge-actions"><button data-memory-capture>＋ Capture concept</button><button data-memory-copy>Copy NotebookLM source</button><button data-memory-export>Export .md source</button></div><div class="memory-forge-foot"><button data-memory-help>?</button><span>Kevin LifeOS stores learning evidence; NotebookLM is now responsible for generating flashcards and other review material.</span></div></div>`;bind();};
-  const bind=()=>{back.querySelector('[data-memory-close]').onclick=close;back.querySelector('[data-memory-capture]').onclick=async()=>{await memoryCaptureConcept();draw();};back.querySelector('[data-memory-copy]').onclick=copyMemoryBridgePrompt;back.querySelector('[data-memory-export]').onclick=async()=>{await exportNotebookLMSource();draw();};back.querySelector('[data-memory-help]').onclick=()=>modal({icon:'?',title:'NotebookLM Bridge',text:'Capture concepts in Kevin LifeOS, then copy or export the generated Markdown source into NotebookLM. NotebookLM can create flashcards, quizzes, audio summaries and study guides from that source. Legacy card data is preserved internally but is no longer part of the active workflow.',okText:'Understood'});};
+  const draw=()=>{const payload=memoryBridgePayload(),total=payload.english.length+payload.concepts.length+payload.academy.length;back.innerHTML=`<div class="modal-card memory-forge-card"><div class="memory-forge-head"><div><span>NOTEBOOKLM BRIDGE</span><h3>Study source hub</h3><p>Kevin LifeOS captures. NotebookLM turns your material into flashcards, quizzes, study guides and review.</p></div><button type="button" data-memory-close>✕</button></div><div class="memory-forge-stats"><div><b>${payload.english.length}</b><span>English signals</span></div><div><b>${payload.concepts.length}</b><span>technical concepts</span></div><div><b>${payload.academy.length}</b><span>Academy notes</span></div><div><b>${total}</b><span>new items waiting</span><small>for NotebookLM</small></div></div><div class="memory-forge-actions"><button data-memory-capture>＋ Capture concept</button><button data-memory-copy>Copy NotebookLM source</button><button data-memory-export>Export .md source</button></div><div class="memory-forge-foot"><button data-memory-help>?</button><span>Kevin LifeOS stores learning evidence; NotebookLM is now responsible for generating flashcards and other review material.</span></div></div>`;bind();};
+  const bind=()=>{back.querySelector('[data-memory-close]').onclick=close;back.querySelector('[data-memory-capture]').onclick=async()=>{await memoryCaptureConcept();draw();};back.querySelector('[data-memory-copy]').onclick=copyMemoryBridgePrompt;back.querySelector('[data-memory-export]').onclick=async()=>{await exportNotebookLMSource();draw();};back.querySelector('[data-memory-help]').onclick=()=>modal({icon:'?',title:'NotebookLM Bridge',text:'Capture learning evidence in Kevin LifeOS, then copy or export the Markdown source into NotebookLM. After a successful copy or export, those items leave the pending queue but remain stored in their original modules. Only new learning evidence appears in the next export.',okText:'Understood'});};
   document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));
 }
 
@@ -5967,9 +5991,10 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 28. V181 Codensa Breakdown Alignment: Codensa toma como saldo superior exactamente las obligaciones activas visibles en Full debt breakdown más sus compras pendientes, sin la resta sintética de pagos históricos no asignados. X, abonos individuales, checks de Home, Pay this card y rediferidos deben reflejarse en ese mismo saldo y liberar cupo. ADDI, Banco de Bogotá, Tarjeta Nicole y Davivienda conservan sus flujos V179/V171 ya validados.
 29. V182 My Credit Cards Panel Visibility: la X de una tarjeta únicamente la oculta del panel My credit cards. No exige saldo cero, no desactiva la tarjeta y no altera compras, servicios, Home, Debt Boss, Full debt breakdown, pagos, rediferidos, historial ni disponibilidad como medio de pago.
 30. V183 Engineering Learning Focus: Memory Forge se convierte en NotebookLM Bridge; Kevin LifeOS captura evidencia y conceptos, y NotebookLM genera flashcards, quizzes, audio y material de repaso. Hunter Skill Academy queda dedicada únicamente a ingeniería de software/sistemas, backend, frontend/full stack, datos/bases de datos, seguridad, cloud/DevOps, arquitectura e IA/ML. Gym no aparece sábados ni domingos. Las actividades personalizadas recurrentes tienen effective_from y nunca generan Recovery retroactivo anterior a su fecha real de activación.
+31. V184 NotebookLM Export Queue & Academy Scroll Polish: copiar exitosamente o exportar el source Markdown marca sus elementos como enviados y los saca de la cola pendiente sin borrar la evidencia original de Language Hunter, conceptos ni Academy. El siguiente export contiene únicamente aprendizaje nuevo. Engineering Paths conserva scroll horizontal funcional pero oculta la barra visual para mantener el diseño limpio y táctil.
 
-ESTADO ACTUAL DEL PROYECTO - V183 ENGINEERING LEARNING FOCUS:
-- V183 convierte Memory Forge en NotebookLM Bridge, restringe Hunter Skill Academy a ingeniería/tecnología, elimina Gym del fin de semana y evita Recovery retroactivo de nuevas actividades recurrentes.
+ESTADO ACTUAL DEL PROYECTO - V184 NOTEBOOKLM EXPORT QUEUE & ACADEMY SCROLL POLISH:
+- V184 completa NotebookLM Bridge con cola incremental: Copy/Export exitoso archiva solo el estado de exportación y el siguiente source incluye únicamente elementos nuevos. Engineering Paths mantiene navegación horizontal sin scrollbar visible. V183 sigue definiendo Academy 100% ingeniería/tecnología, Gym fuera del fin de semana y Recovery sin retroactividad.
 - V181 elimina únicamente para Codensa la conciliación histórica sintética y hace que My credit cards / Debt Boss utilicen su suma pendiente real del desglose más compras pendientes. Las demás tarjetas conservan la lógica ya validada.
 - V182 redefine la X de My credit cards como una preferencia estrictamente visual: puede ocultar una tarjeta del panel aunque tenga saldo o servicios, sin modificar ninguna operación financiera ni quitarla de los medios de pago.
 - V180 desacopla la configuración permanente de un servicio del estado visual mensual: Life & services solo muestra una tarjeta si existe un cargo real de ese servicio en el mes seleccionado; meses sin check/cargo aparecen limpios y pendientes.
