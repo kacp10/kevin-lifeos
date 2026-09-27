@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 184  # V184 NotebookLM Export Queue & Academy Scroll Polish
+VERSION = 185  # V185 Wishlist Inline Edit & Gym Progression
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -2947,7 +2947,7 @@ def close_month():
 
 @app.post('/api/dream')
 def dream():
-    return safe_field_update('dreams', ('saved', 'value', 'bought'),
+    return safe_field_update('dreams', ('name', 'saved', 'value', 'bought'),
                               ('saved', 'value', 'bought'), request.json or {}, default_field='saved')
 
 
