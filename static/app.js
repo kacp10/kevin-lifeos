@@ -274,7 +274,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 185;
+const FRONT_V = 186;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -2040,7 +2040,7 @@ function renderWorkout() {
   if(allDone&&(GYM_PLAN_SEL==null||GYM_PLAN_SEL==='today')&&wd===todayWd&&GYM_CELEBRATED_DATE!==hoyLocal()&&!gymCelebratedToday()){GYM_CELEBRATED_DATE=hoyLocal();markGymCelebratedToday().catch(()=>{});showWorkoutCelebration();}
 }
 
-function gymPplPromotionState() {
+function gymPplPromotionState({ignoreDeferred=false}={}) {
   const p=getGymPrefs(), dates=gymAllTrainingDates();
   const first=dates[0]||p.blockStart||hoyLocal();
   const weeks=Math.floor(gymDateDiffDays(first)/7)+1;
@@ -2049,9 +2049,9 @@ function gymPplPromotionState() {
   const hasPain=!!(latest?.pain && !/^(none|no|ninguno|ninguna|sin dolor)$/i.test(String(latest.pain).trim()));
   const deferred=!!(p.pplPromotionDeferredUntil && p.pplPromotionDeferredUntil>hoyLocal());
   const requirementsMet=weeks>=6 && sessions>=20 && !hasPain;
-  const eligible=p.routineMode!=='ppl5' && !p.pplPromotionAccepted && !deferred && requirementsMet;
+  const eligible=p.routineMode!=='ppl5' && !p.pplPromotionAccepted && (ignoreDeferred||!deferred) && requirementsMet;
   const progress=Math.max(0,Math.min(100,Math.round(Math.min(weeks/6,sessions/20)*100)));
-  return {eligible,weeks,sessions,hasPain,requirementsMet,progress,active:p.routineMode==='ppl5'||!!p.pplPromotionAccepted};
+  return {eligible,weeks,sessions,hasPain,deferred,requirementsMet,progress,active:p.routineMode==='ppl5'||!!p.pplPromotionAccepted};
 }
 async function activatePplRoutine() {
   const p=getGymPrefs();
@@ -2060,8 +2060,8 @@ async function activatePplRoutine() {
   p.swaps={}; p.setcount={}; delete p.pplPromotionShowing; delete p.pplPromotionDeferredUntil; delete p.deloadUntil;
   await saveGymPrefs(p); GYM_PLAN_SEL='today'; renderWorkout();
 }
-function maybeShowPplPromotion() {
-  const state=gymPplPromotionState(); if(!state.eligible||document.querySelector('.ppl-promotion-back'))return false;
+function maybeShowPplPromotion(force=false) {
+  const state=gymPplPromotionState({ignoreDeferred:force}); if(!state.eligible||document.querySelector('.ppl-promotion-back'))return false;
   const back=document.createElement('div'); back.className='modal-back ppl-promotion-back';
   back.innerHTML=`<div class="modal-card ppl-promotion-card"><small>◆ NEW TRAINING ARC</small><div class="ppl-promotion-mark">V</div><h3>Felicidades. Estás en otro nivel.</h3><p>Es hora de entrenar como un hombre de verdad.</p><div class="ppl-promotion-meta"><span>${state.weeks}+ weeks</span><span>${state.sessions} sessions</span><span>5-day PPL</span></div><div class="ppl-promotion-week"><b>MON</b><span>Push A</span><b>TUE</b><span>Pull A</span><b>WED</b><span>Legs + Abs</span><b>THU</b><span>Push B</span><b>FRI</b><span>Pull B</span></div><p class="ppl-promotion-note">Your history, weights and measurements stay intact. The routine changes only if you accept.</p><div class="ppl-promotion-actions"><button data-ppl-later>Not yet</button><button data-ppl-start>Start PPL arc</button></div></div>`;
   document.body.appendChild(back); requestAnimationFrame(()=>back.classList.add('show'));
@@ -2368,13 +2368,16 @@ function openGymTrainer() {
           ? 'Your 5-day Push / Pull / Legs arc is unlocked and active.'
           : arc.hasPain
             ? 'The time and session counters keep progressing, but a reported pain/discomfort check-in pauses the automatic unlock until recovery is clear.'
-            : `Automatic unlock requires 6 weeks and 20 logged training days. ${Math.max(0,6-arc.weeks)} week(s) and ${Math.max(0,20-arc.sessions)} session(s) remain by the current counters.`;
+            : arc.requirementsMet
+              ? `Requirements complete. Promotion is ready now. Actual history: ${arc.weeks} weeks · ${arc.sessions} training days.`
+              : `Automatic unlock requires 6 weeks and 20 logged training days. ${Math.max(0,6-arc.weeks)} week(s) and ${Math.max(0,20-arc.sessions)} session(s) remain by the current counters.`;
         return `<section class="trainer-section trainer-unlock-section">
           <div class="trainer-section-head"><h4>Next training arc</h4><span>${status}</span></div>
           <div class="trainer-unlock-title"><div><small>5-DAY PUSH / PULL / LEGS</small><b>${arc.active?'Unlocked':arc.progress+'% toward unlock'}</b></div><strong>${arc.active?'✓':arc.progress+'%'}</strong></div>
-          <div class="trainer-unlock-metric"><div><span>Training time</span><b>${arc.weeks}/6 weeks</b></div><div class="trainer-unlock-bar"><i style="width:${weeksPct}%"></i></div></div>
-          <div class="trainer-unlock-metric"><div><span>Logged sessions</span><b>${arc.sessions}/20 days</b></div><div class="trainer-unlock-bar"><i style="width:${sessionsPct}%"></i></div></div>
+          <div class="trainer-unlock-metric"><div><span>Training time</span><b>${arc.weeks>=6?'✓ 6-week requirement met':`${arc.weeks}/6 weeks`}</b></div><div class="trainer-unlock-bar"><i style="width:${weeksPct}%"></i></div></div>
+          <div class="trainer-unlock-metric"><div><span>Logged sessions</span><b>${arc.sessions>=20?'✓ 20-session requirement met':`${arc.sessions}/20 days`}</b></div><div class="trainer-unlock-bar"><i style="width:${sessionsPct}%"></i></div></div>
           <p>${esc(note)}</p>
+          ${arc.requirementsMet&&!arc.active?`<button type="button" class="btn-gold" data-ppl-open>Open PPL promotion</button>`:''}
         </section>`;
       })()}
       <p class="trainer-disclaimer">This is progress guidance, not medical diagnosis. Pain, injury or concerning symptoms require a qualified professional.</p>
@@ -2385,6 +2388,7 @@ function openGymTrainer() {
   back.querySelector('.trainer-help').onclick=()=>{const p=back.querySelector('.trainer-help-text');p.hidden=!p.hidden};
   back.addEventListener('click',async e=>{const b=e.target.closest('[data-trainer-action]');if(!b)return;const ok=b.dataset.trainerAction==='checkin'?await openGymWeeklyCheckin():await openGymWeightLog();if(ok){close();await load();setTimeout(openGymTrainer,180);}});
   back.addEventListener('click',e=>{const b=e.target.closest('[data-trainer-copy]');if(!b)return;gymCopyPrompt(b.dataset.trainerCopy==='activation'?gymTrainerActivationPrompt():gymTrainerReportPrompt(),b.dataset.trainerCopy==='activation'?'Trainer prompt':'Progress report')});
+  back.addEventListener('click',e=>{const b=e.target.closest('[data-ppl-open]');if(!b)return;close();setTimeout(()=>maybeShowPplPromotion(true),300)});
 }
 
 function renderGym() {
@@ -2470,6 +2474,7 @@ function renderGym() {
 
   // guía compacta: el detalle vive en un modal para no ocupar la pantalla
   document.getElementById('gymHelp').innerHTML = `<button class="gym-measure-help" id="gymMeasureHelpBtn"><span>📏 Measurement guide</span><b>?</b></button>`;
+  setTimeout(()=>{if(!document.querySelector('.modal-back.show'))maybeShowPplPromotion()},120);
 }
 document.getElementById('gymHelp')?.addEventListener('click',e=>{if(e.target.closest('#gymMeasureHelpBtn'))openMeasurementGuide();});
 
@@ -6017,8 +6022,10 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 30. V183 Engineering Learning Focus: Memory Forge se convierte en NotebookLM Bridge; Kevin LifeOS captura evidencia y conceptos, y NotebookLM genera flashcards, quizzes, audio y material de repaso. Hunter Skill Academy queda dedicada únicamente a ingeniería de software/sistemas, backend, frontend/full stack, datos/bases de datos, seguridad, cloud/DevOps, arquitectura e IA/ML. Gym no aparece sábados ni domingos. Las actividades personalizadas recurrentes tienen effective_from y nunca generan Recovery retroactivo anterior a su fecha real de activación.
 31. V184 NotebookLM Export Queue & Academy Scroll Polish: copiar exitosamente o exportar el source Markdown marca sus elementos como enviados y los saca de la cola pendiente sin borrar la evidencia original de Language Hunter, conceptos ni Academy. El siguiente export contiene únicamente aprendizaje nuevo. Engineering Paths conserva scroll horizontal funcional pero oculta la barra visual para mantener el diseño limpio y táctil.
 32. V185 Wishlist Inline Edit & Gym Progression: los nombres de Wishlist se editan directamente sobre el título sin icono adicional y se persisten en dreams.name. Gym amplía medidas con hombros, antebrazo y pantorrilla sin alterar históricos; Trainer y sus reportes las consumen desde la misma fuente MEASURES. El desbloqueo del arco PPL deja de usar surpriseGate: queda determinado por 6 semanas + 20 días de entrenamiento y ausencia de dolor reportado, con progreso visible al final de Personal Trainer. FINAL BOSS / THE DEBT reemplaza únicamente los títulos visuales del jefe.
+33. V186 Reliable PPL Promotion & Visual Governance: cuando Gym detecta que el arco PPL cumple 6 semanas + 20 sesiones y no existe dolor activo, la ventana de promoción debe ofrecerse automáticamente al entrar/renderizar Gym y también poder abrirse manualmente desde Personal Trainer como respaldo. El panel muestra requisitos cumplidos sin fracciones confusas, conservando los contadores reales. Antes de cualquier cambio visual se debe inspeccionar y respetar el lenguaje de diseño existente del módulo: composición, simetría, tipografía, paleta y patrones actuales; los módulos Hunter conservan su identidad HxH/One Piece y Haki no recibe estilos visuales no solicitados.
 
-ESTADO ACTUAL DEL PROYECTO - V185 WISHLIST INLINE EDIT & GYM PROGRESSION:
+ESTADO ACTUAL DEL PROYECTO - V186 RELIABLE PPL PROMOTION:
+- V186 corrige el flujo de promoción PPL: al cumplir los requisitos la invitación se ofrece automáticamente al entrar/renderizar Gym y Personal Trainer conserva una acción de respaldo para abrirla. Los requisitos cumplidos se muestran como completados y los contadores reales quedan visibles en el texto. No cambia la rutina hasta confirmar Start PPL arc. Se añade la regla permanente de validar el lenguaje visual existente antes de editar estilos; Haki queda protegido de estilos no solicitados.
 - V185 permite editar títulos de Wishlist directamente sobre el texto, añade hombros/antebrazo/pantorrilla al seguimiento corporal y al Trainer, muestra el progreso exacto hacia el arco PPL y elimina el gate aleatorio para que el desbloqueo sea determinista al cumplir requisitos. No se añadió Body Progress Map. FINAL BOSS / THE DEBT es un cambio exclusivamente visual. V184 conserva NotebookLM Bridge incremental y Academy sin scrollbar visible.
 - V181 elimina únicamente para Codensa la conciliación histórica sintética y hace que My credit cards / Debt Boss utilicen su suma pendiente real del desglose más compras pendientes. Las demás tarjetas conservan la lógica ya validada.
 - V182 redefine la X de My credit cards como una preferencia estrictamente visual: puede ocultar una tarjeta del panel aunque tenga saldo o servicios, sin modificar ninguna operación financiera ni quitarla de los medios de pago.
