@@ -4888,3 +4888,22 @@ body.hunter-profile-open {
   width:0;
   height:0;
 }
+
+
+/* V185 · Inline wishlist names */
+.wish-inline-title{cursor:text;outline:none;border-radius:7px;padding:2px 4px;margin-left:-4px;transition:background .16s ease,box-shadow .16s ease,color .16s ease}
+.wish-inline-title:hover{background:rgba(255,255,255,.045)}
+.wish-inline-title:focus{background:rgba(255,255,255,.07);box-shadow:0 0 0 1px rgba(245,197,66,.28);color:#fff}
+
+/* V185 · Trainer progression toward the deterministic PPL unlock */
+.trainer-unlock-section{display:grid;gap:12px}
+.trainer-unlock-title{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px;border-radius:13px;background:linear-gradient(135deg,rgba(118,80,215,.14),rgba(18,24,28,.35));border:1px solid rgba(145,112,255,.18)}
+.trainer-unlock-title small{display:block;color:#a991ff;font-size:.62rem;letter-spacing:.11em;font-weight:800}
+.trainer-unlock-title b{display:block;margin-top:4px;font-size:.92rem}
+.trainer-unlock-title strong{font-size:1.05rem;color:#c9b8ff;white-space:nowrap}
+.trainer-unlock-metric{display:grid;gap:6px}
+.trainer-unlock-metric>div:first-child{display:flex;justify-content:space-between;gap:10px;font-size:.75rem}
+.trainer-unlock-metric span{color:var(--mut)}
+.trainer-unlock-bar{height:7px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden}
+.trainer-unlock-bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#7650d7,#a991ff)}
+.trainer-unlock-section>p{margin:0;color:var(--mut);font-size:.72rem;line-height:1.5}
