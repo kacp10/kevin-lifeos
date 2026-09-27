@@ -274,7 +274,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 186;
+const FRONT_V = 187;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -4996,9 +4996,10 @@ function memoryForgeRead() {
       cards: Array.isArray(raw.cards) ? raw.cards : [],
       imports: Array.isArray(raw.imports) ? raw.imports : [],
       processed_sources: Array.isArray(raw.processed_sources) ? raw.processed_sources : [],
-      pending_prompt_sources: Array.isArray(raw.pending_prompt_sources) ? raw.pending_prompt_sources : []
+      pending_prompt_sources: Array.isArray(raw.pending_prompt_sources) ? raw.pending_prompt_sources : [],
+      notebook_batch: raw.notebook_batch && typeof raw.notebook_batch === 'object' ? raw.notebook_batch : null
     };
-  } catch (_) { return { concepts:[], cards:[], imports:[], processed_sources:[], pending_prompt_sources:[] }; }
+  } catch (_) { return { concepts:[], cards:[], imports:[], processed_sources:[], pending_prompt_sources:[], notebook_batch:null }; }
 }
 async function memoryForgeSave(state) {
   const clean = {
@@ -5006,7 +5007,8 @@ async function memoryForgeSave(state) {
     cards:(state.cards || []).slice(-3000),
     imports:(state.imports || []).slice(-120),
     processed_sources:[...new Set(state.processed_sources || [])].slice(-5000),
-    pending_prompt_sources:[...new Set(state.pending_prompt_sources || [])].slice(-1000)
+    pending_prompt_sources:[...new Set(state.pending_prompt_sources || [])].slice(-1000),
+    notebook_batch: state.notebook_batch && typeof state.notebook_batch === 'object' ? state.notebook_batch : null
   };
   const value = JSON.stringify(clean);
   await api('/api/profile', {body:{key:'memory_forge_v1', value}});
@@ -5180,34 +5182,44 @@ function memoryAcademySources() {
     }));
   } catch(_){ return []; }
 }
+function memoryActiveNotebookBatch() {
+  const state=memoryForgeRead();
+  const batch=state.notebook_batch;
+  if(!batch || batch.status!=='active' || !Array.isArray(batch.source_ids) || !batch.source_ids.length || !String(batch.markdown||'').trim()) return null;
+  return batch;
+}
 function memoryBridgePayload() {
   const state=memoryForgeRead();
   const processed=new Set(state.processed_sources||[]);
+  const active=new Set(memoryActiveNotebookBatch()?.source_ids||[]);
   const concepts=(state.concepts||[]).filter(x=>x.status!=='archived'&&x.status!=='processed').map(x=>({
     ...x,
     source_id:x.source_id||memorySourceId('concept',x.id||'',x.concept||'',x.created_at||'')
-  })).filter(x=>!processed.has(x.source_id)).slice(-180);
+  })).filter(x=>!processed.has(x.source_id)&&!active.has(x.source_id)).slice(-180);
   return {
     generated_at:hoyLocal(),
     folders:['English','Software Engineering','Backend','Frontend','Data & Analytics','Databases','Cloud & DevOps','Cybersecurity','AI & ML','Hunter Skill Academy'],
-    english:memoryEnglishSources().filter(x=>!processed.has(x.source_id)),
+    english:memoryEnglishSources().filter(x=>!processed.has(x.source_id)&&!active.has(x.source_id)),
     concepts,
-    academy:memoryAcademySources().filter(x=>!processed.has(x.source_id))
+    academy:memoryAcademySources().filter(x=>!processed.has(x.source_id)&&!active.has(x.source_id))
   };
 }
-function memoryNotebookSource() {
-  const payload=memoryBridgePayload();
+function memoryNotebookSource(payload=memoryBridgePayload()) {
   const lines=[
     '# Kevin LifeOS — NotebookLM Study Source',
     '',
     `Generated: ${payload.generated_at}`,
     '',
-    '## Purpose',
-    'This document contains learning evidence captured in Kevin LifeOS. Use it as source material in NotebookLM for flashcards, quizzes, study guides, audio overviews and review. Preserve the learner\'s wording when it represents a real mistake or personal explanation; do not invent experience.',
+    '## How to interpret this source',
+    'Kevin LifeOS separates learning evidence by type. Do not mix the categories unless the learner explicitly asks for a combined exercise.',
+    '',
+    '- ENGLISH = vocabulary, learner mistakes, corrections, phrases and language context.',
+    '- TECHNICAL CONCEPTS = software engineering, backend, frontend, data, databases, cloud, DevOps, cybersecurity and AI concepts captured by the learner.',
+    '- HUNTER SKILL ACADEMY = evidence of topics practiced or studied; treat it as learning history, not as proof of professional experience.',
     '',
     '## English signals'
   ];
-  if(!payload.english.length) lines.push('No new English signals.');
+  if(!payload.english.length) lines.push('No English signals in this batch.');
   payload.english.forEach((x,i)=>{
     lines.push('',`### English ${i+1} · ${x.kind||'signal'}`);
     if(x.word) lines.push(`- Word: ${x.word}`);
@@ -5220,7 +5232,7 @@ function memoryNotebookSource() {
     if(x.source) lines.push(`- Source: ${x.source}`);
   });
   lines.push('','## Technical concepts');
-  if(!payload.concepts.length) lines.push('No new captured concepts.');
+  if(!payload.concepts.length) lines.push('No technical concepts in this batch.');
   payload.concepts.forEach((x,i)=>{
     lines.push('',`### Concept ${i+1} · ${x.concept||'Untitled'}`);
     if(x.explanation) lines.push(`- My understanding: ${x.explanation}`);
@@ -5229,54 +5241,107 @@ function memoryNotebookSource() {
     if((x.tags||[]).length) lines.push(`- Tags: ${(x.tags||[]).join(', ')}`);
   });
   lines.push('','## Hunter Skill Academy evidence');
-  if(!payload.academy.length) lines.push('No new Academy practice notes.');
+  if(!payload.academy.length) lines.push('No Academy practice notes in this batch.');
   payload.academy.forEach((x,i)=>{
     lines.push('',`### Academy ${i+1} · ${x.topic||'Topic'}`);
     if(x.subcategory) lines.push(`- Area: ${x.subcategory}`);
     if(x.note) lines.push(`- What I understood: ${x.note}`);
     if(x.date) lines.push(`- Date: ${x.date}`);
   });
-  lines.push('','## NotebookLM instructions','Use this document as a source. Build review material from what is actually present here. When creating flashcards, keep one idea per card. When creating quizzes, mix definitions, scenarios, troubleshooting and trade-offs. When summarizing technical concepts, distinguish facts captured here from any outside knowledge.');
+  lines.push(
+    '',
+    '## NotebookLM master instructions',
+    'Use only the source evidence above when the task is to review what Kevin has learned. Keep English and technical study separated unless Kevin explicitly asks to combine them.',
+    '',
+    'For ENGLISH:',
+    '- Create vocabulary, correction and usage review from the English section only.',
+    '- Preserve learner errors as errors; do not present them as correct English.',
+    '- Prefer short examples and context-based recall.',
+    '',
+    'For TECHNICAL CONCEPTS:',
+    '- Preserve the Area field so Backend, Frontend, Data, Databases, Cloud/DevOps, Cybersecurity, AI and other engineering topics remain distinguishable.',
+    '- Build questions around definition, purpose, alternatives, trade-offs, failure modes and real engineering scenarios when the source supports them.',
+    '- Do not invent technologies, architectures or professional experience that are not present in the source.',
+    '',
+    'For HUNTER SKILL ACADEMY:',
+    '- Treat entries as study/practice evidence and use them to identify what has been trained and what may need review.',
+    '- Do not convert Academy history into claims that Kevin implemented something professionally.',
+    '',
+    'When creating flashcards, keep one idea per card. When creating quizzes, mix recall, scenarios, troubleshooting and trade-offs. When creating summaries or study guides, preserve the category boundaries above.'
+  );
   return lines.join('\n');
 }
 function memoryBridgeSourceIds(payload=memoryBridgePayload()) {
   return [...(payload.english||[]),...(payload.concepts||[]),...(payload.academy||[])]
     .map(x=>x.source_id).filter(Boolean);
 }
-async function memoryMarkNotebookLMSent(payload,reason='notebooklm_export') {
+function memoryNotebookBatchCounts(payload) {
+  return {
+    english:(payload.english||[]).length,
+    concepts:(payload.concepts||[]).length,
+    academy:(payload.academy||[]).length,
+    total:memoryBridgeSourceIds(payload).length
+  };
+}
+async function memoryEnsureNotebookBatch() {
+  const current=memoryActiveNotebookBatch();
+  if(current) return current;
+  const payload=memoryBridgePayload();
   const ids=memoryBridgeSourceIds(payload);
-  if(!ids.length)return 0;
-  const state=memoryForgeRead(),sent=new Set(ids),stamp=hoyLocal();
+  if(!ids.length) return null;
+  const state=memoryForgeRead();
+  const batch={
+    id:`notebook-${Date.now()}`,
+    created_at:hoyLocal(),
+    status:'active',
+    source_ids:ids,
+    counts:memoryNotebookBatchCounts(payload),
+    markdown:memoryNotebookSource(payload)
+  };
+  state.notebook_batch=batch;
+  await memoryForgeSave(state);
+  return batch;
+}
+async function memoryMarkNotebookLMSent(batch,reason='notebooklm_batch_sent') {
+  if(!batch || !Array.isArray(batch.source_ids) || !batch.source_ids.length) return 0;
+  const ids=batch.source_ids, state=memoryForgeRead(), sent=new Set(ids), stamp=hoyLocal();
   state.processed_sources=[...new Set([...(state.processed_sources||[]),...ids])];
   state.concepts=(state.concepts||[]).map(x=>{
     const sid=x.source_id||memorySourceId('concept',x.id||'',x.concept||'',x.created_at||'');
     return sent.has(sid)?{...x,source_id:sid,status:'processed',processed_at:stamp,processed_via:reason}:x;
   });
-  state.imports=(state.imports||[]).concat([{date:stamp,count:ids.length,summary:`NotebookLM source sent · ${reason}`}]);
+  state.imports=(state.imports||[]).concat([{date:stamp,count:ids.length,summary:`NotebookLM batch closed · ${reason}`}]);
+  state.notebook_batch=null;
   await memoryForgeSave(state);
   return ids.length;
 }
 async function copyMemoryBridgePrompt(){
-  const payload=memoryBridgePayload();
-  const ids=[...payload.english,...payload.concepts,...payload.academy].map(x=>x.source_id).filter(Boolean);
-  if(!ids.length){toast('No new learning material is waiting for NotebookLM.');return;}
-  const txt=memoryNotebookSource();
+  const batch=await memoryEnsureNotebookBatch();
+  if(!batch){toast('No new learning material is waiting for NotebookLM.');return false;}
   try{
-    await navigator.clipboard.writeText(txt);
-    await memoryMarkNotebookLMSent(payload,'clipboard');
-    toast(`NotebookLM source copied · ${ids.length} item${ids.length===1?'':'s'} moved out of the pending queue.`);
+    await navigator.clipboard.writeText(batch.markdown);
+    toast(`NotebookLM batch copied · ${batch.source_ids.length} item${batch.source_ids.length===1?'':'s'} remain available for .md export.`);
+    return true;
   }catch(_){
-    prompt('Copy this NotebookLM source:',txt);
-    toast('Source opened for manual copy. It remains pending until you export or copy successfully.');
+    prompt('Copy this NotebookLM source:',batch.markdown);
+    toast('Source opened for manual copy. The batch remains active.');
+    return false;
   }
 }
 async function exportNotebookLMSource(){
-  const payload=memoryBridgePayload();
-  const count=payload.english.length+payload.concepts.length+payload.academy.length;
-  if(!count){toast('No new learning material is waiting for NotebookLM.');return false;}
-  downloadTextFile(`Kevin_LifeOS_NotebookLM_${hoyLocal()}.md`,memoryNotebookSource(),'text/markdown;charset=utf-8');
-  await memoryMarkNotebookLMSent(payload,'markdown_export');
-  toast(`NotebookLM source exported · ${count} item${count===1?'':'s'} moved out of the pending queue.`);
+  const batch=await memoryEnsureNotebookBatch();
+  if(!batch){toast('No new learning material is waiting for NotebookLM.');return false;}
+  downloadTextFile(`Kevin_LifeOS_NotebookLM_${batch.created_at}_${batch.id.replace('notebook-','')}.md`,batch.markdown,'text/markdown;charset=utf-8');
+  toast(`NotebookLM .md exported · batch stays active until you mark it as sent.`);
+  return true;
+}
+async function closeNotebookLMBatch(){
+  const batch=memoryActiveNotebookBatch();
+  if(!batch){toast('There is no active NotebookLM batch to close.');return false;}
+  const ok=await modal({icon:'✓',title:'Mark NotebookLM batch as sent?',text:`This closes the current batch of <b>${batch.source_ids.length}</b> item${batch.source_ids.length===1?'':'s'}. Your original English, concepts and Academy history stay stored in Kevin LifeOS.`,okText:'Mark as sent',cancelText:'Keep batch'});
+  if(!ok)return false;
+  const count=await memoryMarkNotebookLMSent(batch,'manual_confirm');
+  toast(`NotebookLM batch completed · ${count} item${count===1?'':'s'} removed from the pending queue.`);
   return true;
 }
 function memoryCompactText(value='',limit=140){
@@ -5437,8 +5502,24 @@ async function exportMemoryForgeCards(){
 function openMemoryForge() {
   const previous=document.activeElement,back=document.createElement('div');back.className='modal-back memory-forge-back';
   const close=()=>{back.classList.remove('show');setTimeout(()=>{back.remove();if(!document.querySelector('.modal-back'))document.body.classList.remove('modal-open');previous?.focus?.();},240)};
-  const draw=()=>{const payload=memoryBridgePayload(),total=payload.english.length+payload.concepts.length+payload.academy.length;back.innerHTML=`<div class="modal-card memory-forge-card"><div class="memory-forge-head"><div><span>NOTEBOOKLM BRIDGE</span><h3>Study source hub</h3><p>Kevin LifeOS captures. NotebookLM turns your material into flashcards, quizzes, study guides and review.</p></div><button type="button" data-memory-close>✕</button></div><div class="memory-forge-stats"><div><b>${payload.english.length}</b><span>English signals</span></div><div><b>${payload.concepts.length}</b><span>technical concepts</span></div><div><b>${payload.academy.length}</b><span>Academy notes</span></div><div><b>${total}</b><span>new items waiting</span><small>for NotebookLM</small></div></div><div class="memory-forge-actions"><button data-memory-capture>＋ Capture concept</button><button data-memory-copy>Copy NotebookLM source</button><button data-memory-export>Export .md source</button></div><div class="memory-forge-foot"><button data-memory-help>?</button><span>Kevin LifeOS stores learning evidence; NotebookLM is now responsible for generating flashcards and other review material.</span></div></div>`;bind();};
-  const bind=()=>{back.querySelector('[data-memory-close]').onclick=close;back.querySelector('[data-memory-capture]').onclick=async()=>{await memoryCaptureConcept();draw();};back.querySelector('[data-memory-copy]').onclick=copyMemoryBridgePrompt;back.querySelector('[data-memory-export]').onclick=async()=>{await exportNotebookLMSource();draw();};back.querySelector('[data-memory-help]').onclick=()=>modal({icon:'?',title:'NotebookLM Bridge',text:'Capture learning evidence in Kevin LifeOS, then copy or export the Markdown source into NotebookLM. After a successful copy or export, those items leave the pending queue but remain stored in their original modules. Only new learning evidence appears in the next export.',okText:'Understood'});};
+  const draw=()=>{
+    const pending=memoryBridgePayload(),batch=memoryActiveNotebookBatch(),pendingTotal=pending.english.length+pending.concepts.length+pending.academy.length;
+    const counts=batch?.counts||{english:pending.english.length,concepts:pending.concepts.length,academy:pending.academy.length,total:pendingTotal};
+    const mode=batch?'ACTIVE BATCH':'NEW MATERIAL';
+    const foot=batch
+      ? `${batch.source_ids.length} item${batch.source_ids.length===1?'':'s'} are frozen in the active batch. Copy and .md export reuse the exact same source. ${pendingTotal} newer item${pendingTotal===1?' is':'s are'} waiting for the next batch.`
+      : 'Create the batch by copying or exporting. Nothing leaves the pending queue until you explicitly mark the batch as sent.';
+    back.innerHTML=`<div class="modal-card memory-forge-card"><div class="memory-forge-head"><div><span>NOTEBOOKLM BRIDGE · ${mode}</span><h3>Study source hub</h3><p>Kevin LifeOS captures and separates learning evidence. NotebookLM turns the prepared batch into review material.</p></div><button type="button" data-memory-close>✕</button></div><div class="memory-forge-stats"><div><b>${counts.english}</b><span>English signals</span></div><div><b>${counts.concepts}</b><span>technical concepts</span></div><div><b>${counts.academy}</b><span>Academy notes</span></div><div><b>${counts.total}</b><span>${batch?'items in active batch':'new items waiting'}</span><small>${batch?`${pendingTotal} waiting next`:'for NotebookLM'}</small></div></div><div class="memory-forge-actions"><button data-memory-capture>＋ Capture concept</button><button data-memory-copy>${batch?'Copy active batch':'Prepare & copy batch'}</button><button data-memory-export>${batch?'Download active .md':'Prepare & export .md'}</button>${batch?'<button data-memory-sent>✓ Mark batch as sent</button>':''}</div><div class="memory-forge-foot"><button data-memory-help>?</button><span>${foot}</span></div></div>`;
+    bind();
+  };
+  const bind=()=>{
+    back.querySelector('[data-memory-close]').onclick=close;
+    back.querySelector('[data-memory-capture]').onclick=async()=>{await memoryCaptureConcept();draw();};
+    back.querySelector('[data-memory-copy]').onclick=async()=>{await copyMemoryBridgePrompt();draw();};
+    back.querySelector('[data-memory-export]').onclick=async()=>{await exportNotebookLMSource();draw();};
+    const sent=back.querySelector('[data-memory-sent]');if(sent)sent.onclick=async()=>{if(await closeNotebookLMBatch())draw();};
+    back.querySelector('[data-memory-help]').onclick=()=>modal({icon:'?',title:'NotebookLM Bridge',text:'Kevin LifeOS builds one active batch at a time. Copy and Download .md reuse that same batch and do not remove anything. Only “Mark batch as sent” closes it and removes those source IDs from the pending queue. English, technical concepts and Academy evidence remain separated inside the Markdown and are never deleted from their original modules.',okText:'Understood'});
+  };
   document.body.appendChild(back);document.body.classList.add('modal-open');draw();requestAnimationFrame(()=>back.classList.add('show'));
 }
 
@@ -6023,9 +6104,10 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 31. V184 NotebookLM Export Queue & Academy Scroll Polish: copiar exitosamente o exportar el source Markdown marca sus elementos como enviados y los saca de la cola pendiente sin borrar la evidencia original de Language Hunter, conceptos ni Academy. El siguiente export contiene únicamente aprendizaje nuevo. Engineering Paths conserva scroll horizontal funcional pero oculta la barra visual para mantener el diseño limpio y táctil.
 32. V185 Wishlist Inline Edit & Gym Progression: los nombres de Wishlist se editan directamente sobre el título sin icono adicional y se persisten en dreams.name. Gym amplía medidas con hombros, antebrazo y pantorrilla sin alterar históricos; Trainer y sus reportes las consumen desde la misma fuente MEASURES. El desbloqueo del arco PPL deja de usar surpriseGate: queda determinado por 6 semanas + 20 días de entrenamiento y ausencia de dolor reportado, con progreso visible al final de Personal Trainer. FINAL BOSS / THE DEBT reemplaza únicamente los títulos visuales del jefe.
 33. V186 Reliable PPL Promotion & Visual Governance: cuando Gym detecta que el arco PPL cumple 6 semanas + 20 sesiones y no existe dolor activo, la ventana de promoción debe ofrecerse automáticamente al entrar/renderizar Gym y también poder abrirse manualmente desde Personal Trainer como respaldo. El panel muestra requisitos cumplidos sin fracciones confusas, conservando los contadores reales. Antes de cualquier cambio visual se debe inspeccionar y respetar el lenguaje de diseño existente del módulo: composición, simetría, tipografía, paleta y patrones actuales; los módulos Hunter conservan su identidad HxH/One Piece y Haki no recibe estilos visuales no solicitados.
+34. V187 NotebookLM Batch Flow & Modal Toast Layering: NotebookLM Bridge mantiene un lote activo explícito. Copy y Export .md reutilizan exactamente el mismo lote y no lo consumen; solo “Mark batch as sent” marca sus source_id como procesados y cierra el lote, conservando English, conceptos y Academy en sus módulos originales. El Markdown separa English, Technical Concepts y Hunter Skill Academy e incluye instrucciones maestras para NotebookLM. Todos los toasts/notificaciones deben renderizar por encima de cualquier modal activo para que siempre sean legibles sin cerrar el modal.
 
-ESTADO ACTUAL DEL PROYECTO - V186 RELIABLE PPL PROMOTION:
-- V186 corrige el flujo de promoción PPL: al cumplir los requisitos la invitación se ofrece automáticamente al entrar/renderizar Gym y Personal Trainer conserva una acción de respaldo para abrirla. Los requisitos cumplidos se muestran como completados y los contadores reales quedan visibles en el texto. No cambia la rutina hasta confirmar Start PPL arc. Se añade la regla permanente de validar el lenguaje visual existente antes de editar estilos; Haki queda protegido de estilos no solicitados.
+ESTADO ACTUAL DEL PROYECTO - V187 NOTEBOOKLM BATCH FLOW:
+- V187 conserva V186 y corrige NotebookLM Bridge: Copy y Export .md comparten un lote activo no destructivo; solo Mark batch as sent cierra y procesa el lote. El Markdown separa English, conceptos técnicos y Academy con instrucciones maestras para NotebookLM. Los toasts se muestran por encima de modales activos. La regla visual de V186 permanece vigente y Haki sigue protegido de estilos no solicitados.
 - V185 permite editar títulos de Wishlist directamente sobre el texto, añade hombros/antebrazo/pantorrilla al seguimiento corporal y al Trainer, muestra el progreso exacto hacia el arco PPL y elimina el gate aleatorio para que el desbloqueo sea determinista al cumplir requisitos. No se añadió Body Progress Map. FINAL BOSS / THE DEBT es un cambio exclusivamente visual. V184 conserva NotebookLM Bridge incremental y Academy sin scrollbar visible.
 - V181 elimina únicamente para Codensa la conciliación histórica sintética y hace que My credit cards / Debt Boss utilicen su suma pendiente real del desglose más compras pendientes. Las demás tarjetas conservan la lógica ya validada.
 - V182 redefine la X de My credit cards como una preferencia estrictamente visual: puede ocultar una tarjeta del panel aunque tenga saldo o servicios, sin modificar ninguna operación financiera ni quitarla de los medios de pago.

@@ -336,7 +336,7 @@ tr.pending td:first-child { box-shadow: inset 3px 0 0 var(--mut); }
 .m-ok:hover, .m-cancel:hover { filter: brightness(1.12); }
 
 /* ====== TOAST (avisos rápidos) ====== */
-#toastWrap { position: fixed; top: 18px; right: 18px; z-index: 1100;
+#toastWrap { position: fixed; top: 18px; right: 18px; z-index: 2147483000;
   display: flex; flex-direction: column; gap: 10px; }
 .toast {
   background: linear-gradient(135deg, #2a2347, var(--panel));
