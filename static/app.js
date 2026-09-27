@@ -274,7 +274,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 184;
+const FRONT_V = 185;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -1616,12 +1616,15 @@ function checkVersion() {
 
 /* ---------- GYM & FITNESS ---------- */
 const MEASURES = [
-  { key: 'weight', label: 'Weight', unit: 'kg', good: 'down' },
-  { key: 'waist',  label: 'Waist',  unit: 'cm', good: 'down' },
-  { key: 'chest',  label: 'Chest',  unit: 'cm', good: 'flat' },
-  { key: 'arm',    label: 'Arm (flexed)', unit: 'cm', good: 'flat' },
-  { key: 'hip',    label: 'Hips',   unit: 'cm', good: 'down' },
-  { key: 'thigh',  label: 'Thigh',  unit: 'cm', good: 'flat' }
+  { key: 'weight',    label: 'Weight', unit: 'kg', good: 'down' },
+  { key: 'waist',     label: 'Waist', unit: 'cm', good: 'down' },
+  { key: 'chest',     label: 'Chest', unit: 'cm', good: 'flat' },
+  { key: 'shoulders', label: 'Shoulders', unit: 'cm', good: 'flat' },
+  { key: 'arm',       label: 'Arm (flexed)', unit: 'cm', good: 'flat' },
+  { key: 'forearm',   label: 'Forearm', unit: 'cm', good: 'flat' },
+  { key: 'hip',       label: 'Hips', unit: 'cm', good: 'down' },
+  { key: 'thigh',     label: 'Thigh', unit: 'cm', good: 'flat' },
+  { key: 'calf',      label: 'Calf', unit: 'cm', good: 'flat' }
 ];
 function getGym() {
   try { return JSON.parse((S.profile || {}).gym_data || '{}'); } catch { return {}; }
@@ -2045,9 +2048,10 @@ function gymPplPromotionState() {
   const latest=gymTrainerLatestCheckin();
   const hasPain=!!(latest?.pain && !/^(none|no|ninguno|ninguna|sin dolor)$/i.test(String(latest.pain).trim()));
   const deferred=!!(p.pplPromotionDeferredUntil && p.pplPromotionDeferredUntil>hoyLocal());
-  const eligible=p.routineMode!=='ppl5' && !p.pplPromotionAccepted && !p.pplPromotionShowing && !hasPain && !deferred && weeks>=6 && sessions>=20;
-  const surpriseGate=sessions>=24 || ((sessions + Number(hoyLocal().replace(/-/g,''))) % 3 === 0);
-  return {eligible:eligible&&surpriseGate,weeks,sessions,hasPain};
+  const requirementsMet=weeks>=6 && sessions>=20 && !hasPain;
+  const eligible=p.routineMode!=='ppl5' && !p.pplPromotionAccepted && !deferred && requirementsMet;
+  const progress=Math.max(0,Math.min(100,Math.round(Math.min(weeks/6,sessions/20)*100)));
+  return {eligible,weeks,sessions,hasPain,requirementsMet,progress,active:p.routineMode==='ppl5'||!!p.pplPromotionAccepted};
 }
 async function activatePplRoutine() {
   const p=getGymPrefs();
@@ -2057,8 +2061,7 @@ async function activatePplRoutine() {
   await saveGymPrefs(p); GYM_PLAN_SEL='today'; renderWorkout();
 }
 function maybeShowPplPromotion() {
-  const state=gymPplPromotionState(); if(!state.eligible)return false;
-  const p=getGymPrefs(); p.pplPromotionShowing=true; saveGymPrefs(p).catch(()=>{});
+  const state=gymPplPromotionState(); if(!state.eligible||document.querySelector('.ppl-promotion-back'))return false;
   const back=document.createElement('div'); back.className='modal-back ppl-promotion-back';
   back.innerHTML=`<div class="modal-card ppl-promotion-card"><small>◆ NEW TRAINING ARC</small><div class="ppl-promotion-mark">V</div><h3>Felicidades. Estás en otro nivel.</h3><p>Es hora de entrenar como un hombre de verdad.</p><div class="ppl-promotion-meta"><span>${state.weeks}+ weeks</span><span>${state.sessions} sessions</span><span>5-day PPL</span></div><div class="ppl-promotion-week"><b>MON</b><span>Push A</span><b>TUE</b><span>Pull A</span><b>WED</b><span>Legs + Abs</span><b>THU</b><span>Push B</span><b>FRI</b><span>Pull B</span></div><p class="ppl-promotion-note">Your history, weights and measurements stay intact. The routine changes only if you accept.</p><div class="ppl-promotion-actions"><button data-ppl-later>Not yet</button><button data-ppl-start>Start PPL arc</button></div></div>`;
   document.body.appendChild(back); requestAnimationFrame(()=>back.classList.add('show'));
@@ -2191,7 +2194,7 @@ function gymMeasurementQuality(entry) {
 }
 function gymMeasurementWarnings(entry, previous) {
   if(!entry||!previous)return [];
-  const limits={weight:3,waist:5,chest:5,arm:2.5,hip:5,thigh:4};
+  const limits={weight:3,waist:5,chest:5,shoulders:5,arm:2.5,forearm:2.5,hip:5,thigh:4,calf:2.5};
   const out=[];
   MEASURES.forEach(m=>{
     const a=Number(previous[m.key]),b=Number(entry[m.key]);
@@ -2356,6 +2359,24 @@ function openGymTrainer() {
           <button type="button" class="trainer-prompt-btn primary" data-trainer-copy="report"><span>📋</span><b>Current progress report</b><small>Use for a complete evaluation of your current body and training data.</small></button>
         </div>
       </section>
+      ${(()=>{
+        const arc=gymPplPromotionState();
+        const weeksPct=Math.min(100,Math.round((arc.weeks/6)*100));
+        const sessionsPct=Math.min(100,Math.round((arc.sessions/20)*100));
+        const status=arc.active?'UNLOCKED':arc.requirementsMet?'READY TO UNLOCK':arc.hasPain?'RECOVERY CHECK REQUIRED':'IN PROGRESS';
+        const note=arc.active
+          ? 'Your 5-day Push / Pull / Legs arc is unlocked and active.'
+          : arc.hasPain
+            ? 'The time and session counters keep progressing, but a reported pain/discomfort check-in pauses the automatic unlock until recovery is clear.'
+            : `Automatic unlock requires 6 weeks and 20 logged training days. ${Math.max(0,6-arc.weeks)} week(s) and ${Math.max(0,20-arc.sessions)} session(s) remain by the current counters.`;
+        return `<section class="trainer-section trainer-unlock-section">
+          <div class="trainer-section-head"><h4>Next training arc</h4><span>${status}</span></div>
+          <div class="trainer-unlock-title"><div><small>5-DAY PUSH / PULL / LEGS</small><b>${arc.active?'Unlocked':arc.progress+'% toward unlock'}</b></div><strong>${arc.active?'✓':arc.progress+'%'}</strong></div>
+          <div class="trainer-unlock-metric"><div><span>Training time</span><b>${arc.weeks}/6 weeks</b></div><div class="trainer-unlock-bar"><i style="width:${weeksPct}%"></i></div></div>
+          <div class="trainer-unlock-metric"><div><span>Logged sessions</span><b>${arc.sessions}/20 days</b></div><div class="trainer-unlock-bar"><i style="width:${sessionsPct}%"></i></div></div>
+          <p>${esc(note)}</p>
+        </section>`;
+      })()}
       <p class="trainer-disclaimer">This is progress guidance, not medical diagnosis. Pain, injury or concerning symptoms require a qualified professional.</p>
     </div></div>`;
   document.body.appendChild(back); requestAnimationFrame(()=>back.classList.add('show'));
@@ -2594,9 +2615,12 @@ const GYM_MANUAL_HTML = `
     <ul>
       <li><b>Waist</b> — around the navel. The #1 fat-loss signal.</li>
       <li><b>Chest</b> — across the nipples, arms down.</li>
+      <li><b>Shoulders</b> — around the widest point of both shoulders, tape level and relaxed.</li>
       <li><b>Arm</b> — flexed bicep, thickest point.</li>
+      <li><b>Forearm</b> — thickest point, arm relaxed.</li>
       <li><b>Hips</b> — widest part of the glutes.</li>
       <li><b>Thigh</b> — highest point, under the glute.</li>
+      <li><b>Calf</b> — thickest point of the calf, standing relaxed.</li>
       <li><b>Weight</b> — same scale, morning, after bathroom.</li>
     </ul>
   </div>
@@ -5992,9 +6016,10 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 29. V182 My Credit Cards Panel Visibility: la X de una tarjeta únicamente la oculta del panel My credit cards. No exige saldo cero, no desactiva la tarjeta y no altera compras, servicios, Home, Debt Boss, Full debt breakdown, pagos, rediferidos, historial ni disponibilidad como medio de pago.
 30. V183 Engineering Learning Focus: Memory Forge se convierte en NotebookLM Bridge; Kevin LifeOS captura evidencia y conceptos, y NotebookLM genera flashcards, quizzes, audio y material de repaso. Hunter Skill Academy queda dedicada únicamente a ingeniería de software/sistemas, backend, frontend/full stack, datos/bases de datos, seguridad, cloud/DevOps, arquitectura e IA/ML. Gym no aparece sábados ni domingos. Las actividades personalizadas recurrentes tienen effective_from y nunca generan Recovery retroactivo anterior a su fecha real de activación.
 31. V184 NotebookLM Export Queue & Academy Scroll Polish: copiar exitosamente o exportar el source Markdown marca sus elementos como enviados y los saca de la cola pendiente sin borrar la evidencia original de Language Hunter, conceptos ni Academy. El siguiente export contiene únicamente aprendizaje nuevo. Engineering Paths conserva scroll horizontal funcional pero oculta la barra visual para mantener el diseño limpio y táctil.
+32. V185 Wishlist Inline Edit & Gym Progression: los nombres de Wishlist se editan directamente sobre el título sin icono adicional y se persisten en dreams.name. Gym amplía medidas con hombros, antebrazo y pantorrilla sin alterar históricos; Trainer y sus reportes las consumen desde la misma fuente MEASURES. El desbloqueo del arco PPL deja de usar surpriseGate: queda determinado por 6 semanas + 20 días de entrenamiento y ausencia de dolor reportado, con progreso visible al final de Personal Trainer. FINAL BOSS / THE DEBT reemplaza únicamente los títulos visuales del jefe.
 
-ESTADO ACTUAL DEL PROYECTO - V184 NOTEBOOKLM EXPORT QUEUE & ACADEMY SCROLL POLISH:
-- V184 completa NotebookLM Bridge con cola incremental: Copy/Export exitoso archiva solo el estado de exportación y el siguiente source incluye únicamente elementos nuevos. Engineering Paths mantiene navegación horizontal sin scrollbar visible. V183 sigue definiendo Academy 100% ingeniería/tecnología, Gym fuera del fin de semana y Recovery sin retroactividad.
+ESTADO ACTUAL DEL PROYECTO - V185 WISHLIST INLINE EDIT & GYM PROGRESSION:
+- V185 permite editar títulos de Wishlist directamente sobre el texto, añade hombros/antebrazo/pantorrilla al seguimiento corporal y al Trainer, muestra el progreso exacto hacia el arco PPL y elimina el gate aleatorio para que el desbloqueo sea determinista al cumplir requisitos. No se añadió Body Progress Map. FINAL BOSS / THE DEBT es un cambio exclusivamente visual. V184 conserva NotebookLM Bridge incremental y Academy sin scrollbar visible.
 - V181 elimina únicamente para Codensa la conciliación histórica sintética y hace que My credit cards / Debt Boss utilicen su suma pendiente real del desglose más compras pendientes. Las demás tarjetas conservan la lógica ya validada.
 - V182 redefine la X de My credit cards como una preferencia estrictamente visual: puede ocultar una tarjeta del panel aunque tenga saldo o servicios, sin modificar ninguna operación financiera ni quitarla de los medios de pago.
 - V180 desacopla la configuración permanente de un servicio del estado visual mensual: Life & services solo muestra una tarjeta si existe un cargo real de ese servicio en el mes seleccionado; meses sin check/cargo aparecen limpios y pendientes.
@@ -7547,7 +7572,7 @@ function renderRoutineDay() {
       const [sy, sm, sd] = startG.split('-').map(Number);
       const diffG = Math.round((Date.UTC(yy, mm - 1, dd) - Date.UTC(sy, sm - 1, sd)) / 86400000);
       if (diffG >= 0 && diffG % 7 === 0 && !hiddenDay.has(`${iso}|gymmeasure`)) {
-        lista.push({ t: '08:00', title: '📏 Take your measurements', d: 'Weekly check-in — weight, waist, chest, arm, hip, thigh. Same time, same conditions as always. Log it in Gym → + Log this week.', key: 'gymmeasure' });
+        lista.push({ t: '08:00', title: '📏 Take your measurements', d: 'Weekly check-in — weight, waist, chest, shoulders, arm, forearm, hip, thigh, calf. Same time, same conditions as always. Log it in Gym → + Log this week.', key: 'gymmeasure' });
       }
     }
   } catch { /* sin datos de gym aún: no mostrar el recordatorio */ }
@@ -8355,7 +8380,7 @@ function renderSuenos() {
         const percent = d.bought ? 100 : Math.round(p * 100);
         const remaining = Math.max(value - savedAmount, 0);
         return `<article class="dream-item wish-card ${d.bought ? 'bought-item' : ''}">
-          <div class="wish-card-top"><div><small>${d.bought ? 'TARGET CLAIMED' : percent >= 100 ? 'READY TO CLAIM' : 'FUTURE ACQUISITION'}</small><h4>${esc(d.name)}</h4></div><button class="del-x" data-type="dream" data-id="${d.id}" aria-label="Delete wish">✕</button></div>
+          <div class="wish-card-top"><div><small>${d.bought ? 'TARGET CLAIMED' : percent >= 100 ? 'READY TO CLAIM' : 'FUTURE ACQUISITION'}</small><h4 class="wish-inline-title" contenteditable="true" spellcheck="false" data-dream-name="${d.id}" role="textbox" aria-label="Edit target name">${esc(d.name)}</h4></div><button class="del-x" data-type="dream" data-id="${d.id}" aria-label="Delete wish">✕</button></div>
           <div class="wish-money-grid">
             <label><span>Target value</span><input class="d-edit money-live" inputmode="numeric" data-f="value" data-id="${d.id}" value="${Number(value).toLocaleString('es-CO')}" title="Target value"></label>
             <label><span>Saved</span><input class="d-edit money-live" inputmode="numeric" data-f="saved" data-id="${d.id}" value="${Number(savedAmount).toLocaleString('es-CO')}" title="Amount saved"></label>
@@ -8368,6 +8393,28 @@ function renderSuenos() {
   }).join('');
   $('#dreamList').innerHTML = summary + groups;
 }
+$('#dreamList').addEventListener('keydown', async (e) => {
+  const title=e.target.closest('[data-dream-name]');
+  if(!title)return;
+  if(e.key==='Enter'){e.preventDefault();title.blur();}
+  if(e.key==='Escape'){
+    const d=S.dreams.find(x=>x.id===+title.dataset.dreamName);
+    title.textContent=d?.name||'';
+    title.blur();
+  }
+});
+$('#dreamList').addEventListener('blur', async (e) => {
+  const title=e.target.closest?.('[data-dream-name]');
+  if(!title)return;
+  const d=S.dreams.find(x=>x.id===+title.dataset.dreamName);
+  const name=String(title.textContent||'').replace(/\s+/g,' ').trim();
+  if(!d)return;
+  if(!name){title.textContent=d.name||'';toast('Target name cannot be empty');return;}
+  if(name===String(d.name||''))return;
+  await api('/api/dream',{body:{id:d.id,field:'name',value:name}});
+  d.name=name;
+  toast('Target name updated');
+}, true);
 $('#dreamList').addEventListener('change', async (e) => {
   if (!e.target.classList.contains('d-edit')) return;
   const v = +(e.target.value || '').replace(/\./g, '').replace(/[^0-9-]/g, '') || 0;
