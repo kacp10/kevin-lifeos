@@ -283,7 +283,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 189;
+const FRONT_V = 190;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -3893,8 +3893,8 @@ document.addEventListener('click', async (e) => {
   const c = e.target.closest('.check-item');
   if (!c) return;
   if (c.dataset.oncard && c.dataset.serviceId) {
-    // V188: clicking an explicitly charged service again removes that month's
-    // unpaid card charge and returns the row to a clean pending state.
+    // V190: only the CURRENT month's unpaid charge can be toggled off. A charge
+    // from a closed month is historical evidence and the backend protects it.
     try {
       const out = await api('/api/service/card-charge', { body: { service_id: +c.dataset.serviceId, month: c.dataset.mk } });
       toast(out.checked === false ? '↩ Card charge removed for this month.' : '💳 Card charge confirmed for this month.');
@@ -6149,6 +6149,7 @@ ESTADO ACTUAL DEL PROYECTO - V188 EXPLICIT MONTHLY SERVICE CARD CHARGES:
 - V182 redefine la X de My credit cards como una preferencia estrictamente visual: puede ocultar una tarjeta del panel aunque tenga saldo o servicios, sin modificar ninguna operación financiera ni quitarla de los medios de pago.
 - V180 desacopla la configuración permanente de un servicio del estado visual mensual: Life & services solo muestra una tarjeta si existe un cargo real de ese servicio en el mes seleccionado; meses sin check/cargo aparecen limpios y pendientes.
 - V189 aplica una frontera temporal única a nuevas cuotas y rediferidos: el primer mes seleccionable es siempre el mes calendario real actual; meses ya cerrados nunca reaparecen en selectores de alta aunque Home esté navegando un mes histórico.
+- V190 separa estado mensual de historial financiero en Life & services: cada mes nuevo vuelve a Pending, pero cualquier cargo explícito realizado con tarjeta en un mes cerrado queda persistido e inmutable en compras/service_card_charges y en la deuda de la tarjeta. El cambio de mes nunca elimina ese registro; solo se puede quitar un cargo del mes calendario actual mientras siga sin pagos/asignaciones. Un mes histórico faltante puede reconstruirse manualmente una vez y luego queda protegido.
 - V179 establece una fuente monetaria canónica para las cinco tarjetas: deuda base pendiente + compras pendientes. My Credit Cards y Debt Boss consumen ese mismo saldo.
 - Full debt breakdown mantiene las líneas históricas sin borrarlas ni reescribir pagos antiguos; cuando el historial viejo no permite atribuir con precisión un pago a una línea, muestra una fila de reconciliación explícita para que la suma del grupo coincida exactamente con el saldo real.
 - El selector de mes ya no paga capital por el simple paso del tiempo. Solo cambia qué cuota corresponde al mes; el saldo disminuye únicamente mediante abonos/pagos reales.
