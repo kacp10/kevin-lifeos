@@ -83,11 +83,20 @@ const planIndex = (d) => (d.getFullYear() - 2026) * 12 + d.getMonth() - 6;  // j
 const TARJETAS_CREDITO = ['Tarjeta DV — Jefe Final', 'ADDI', 'Crédito Nicole', 'Codensa', 'Banco de Bogotá', 'Tarjeta Nicole'];
 const CRED_TO_DEBT = { 'Tarjeta DV': 'Tarjeta DV — Jefe Final', 'Joseph (cuota)': 'Joseph' };
 const CRED_TO_GRUPO = { 'Joseph (cuota)': 'Joseph' };
-// Opciones "¿en qué mes empieza la primera cuota?" para los modales de compra a cuotas.
-// Evita que una compra de HOY se sume al mes que ya pagaste: tú eliges si arranca este mes o después.
-const mesInicioOpts = () => (S.plan.months || [])
-  .map((m, ix) => ({ v: String(ix), t: ix === MES ? `${m} (this month)` : m }))
-  .slice(MES, MES + 12);
+// V189 — Los nuevos compromisos nunca pueden empezar en un mes que ya pasó.
+// La frontera usa el MES REAL del calendario, no el mes que el usuario esté mirando en Home.
+const currentPlanIndex = () => {
+  const months = (S.plan && S.plan.months) || [];
+  if (!months.length) return 0;
+  return Math.max(0, Math.min(months.length - 1, planIndex(new Date())));
+};
+// Opciones "¿en qué mes empieza la primera cuota?": mes actual hacia adelante.
+const mesInicioOpts = () => {
+  const first = currentPlanIndex();
+  return (S.plan.months || [])
+    .map((m, ix) => ({ v: String(ix), t: ix === first ? `${m} (this month)` : m }))
+    .slice(first);
+};
 const cuotaDe = (c) => Math.round(Math.max(c.valor - (c.refinance_baseline || 0), 0) / c.cuotas);
 const compraActiva = (c, i) => i >= c.start && i < c.start + c.cuotas;
 const extraCuota = (cred, i) => S.compras
@@ -274,7 +283,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 187;
+const FRONT_V = 189;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -3725,7 +3734,7 @@ function renderChecklist(i, deudas) {
     // V180: la tarjeta mostrada pertenece al MES, no a la configuración permanente
     // del servicio. Un mes futuro sin cargo real debe verse completamente limpio.
     if (monthCardMethod) {
-      return `<div class="check-item on-card" data-item="${s.name}" data-mk="${mk}" data-oncard="1">
+      return `<div class="check-item on-card" data-item="${s.name}" data-mk="${mk}" data-service-id="${s.id}" data-oncard="1">
         <div class="box card-box-mini" title="Paid on card this month — already in your card debt">💳</div>
         <div class="cmid">
           <span class="cname">${esc(s.name)} <button class="svc-edit" data-id="${s.id}" title="Edit">✎</button></span>
@@ -3737,7 +3746,7 @@ function renderChecklist(i, deudas) {
     const status = paid
       ? (configured.card ? 'Paid this month' : `${configured.logo} ${esc(s.method || '')} · paid this month`)
       : `Pending this month${s.payday ? ` · ${esc(s.payday)}` : ''}`;
-    return `<div class="check-item ${paid ? 'paid' : ''}" data-item="${s.name}" data-mk="${mk}">
+    return `<div class="check-item ${paid ? 'paid' : ''}" data-item="${s.name}" data-mk="${mk}" data-service-id="${s.id}">
       <div class="box">${paid ? '✓' : ''}</div>
       <div class="cmid">
         <span class="cname">${esc(s.name)} <button class="svc-edit" data-id="${s.id}" title="Edit">✎</button></span>
@@ -3857,10 +3866,10 @@ document.addEventListener('click', async (e) => {
     const oldMethod = s.method, newMethod = r[2];
     await api('/api/service', { body: { id: s.id, field: 'method', value: newMethod } });
     await api('/api/service', { body: { id: s.id, field: 'payday', value: r[3] } });
-    // V171: recurring services paid by credit card are materialized by the
-    // backend once per real month. Do NOT create a second one-off purchase here.
+    // V188: the selected card is only the preferred method. Every new month
+    // starts pending; the real purchase appears only after the user marks it.
     if (newMethod !== oldMethod && payMethod(newMethod).card) {
-      toast(`💳 ${esc(r[0])} will now charge ${esc(newMethod)} once per month and reduce that card's available limit.`);
+      toast(`💳 ${esc(r[0])} will use ${esc(newMethod)} when you mark it paid each month.`);
     }
     toast('✓ Service updated'); load();
     return;
@@ -3883,9 +3892,33 @@ document.addEventListener('click', async (e) => {
   // Marcar/desmarcar pago (servicio o deuda)
   const c = e.target.closest('.check-item');
   if (!c) return;
-  if (c.dataset.oncard) {   // servicio en tarjeta: ya está cubierto por la deuda, no se marca a mano
-    toast('💳 This one is on your card — it already counts in that card\'s debt.');
+  if (c.dataset.oncard && c.dataset.serviceId) {
+    // V188: clicking an explicitly charged service again removes that month's
+    // unpaid card charge and returns the row to a clean pending state.
+    try {
+      const out = await api('/api/service/card-charge', { body: { service_id: +c.dataset.serviceId, month: c.dataset.mk } });
+      toast(out.checked === false ? '↩ Card charge removed for this month.' : '💳 Card charge confirmed for this month.');
+      await load();
+    } catch (err) {
+      toast(err?.message || 'Could not update this card charge.', 'error');
+    }
     return;
+  }
+  const serviceId = +(c.dataset.serviceId || 0);
+  if (serviceId) {
+    const svc = (S.servicios || []).find(x => Number(x.id) === serviceId);
+    if (svc && payMethod(svc.method).card) {
+      // Configuring a credit card does NOT mean the service is already paid.
+      // Only this explicit monthly action creates the real purchase.
+      try {
+        await api('/api/service/card-charge', { body: { service_id: serviceId, month: c.dataset.mk } });
+        toast(`💳 ${esc(svc.name)} charged to ${esc(svc.method)} for this month.`);
+        await load();
+      } catch (err) {
+        toast(err?.message || 'Could not create this month\'s card charge.', 'error');
+      }
+      return;
+    }
   }
   const estabaMarcado = c.classList.contains('paid');
   const body = {
@@ -4254,10 +4287,11 @@ function renderBoss(animate) {
 
   $('#cpCred').innerHTML = Object.keys(S.plan.creditors)
     .map(c => `<option>${c}</option>`).join('');
-  $('#cpStart').innerHTML = S.plan.months
-    .map((m, ix) => `<option value="${ix}">1st installment: ${m}</option>`).join('');
-  $('#ndStart').innerHTML = '<option value="0">1st installment: starting month</option>' + S.plan.months
-    .map((m, ix) => `<option value="${ix}">1st installment: ${m}</option>`).join('');
+  const _startOpts = mesInicioOpts();
+  $('#cpStart').innerHTML = _startOpts
+    .map(o => `<option value="${o.v}">1st installment: ${o.t}</option>`).join('');
+  $('#ndStart').innerHTML = _startOpts
+    .map(o => `<option value="${o.v}">1st installment: ${o.t}</option>`).join('');
   const comprasPendientes = (S.compras || []).filter(c => (c.valor || 0) - (c.abonado || 0) > 0);
   $('#compraList').innerHTML = comprasPendientes.map(c =>
     `<li><span>${c.creditor} · ${c.concepto} · ${c.cuotas} x ${fmt(cuotaDe(c))} desde ${S.plan.months[c.start]}</span>
@@ -6105,13 +6139,16 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 32. V185 Wishlist Inline Edit & Gym Progression: los nombres de Wishlist se editan directamente sobre el título sin icono adicional y se persisten en dreams.name. Gym amplía medidas con hombros, antebrazo y pantorrilla sin alterar históricos; Trainer y sus reportes las consumen desde la misma fuente MEASURES. El desbloqueo del arco PPL deja de usar surpriseGate: queda determinado por 6 semanas + 20 días de entrenamiento y ausencia de dolor reportado, con progreso visible al final de Personal Trainer. FINAL BOSS / THE DEBT reemplaza únicamente los títulos visuales del jefe.
 33. V186 Reliable PPL Promotion & Visual Governance: cuando Gym detecta que el arco PPL cumple 6 semanas + 20 sesiones y no existe dolor activo, la ventana de promoción debe ofrecerse automáticamente al entrar/renderizar Gym y también poder abrirse manualmente desde Personal Trainer como respaldo. El panel muestra requisitos cumplidos sin fracciones confusas, conservando los contadores reales. Antes de cualquier cambio visual se debe inspeccionar y respetar el lenguaje de diseño existente del módulo: composición, simetría, tipografía, paleta y patrones actuales; los módulos Hunter conservan su identidad HxH/One Piece y Haki no recibe estilos visuales no solicitados.
 34. V187 NotebookLM Batch Flow & Modal Toast Layering: NotebookLM Bridge mantiene un lote activo explícito. Copy y Export .md reutilizan exactamente el mismo lote y no lo consumen; solo “Mark batch as sent” marca sus source_id como procesados y cierra el lote, conservando English, conceptos y Academy en sus módulos originales. El Markdown separa English, Technical Concepts y Hunter Skill Academy e incluye instrucciones maestras para NotebookLM. Todos los toasts/notificaciones deben renderizar por encima de cualquier modal activo para que siempre sean legibles sin cerrar el modal.
+35. V188 Explicit Monthly Service Card Charges: Life & services inicia cada mes visual y financieramente limpio. services.method es solo el método preferido; nunca prueba que el mes esté pagado. Un servicio configurado con tarjeta crea exactamente una compra real source_type=service únicamente cuando el usuario lo marca explícitamente en ese mes. Volver a pulsarlo puede retirar ese cargo mientras siga impago y sin asignaciones. El cambio de mes, abrir /api/state, crear o editar un servicio NO materializa cargos automáticamente. La migración V188 elimina solo cargos automáticos impagos del mes de despliegue y preserva cualquier historial pagado/asignado.
 
-ESTADO ACTUAL DEL PROYECTO - V187 NOTEBOOKLM BATCH FLOW:
+ESTADO ACTUAL DEL PROYECTO - V188 EXPLICIT MONTHLY SERVICE CARD CHARGES:
 - V187 conserva V186 y corrige NotebookLM Bridge: Copy y Export .md comparten un lote activo no destructivo; solo Mark batch as sent cierra y procesa el lote. El Markdown separa English, conceptos técnicos y Academy con instrucciones maestras para NotebookLM. Los toasts se muestran por encima de modales activos. La regla visual de V186 permanece vigente y Haki sigue protegido de estilos no solicitados.
+- V188 conserva V187 y corrige Life & services de raíz: ningún servicio se considera pagado ni crea compra por tener una tarjeta configurada. Cada mes empieza pendiente; el cargo real se crea solo al marcar explícitamente el servicio. Reabrir el mes no recrea cargos. El primer arranque V188 limpia únicamente cargos automáticos impagos del mes actual. Historial, pagos y asignaciones ya reales se preservan.
 - V185 permite editar títulos de Wishlist directamente sobre el texto, añade hombros/antebrazo/pantorrilla al seguimiento corporal y al Trainer, muestra el progreso exacto hacia el arco PPL y elimina el gate aleatorio para que el desbloqueo sea determinista al cumplir requisitos. No se añadió Body Progress Map. FINAL BOSS / THE DEBT es un cambio exclusivamente visual. V184 conserva NotebookLM Bridge incremental y Academy sin scrollbar visible.
 - V181 elimina únicamente para Codensa la conciliación histórica sintética y hace que My credit cards / Debt Boss utilicen su suma pendiente real del desglose más compras pendientes. Las demás tarjetas conservan la lógica ya validada.
 - V182 redefine la X de My credit cards como una preferencia estrictamente visual: puede ocultar una tarjeta del panel aunque tenga saldo o servicios, sin modificar ninguna operación financiera ni quitarla de los medios de pago.
 - V180 desacopla la configuración permanente de un servicio del estado visual mensual: Life & services solo muestra una tarjeta si existe un cargo real de ese servicio en el mes seleccionado; meses sin check/cargo aparecen limpios y pendientes.
+- V189 aplica una frontera temporal única a nuevas cuotas y rediferidos: el primer mes seleccionable es siempre el mes calendario real actual; meses ya cerrados nunca reaparecen en selectores de alta aunque Home esté navegando un mes histórico.
 - V179 establece una fuente monetaria canónica para las cinco tarjetas: deuda base pendiente + compras pendientes. My Credit Cards y Debt Boss consumen ese mismo saldo.
 - Full debt breakdown mantiene las líneas históricas sin borrarlas ni reescribir pagos antiguos; cuando el historial viejo no permite atribuir con precisión un pago a una línea, muestra una fila de reconciliación explícita para que la suma del grupo coincida exactamente con el saldo real.
 - El selector de mes ya no paga capital por el simple paso del tiempo. Solo cambia qué cuota corresponde al mes; el saldo disminuye únicamente mediante abonos/pagos reales.
@@ -8381,7 +8418,7 @@ document.addEventListener('click', async (e) => {
       text: 'Reschedule every outstanding installment on this card together. Individual 🔄 controls will remain available. Fixed charges (insurance/handling) stay separate. Existing recorded payments stay in history. If your old card balance exceeds its listed purchases, the unitemized difference is shown as a separate line to verify against your statement.',
       fields: [
         { type: 'number', placeholder: 'New installments (e.g. 12)', min: 1, max: 60 },
-        { type: 'select', value: String(MES), options: S.plan.months.map((m, ix) => ({ v: String(ix), t: 'Start: ' + m })) }
+        { type: 'select', value: String(currentPlanIndex()), options: mesInicioOpts().map(o => ({ v: o.v, t: 'Start: ' + o.t })) }
       ], okText: 'Apply to all' });
     if (!r) return;
     const cuotas = Number(r[0]), start = Number(r[1]);
@@ -8413,7 +8450,7 @@ document.addEventListener('click', async (e) => {
     text: `Reschedule <b>${actualesTxt}</b>. Type the number of installments you want. I split what you still owe into that many, starting the month you pick.<br><br>If the amount is <b>wrong</b>, type the <b>correct total</b> below and I'll use that instead.`,
     fields: [
       { type: 'number', placeholder: 'Number of installments (e.g. 12)', min: 1, max: 60 },
-      { type: 'select', value: String(MES), options: S.plan.months.map((m, i) => ({ v: String(i), t: 'Start: ' + m })) },
+      { type: 'select', value: String(currentPlanIndex()), options: mesInicioOpts().map(o => ({ v: o.v, t: 'Start: ' + o.t })) },
       { type: 'money', placeholder: 'Correct total amount (optional)' }
     ], okText: 'Apply' });
   if (!r || !r[0]) return;
