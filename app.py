@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 187  # V187 NotebookLM Batch Flow
+VERSION = 189  # V189 Current-Month Installment Boundary
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -1994,10 +1994,10 @@ def state():
     month = request.args.get('month', date.today().strftime('%Y-%m'))
     plan = json.loads(d.execute(
         "SELECT value FROM config WHERE key='plan'").fetchone()['value'])
-    # V171: recurring services paid by credit card become one real card charge per
-    # current month, and legacy monthly card checks are reconciled before balances
-    # are read so My credit cards / Debt Boss / checklist use the same source.
-    _materialize_current_service_card_charges(d)
+    # V188: a recurring service configured with a credit card is only a payment
+    # preference. A new month starts clean; the real card purchase is created only
+    # when the user explicitly marks that service for that month.
+    _cleanup_v188_auto_service_card_charges(d)
     _reconcile_legacy_card_checks_v171(d)
     debts = [dict(r) for r in d.execute(
         '''SELECT de.id, de.name, de.initial,
@@ -4280,6 +4280,69 @@ def _materialize_current_service_card_charges(con):
     return made
 
 
+def _cleanup_v188_auto_service_card_charges(con):
+    """One-time V188 repair: remove unpaid current-month service charges that V171
+    materialized automatically. Paid/allocated history is never touched.
+    """
+    _ensure_card_balance_schema(con)
+    flag = con.execute("SELECT value FROM config WHERE key='v188_explicit_service_card_charges'").fetchone()
+    if flag:
+        return 0
+    current_key = date.today().strftime('%Y-%m')
+    removed = 0
+    links = con.execute(
+        'SELECT service_id FROM service_card_charges WHERE month_key=? ORDER BY service_id',
+        (current_key,)
+    ).fetchall()
+    for row in links:
+        sid = int(dict(row)['service_id'])
+        if _remove_unpaid_service_card_charge(con, sid, current_key):
+            removed += 1
+    con.execute(
+        "INSERT OR REPLACE INTO config (key,value) VALUES (?,?)",
+        ('v188_explicit_service_card_charges', json.dumps({
+            'enabled': True, 'migrated_month': current_key, 'removed_unpaid_auto_charges': removed
+        }, ensure_ascii=False))
+    )
+    con.commit()
+    return removed
+
+
+@app.post('/api/service/card-charge')
+def service_card_charge_toggle():
+    """Explicitly toggle a recurring service's real card purchase for one month."""
+    j = request.json or {}
+    try:
+        sid = int(j.get('service_id'))
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid service'), 400
+    month_key = str(j.get('month') or '').strip()
+    if not month_key:
+        return jsonify(error='Month is required'), 400
+    _ensure_card_balance_schema(db())
+    with transaction() as con:
+        service = con.execute('SELECT * FROM services WHERE id=?', (sid,)).fetchone()
+        if not service:
+            return jsonify(error='Service not found'), 404
+        service = dict(service)
+        if not _card_creditor_for_method(service.get('method')):
+            return jsonify(error='This service is not configured for a credit card'), 400
+        if _plan_month_index(con, month_key) < 0:
+            return jsonify(error='Month is outside the active plan'), 400
+        existing = con.execute(
+            'SELECT compra_id FROM service_card_charges WHERE service_id=? AND month_key=?',
+            (sid, month_key)
+        ).fetchone()
+        if existing:
+            if not _remove_unpaid_service_card_charge(con, sid, month_key):
+                return jsonify(error='This card charge already has payment history and cannot be removed'), 409
+            return jsonify(ok=True, checked=False, month=month_key)
+        compra_id = _sync_service_card_charge(con, service, month_key)
+        if not compra_id:
+            return jsonify(error='Could not create card charge for this month'), 400
+        return jsonify(ok=True, checked=True, month=month_key, compra_id=compra_id)
+
+
 def _allocate_card_check_payment(con, item, due_month, amount):
     """Apply the purchase portion of a monthly card payment to card purchases first."""
     creditor = _card_creditor_for_item(item)
@@ -4657,9 +4720,8 @@ def service_new():
     with transaction() as con:
         con.execute('INSERT INTO services (name, amount, method, payday, card_charge_from) VALUES (?,?,?,?,?)',
                     (name, amount, method, str(j.get('payday') or ''), charge_from))
-        row = con.execute('SELECT * FROM services ORDER BY id DESC LIMIT 1').fetchone()
-        if row and charge_from:
-            _sync_service_card_charge(con, dict(row), current_key)
+        # V188: choosing a card is only configuration. The month's purchase is
+        # created later, explicitly, when the service is marked in Life & services.
     return jsonify(ok=True)
 
 
@@ -4694,8 +4756,14 @@ def service_update():
         if field == 'method' and new_card:
             con.execute('UPDATE services SET card_charge_from=? WHERE id=?', (current_key, sid))
         updated = con.execute('SELECT * FROM services WHERE id=?', (sid,)).fetchone()
+        # V188: editing a service must not auto-pay the month. If this month was
+        # already explicitly charged, keep that existing unpaid charge in sync.
         if updated and new_card:
-            _sync_service_card_charge(con, dict(updated), current_key)
+            existing = con.execute(
+                'SELECT 1 FROM service_card_charges WHERE service_id=? AND month_key=?',
+                (sid, current_key)).fetchone()
+            if existing:
+                _sync_service_card_charge(con, dict(updated), current_key)
     return jsonify(ok=True)
 
 
