@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 189  # V189 Current-Month Installment Boundary
+VERSION = 190  # V190 Persistent Monthly Service Card History
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -4240,7 +4240,14 @@ def _sync_service_card_charge(con, service, month_key):
     return compra_id
 
 
-def _remove_unpaid_service_card_charge(con, service_id, month_key):
+def _remove_unpaid_service_card_charge(con, service_id, month_key, *, allow_closed_month=False):
+    # V190: once a calendar month is closed, an explicit service-card charge is
+    # financial history.  Starting a new month must never erase it just because
+    # the service row resets to Pending this month.  The escape hatch is reserved
+    # for one-time migrations/repairs that explicitly opt in.
+    current_key = date.today().strftime('%Y-%m')
+    if str(month_key) < current_key and not allow_closed_month:
+        return False
     link = con.execute('SELECT * FROM service_card_charges WHERE service_id=? AND month_key=?',
                        (service_id, month_key)).fetchone()
     if not link:
@@ -4329,14 +4336,24 @@ def service_card_charge_toggle():
             return jsonify(error='This service is not configured for a credit card'), 400
         if _plan_month_index(con, month_key) < 0:
             return jsonify(error='Month is outside the active plan'), 400
+        current_key = date.today().strftime('%Y-%m')
+        if month_key > current_key:
+            return jsonify(error='A recurring service can only be charged when its month arrives'), 409
         existing = con.execute(
             'SELECT compra_id FROM service_card_charges WHERE service_id=? AND month_key=?',
             (sid, month_key)
         ).fetchone()
         if existing:
+            # Closed months are immutable history.  Their card purchase remains
+            # in compras/service_card_charges even though the next month renders
+            # the service as Pending again.
+            if month_key < current_key:
+                return jsonify(error='This charge belongs to a closed month and is kept as history'), 409
             if not _remove_unpaid_service_card_charge(con, sid, month_key):
                 return jsonify(error='This card charge already has payment history and cannot be removed'), 409
             return jsonify(ok=True, checked=False, month=month_key)
+        # Historical backfill is still allowed when a closed month is missing a
+        # record (useful for manual repair), but once created it becomes immutable.
         compra_id = _sync_service_card_charge(con, service, month_key)
         if not compra_id:
             return jsonify(error='Could not create card charge for this month'), 400
