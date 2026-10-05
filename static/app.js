@@ -283,7 +283,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 190;
+const FRONT_V = 192;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -3763,19 +3763,33 @@ function renderChecklist(i, deudas) {
     const debtName = CRED_TO_DEBT[item] || item;
     const debt = S.debts.find(x => x.name === debtName);
     const paid = checks.has(`${item}|${dueMonth}`);
+    // V191: once a debt row is paid, the live debt model can immediately advance
+    // to the NEXT installment (especially ADDI/Codensa/Banco de Bogotá). Never
+    // replace the amount the user actually paid with that post-payment recalculation.
+    // payment_check_records is the immutable snapshot of the check transaction.
+    const paidRecord = paid
+      ? paymentRecords().find(r => r.item === item && r.month === dueMonth)
+      : null;
+    const dueIndex = (S.plan && S.plan.months ? S.plan.months : [])
+      .findIndex((_, ix) => monthKey(ix) === dueMonth);
+    const fixedAtDue = (!extraTag && dueIndex >= 0) ? costoFijoMes(item, dueIndex) : 0;
+    const storedPrincipal = paidRecord ? Math.max(+paidRecord.valor || 0, 0) : 0;
+    const displayVal = paid && storedPrincipal > 0
+      ? storedPrincipal + fixedAtDue
+      : val;
     // extraTag tipo 'extra:ID' -> deuda registrada prometida (abona a esa deuda)
     const extraAttr = extraTag ? ` data-extra="${extraTag.split(':')[1]}"` : '';
     const hits = (debt || extraTag) ? ' · hits the boss' : '';
     // abono real al jefe = pago del mes − cargos fijos (seguro/manejo NO bajan la deuda)
-    const abono = Math.max(val - (extraTag ? 0 : costoFijoMes(item, MES)), 0);
+    const abono = Math.max(displayVal - (extraTag ? 0 : fixedAtDue), 0);
     return `<div class="check-item debt ${paid ? 'paid' : ''} ${overdue ? 'overdue-debt' : ''}" data-item="${item}" data-mk="${dueMonth}" data-paid-month="${paidMonth}"
-            data-debt="${debt ? debt.id : ''}"${extraAttr} data-val="${val}" data-abono="${abono}">
+            data-debt="${debt ? debt.id : ''}"${extraAttr} data-val="${displayVal}" data-abono="${abono}">
       <div class="box">${paid ? '✓' : ''}</div>
       <div class="cmid">
         <span class="cname">${esc(item)}</span>
         <small>⚔ ${overdue ? `pending from ${esc(dueMonth)}` : (extraTag ? 'promised payment' : "this month's installment")}${hits}</small>
       </div>
-      <span class="cval">${fmt(val)}</span></div>`;
+      <span class="cval">${fmt(displayVal)}</span></div>`;
   };
   // El aporte al fondo de empresa (método 'Fondo') NO se muestra aquí:
   // tiene su propia sección "Company fund". Se excluye de la lista y del conteo.
@@ -4302,10 +4316,17 @@ function renderBoss(animate) {
   renderMyCards();
   renderAmortDav();
 
-  $('#abonoList').innerHTML = S.abonos.map(a =>
-    `<li><span>${a.fecha} · ${a.name}</span>
-     <span>${fmt(a.valor)} <button class="del" data-id="${a.id}" title="Deshacer">✕</button></span></li>`
-  ).join('') || '<li>No attacks yet. The first payment is the most important one.</li>';
+  // V192: Historial de ataques must show the FULL payment the user made.
+  // Monthly checks are canonical in payment_checks; their internal purchase/base
+  // allocation must never leak into this human-facing history as a partial payment.
+  const attacks = Array.isArray(S.attack_history) ? S.attack_history : (S.abonos || []);
+  $('#abonoList').innerHTML = attacks.map(a => {
+    const undoAttrs = a.kind === 'check'
+      ? `data-kind="check" data-item="${esc(a.item || a.name || '')}" data-month="${esc(a.month || '')}"`
+      : `data-kind="abono" data-id="${a.id}"`;
+    return `<li><span>${a.fecha} · ${esc(a.name || '?')}</span>
+     <span>${fmt(a.valor)} <button class="del" ${undoAttrs} title="Deshacer">✕</button></span></li>`;
+  }).join('') || '<li>No attacks yet. The first payment is the most important one.</li>';
 }
 
 // Editar una deuda registrada (nombre, total, fecha de pago prometida)
@@ -4403,7 +4424,18 @@ $('#abonoForm').addEventListener('submit', async (e) => {
 $('#abonoList').addEventListener('click', async (e) => {
   if (!e.target.classList.contains('del')) return;
   if (!await confirmModal('Deshacer abono', 'Undo this attack? The damage goes back to the boss.')) return;
-  await api('/api/abono/' + e.target.dataset.id, { method: 'DELETE' });
+  if (e.target.dataset.kind === 'check') {
+    // V192: undo the canonical monthly transaction. Backend reads the stored
+    // debt/extra IDs itself, reverses purchase allocations and removes the base
+    // residual atomically; no orphaned $221k-style fragment can remain.
+    await api('/api/check', { body: {
+      item: e.target.dataset.item,
+      month: e.target.dataset.month,
+      paid_month: e.target.dataset.month
+    }});
+  } else {
+    await api('/api/abono/' + e.target.dataset.id, { method: 'DELETE' });
+  }
   load();
 });
 
@@ -6150,6 +6182,8 @@ ESTADO ACTUAL DEL PROYECTO - V188 EXPLICIT MONTHLY SERVICE CARD CHARGES:
 - V180 desacopla la configuración permanente de un servicio del estado visual mensual: Life & services solo muestra una tarjeta si existe un cargo real de ese servicio en el mes seleccionado; meses sin check/cargo aparecen limpios y pendientes.
 - V189 aplica una frontera temporal única a nuevas cuotas y rediferidos: el primer mes seleccionable es siempre el mes calendario real actual; meses ya cerrados nunca reaparecen en selectores de alta aunque Home esté navegando un mes histórico.
 - V190 separa estado mensual de historial financiero en Life & services: cada mes nuevo vuelve a Pending, pero cualquier cargo explícito realizado con tarjeta en un mes cerrado queda persistido e inmutable en compras/service_card_charges y en la deuda de la tarjeta. El cambio de mes nunca elimina ese registro; solo se puede quitar un cargo del mes calendario actual mientras siga sin pagos/asignaciones. Un mes histórico faltante puede reconstruirse manualmente una vez y luego queda protegido.
+- V191 congela visualmente el valor real de una cuota ya pagada usando payment_check_records. Después de marcar un check, ADDI/Codensa/Banco de Bogotá pueden avanzar inmediatamente a la siguiente cuota y reducir compras; Home no debe reemplazar el importe que se acaba de pagar por ese nuevo cálculo posterior. El check muestra el importe registrado de la transacción del mes y el motor financiero puede seguir avanzando internamente.
+- V192 unifica el historial humano de pagos con la transacción canónica de payment_checks: Historial de ataques muestra el importe COMPLETO marcado en Home, no solo el residual que llegó a la deuda base después de distribuir parte del pago entre compras. Los abonos residuales check:/extracheck: se excluyen del historial visible para evitar duplicados. Deshacer una entrada de check revierte atómicamente allocations + abono base usando los IDs persistidos por backend, aunque el frontend no los reenvíe.
 - V179 establece una fuente monetaria canónica para las cinco tarjetas: deuda base pendiente + compras pendientes. My Credit Cards y Debt Boss consumen ese mismo saldo.
 - Full debt breakdown mantiene las líneas históricas sin borrarlas ni reescribir pagos antiguos; cuando el historial viejo no permite atribuir con precisión un pago a una línea, muestra una fila de reconciliación explícita para que la suma del grupo coincida exactamente con el saldo real.
 - El selector de mes ya no paga capital por el simple paso del tiempo. Solo cambia qué cuota corresponde al mes; el saldo disminuye únicamente mediante abonos/pagos reales.
