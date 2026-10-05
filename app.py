@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 190  # V190 Persistent Monthly Service Card History
+VERSION = 192  # V192 Canonical Payment Attack History
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -2033,6 +2033,61 @@ def state():
                     nombre = dict(row)['name']
         abonos_extra.append({'id': r['id'], 'fecha': r['fecha'], 'valor': r['valor'], 'name': nombre})
     abonos = sorted(abonos_core + abonos_extra, key=lambda a: a['id'], reverse=True)[:30]
+
+    # V192: Canonical "Historial de ataques". A monthly checklist payment can be
+    # split internally between purchase allocations and the legacy/base principal.
+    # The user nevertheless made ONE payment, whose full amount lives in
+    # payment_checks.valor. Never expose only the residual base `abono` as if it
+    # were the whole payment (e.g. ADDI 541,312 split into purchases + 221,579 base).
+    # Manual attacks remain sourced from `abonos`; check-generated residual rows are
+    # excluded to avoid duplicate/partial history entries.
+    attack_history = []
+    raw_attacks = d.execute(
+        '''SELECT a.id, a.fecha, a.valor, a.nota, de.name AS debt_name
+           FROM abonos a
+           LEFT JOIN debts de ON de.id = a.debt_id
+           ORDER BY a.id DESC'''
+    ).fetchall()
+    for raw in raw_attacks:
+        a = dict(raw)
+        nota = str(a.get('nota') or '')
+        if nota.startswith('check:') or nota.startswith('extracheck:'):
+            continue
+        name = a.get('debt_name') or '?'
+        if nota.startswith('compra:'):
+            parts = nota.split(':', 2)
+            name = parts[2] if len(parts) > 2 else 'Compra'
+        elif nota.startswith('extra:'):
+            parts = nota.split(':', 1)
+            if len(parts) > 1:
+                try:
+                    er = d.execute('SELECT name FROM extra_debts WHERE id=?', (int(parts[1]),)).fetchone()
+                    if er:
+                        name = dict(er)['name']
+                except (TypeError, ValueError):
+                    pass
+        attack_history.append({
+            'kind': 'abono', 'id': a['id'], 'fecha': a.get('fecha') or '',
+            'valor': int(a.get('valor') or 0), 'name': name
+        })
+
+    for raw in d.execute(
+        '''SELECT item, month, COALESCE(paid_month, month) AS paid_month,
+                  COALESCE(paid_date, '') AS paid_date, COALESCE(valor,0) AS valor
+           FROM payment_checks'''
+    ).fetchall():
+        r = dict(raw)
+        attack_history.append({
+            'kind': 'check', 'id': f"check:{r['item']}:{r['month']}",
+            'fecha': r.get('paid_date') or '', 'valor': int(r.get('valor') or 0),
+            'name': r.get('item') or '?', 'item': r.get('item') or '',
+            'month': r.get('month') or '', 'paid_month': r.get('paid_month') or r.get('month') or ''
+        })
+
+    # ISO dates sort lexicographically. Keep a deterministic tie-breaker and the same
+    # compact history size used by the previous UI.
+    attack_history.sort(key=lambda x: (str(x.get('fecha') or ''), str(x.get('id') or '')), reverse=True)
+    attack_history = attack_history[:30]
     habits = [dict(r) for r in d.execute('SELECT * FROM habits')]
     gym_sets = [dict(r) for r in d.execute('SELECT * FROM gym_sets ORDER BY date, id')]
     # Return the complete mark history. The frontend filters the visible month, while
@@ -2116,7 +2171,7 @@ def state():
         ed['abonado'] = (ed.get('abonado') or 0) + historicos_extra.get(ed['id'], 0)
     core = [x[0] for x in _SEED['debts']]
     finance_cards = _finance_card_snapshots(d)
-    return jsonify(dict(version=VERSION, core_debts=core, finance_cards=finance_cards, compras=compras, goals=goals, goal_checkpoints=goal_checkpoints, goal_logs=goal_logs, goal_strategy=goal_strategy, achievement_unlocks=achievement_unlocks, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, career_courses=career_courses, courses_done=courses_done, skills=skills, course_skills=course_skills, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, habits=habits, habit_recoveries=habit_recoveries,
+    return jsonify(dict(version=VERSION, core_debts=core, finance_cards=finance_cards, compras=compras, goals=goals, goal_checkpoints=goal_checkpoints, goal_logs=goal_logs, goal_strategy=goal_strategy, achievement_unlocks=achievement_unlocks, extra_debts=extra_debts, shifts=shifts, profile=profile, rdone=rdone, careers=careers, career_courses=career_courses, courses_done=courses_done, skills=skills, course_skills=course_skills, routine_extra=routine_extra, routine_hidden=routine_hidden, routine_hidden_day=routine_hidden_day, journal=journal, assets=assets, expenses=expenses, month_income=month_income, plan=plan, debts=debts, abonos=abonos, attack_history=attack_history, habits=habits, habit_recoveries=habit_recoveries,
                         marks=marks, history=history, dreams=dreams,
                         animes=animes, books=books, gym_sets=gym_sets,
                         servicios=services, fund=fund, piggy=piggy, piggy_moves=piggy_moves, shopping=shopping, todos=todos, detalle=_detalle_actual(d),
@@ -3039,25 +3094,32 @@ def check():
     _ensure_card_balance_schema(db())
     with transaction() as con:
         cur = con.execute(
-            'SELECT 1 FROM payment_checks WHERE item=? AND month=?',
+            'SELECT debt_id, extra_id, paid_month, valor FROM payment_checks WHERE item=? AND month=?',
             (item, due_month)
         ).fetchone()
         if cur:
-            # V171: undo restores both the base card payment and the purchase
-            # portions allocated by this monthly check.
+            # V192: payment_checks is the canonical transaction for a monthly check.
+            # Undo must use the IDs stored with that transaction, not depend on the
+            # browser sending them again. This prevents orphaned residual `abonos`
+            # when a card payment was split between purchases and base principal.
+            cur = dict(cur)
+            stored_debt_id = cur.get('debt_id')
+            stored_extra_id = cur.get('extra_id')
             _reverse_card_check_allocations(con, item, due_month)
             con.execute('DELETE FROM payment_checks WHERE item=? AND month=?', (item, due_month))
-            if debt_id:
+            if stored_debt_id:
                 con.execute(
                     'DELETE FROM abonos WHERE debt_id=? AND nota=?',
-                    (int(debt_id), f'check:{item}:{due_month}')
+                    (int(stored_debt_id), f'check:{item}:{due_month}')
                 )
-            if extra_id:
+            if stored_extra_id:
                 con.execute(
                     'DELETE FROM abonos WHERE nota=?',
-                    (f'extracheck:{extra_id}:{item}:{due_month}',)
+                    (f'extracheck:{stored_extra_id}:{item}:{due_month}',)
                 )
-            return jsonify(ok=True, checked=False, due_month=due_month, paid_month=paid_month)
+            return jsonify(ok=True, checked=False, due_month=due_month,
+                           paid_month=cur.get('paid_month') or paid_month,
+                           valor=int(cur.get('valor') or 0))
 
         con.execute(
             "INSERT INTO payment_checks (item, month, paid_month, paid_date, valor, debt_id, extra_id) VALUES (?,?,?,?,?,?,?)",
