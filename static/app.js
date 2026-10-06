@@ -283,7 +283,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 192;
+const FRONT_V = 193;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -3734,7 +3734,7 @@ function renderChecklist(i, deudas) {
     // V180: la tarjeta mostrada pertenece al MES, no a la configuración permanente
     // del servicio. Un mes futuro sin cargo real debe verse completamente limpio.
     if (monthCardMethod) {
-      return `<div class="check-item on-card" data-item="${s.name}" data-mk="${mk}" data-service-id="${s.id}" data-oncard="1">
+      return `<div class="check-item on-card" data-item="${s.name}" data-mk="${mk}" data-service-id="${s.id}" data-val="${Number(s.amount)||0}" data-method="${esc(s.method || '')}" data-oncard="1">
         <div class="box card-box-mini" title="Paid on card this month — already in your card debt">💳</div>
         <div class="cmid">
           <span class="cname">${esc(s.name)} <button class="svc-edit" data-id="${s.id}" title="Edit">✎</button></span>
@@ -3746,7 +3746,7 @@ function renderChecklist(i, deudas) {
     const status = paid
       ? (configured.card ? 'Paid this month' : `${configured.logo} ${esc(s.method || '')} · paid this month`)
       : `Pending this month${s.payday ? ` · ${esc(s.payday)}` : ''}`;
-    return `<div class="check-item ${paid ? 'paid' : ''}" data-item="${s.name}" data-mk="${mk}" data-service-id="${s.id}">
+    return `<div class="check-item ${paid ? 'paid' : ''}" data-item="${s.name}" data-mk="${mk}" data-service-id="${s.id}" data-val="${Number(s.amount)||0}" data-method="${esc(s.method || '')}">
       <div class="box">${paid ? '✓' : ''}</div>
       <div class="cmid">
         <span class="cname">${esc(s.name)} <button class="svc-edit" data-id="${s.id}" title="Edit">✎</button></span>
@@ -3940,6 +3940,18 @@ document.addEventListener('click', async (e) => {
     month: c.dataset.mk,
     paid_month: c.dataset.paidMonth || c.dataset.mk
   };
+  // V193: Life & services checks are financial transactions too. Persist the
+  // full service amount and payment method so history never records Gym/Arriendo
+  // as $0. Credit-card services use /api/service/card-charge and are persisted
+  // there with the same canonical payment_check semantics.
+  if (serviceId) {
+    const svc = (S.servicios || []).find(x => Number(x.id) === serviceId);
+    if (svc) {
+      body.valor = Math.max(Number(svc.amount) || 0, 0);
+      body.source_type = 'service';
+      body.payment_method = String(svc.method || '');
+    }
+  }
   // el jefe baja por el abono real (data-abono), no por el pago total con seguro/manejo
   const abonoReal = c.dataset.abono != null ? +c.dataset.abono : +c.dataset.val;
   if (c.dataset.debt) { body.debt_id = +c.dataset.debt; body.valor = abonoReal || 0; }
@@ -4324,7 +4336,10 @@ function renderBoss(animate) {
     const undoAttrs = a.kind === 'check'
       ? `data-kind="check" data-item="${esc(a.item || a.name || '')}" data-month="${esc(a.month || '')}"`
       : `data-kind="abono" data-id="${a.id}"`;
-    return `<li><span>${a.fecha} · ${esc(a.name || '?')}</span>
+    const methodTrail = a.source_type === 'service' && a.payment_method
+      ? ` · ${esc(a.payment_method)}`
+      : '';
+    return `<li><span>${a.fecha} · ${esc(a.name || '?')}${methodTrail}</span>
      <span>${fmt(a.valor)} <button class="del" ${undoAttrs} title="Deshacer">✕</button></span></li>`;
   }).join('') || '<li>No attacks yet. The first payment is the most important one.</li>';
 }
@@ -6184,6 +6199,7 @@ ESTADO ACTUAL DEL PROYECTO - V188 EXPLICIT MONTHLY SERVICE CARD CHARGES:
 - V190 separa estado mensual de historial financiero en Life & services: cada mes nuevo vuelve a Pending, pero cualquier cargo explícito realizado con tarjeta en un mes cerrado queda persistido e inmutable en compras/service_card_charges y en la deuda de la tarjeta. El cambio de mes nunca elimina ese registro; solo se puede quitar un cargo del mes calendario actual mientras siga sin pagos/asignaciones. Un mes histórico faltante puede reconstruirse manualmente una vez y luego queda protegido.
 - V191 congela visualmente el valor real de una cuota ya pagada usando payment_check_records. Después de marcar un check, ADDI/Codensa/Banco de Bogotá pueden avanzar inmediatamente a la siguiente cuota y reducir compras; Home no debe reemplazar el importe que se acaba de pagar por ese nuevo cálculo posterior. El check muestra el importe registrado de la transacción del mes y el motor financiero puede seguir avanzando internamente.
 - V192 unifica el historial humano de pagos con la transacción canónica de payment_checks: Historial de ataques muestra el importe COMPLETO marcado en Home, no solo el residual que llegó a la deuda base después de distribuir parte del pago entre compras. Los abonos residuales check:/extracheck: se excluyen del historial visible para evitar duplicados. Deshacer una entrada de check revierte atómicamente allocations + abono base usando los IDs persistidos por backend, aunque el frontend no los reenvíe.
+- V193 extiende esa trazabilidad a Life & services: cada check de servicio guarda su valor completo y método de pago en payment_checks; Efectivo/Nequi dejan de producir ataques de $0 y los cargos explícitos con tarjeta también generan una entrada histórica por el valor total del servicio, sin duplicar el gasto de salario. Los checks históricos de servicios que quedaron en $0 se reparan desde el monto configurado del servicio y las filas $0 restantes no se muestran como ataques financieros.
 - V179 establece una fuente monetaria canónica para las cinco tarjetas: deuda base pendiente + compras pendientes. My Credit Cards y Debt Boss consumen ese mismo saldo.
 - Full debt breakdown mantiene las líneas históricas sin borrarlas ni reescribir pagos antiguos; cuando el historial viejo no permite atribuir con precisión un pago a una línea, muestra una fila de reconciliación explícita para que la suma del grupo coincida exactamente con el saldo real.
 - El selector de mes ya no paga capital por el simple paso del tiempo. Solo cambia qué cuota corresponde al mes; el saldo disminuye únicamente mediante abonos/pagos reales.
