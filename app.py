@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 192  # V192 Canonical Payment Attack History
+VERSION = 193  # V193 Unified Service Payment Traceability
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -1319,6 +1319,64 @@ def init_db():
         con.execute("INSERT OR IGNORE INTO config VALUES ('payment_checks_v2','1')")
         con.commit()
 
+    # V193: every checked Life & services payment is a real financial transaction.
+    # Store its full amount + method so human-facing history never degrades to $0,
+    # and make explicit credit-card service charges use the same canonical ledger.
+    if not con.execute("SELECT 1 FROM config WHERE key='payment_checks_service_trace_v193'").fetchone():
+        for sql in (
+            "ALTER TABLE payment_checks ADD COLUMN source_type TEXT DEFAULT ''",
+            "ALTER TABLE payment_checks ADD COLUMN payment_method TEXT DEFAULT ''",
+        ):
+            try:
+                con.execute(sql)
+                con.commit()
+            except Exception:
+                try:
+                    con.rollback()
+                except Exception:
+                    pass
+        # Repair old service checks that were stored with valor=0.  We can safely
+        # identify them by exact service name; no debt principal is changed here.
+        try:
+            current_key = date.today().strftime('%Y-%m')
+            rows = con.execute(
+                '''SELECT pc.item, pc.month, s.amount, s.method
+                   FROM payment_checks pc JOIN services s ON s.name=pc.item
+                   WHERE COALESCE(pc.valor,0)=0 AND pc.month=?''',
+                (current_key,)
+            ).fetchall()
+            for row in rows:
+                r = dict(row)
+                con.execute(
+                    '''UPDATE payment_checks SET valor=?, source_type='service', payment_method=?
+                       WHERE item=? AND month=? AND COALESCE(valor,0)=0''',
+                    (max(0, int(r.get('amount') or 0)), str(r.get('method') or ''),
+                     r.get('item'), r.get('month'))
+                )
+        except Exception:
+            pass
+        # Existing explicit service-card charges are also payments/events the user
+        # expects in history. Backfill only when the canonical check does not exist.
+        try:
+            links = con.execute(
+                '''SELECT s.name, sc.month_key, sc.amount, sc.method, sc.created
+                   FROM service_card_charges sc JOIN services s ON s.id=sc.service_id'''
+            ).fetchall()
+            for row in links:
+                r = dict(row)
+                con.execute(
+                    '''INSERT OR IGNORE INTO payment_checks
+                       (item, month, paid_month, paid_date, valor, debt_id, extra_id, source_type, payment_method)
+                       VALUES (?,?,?,?,?,NULL,NULL,'service',?)''',
+                    (r.get('name') or 'Service', r.get('month_key') or '', r.get('month_key') or '',
+                     r.get('created') or date.today().isoformat(), max(0, int(r.get('amount') or 0)),
+                     r.get('method') or '')
+                )
+        except Exception:
+            pass
+        con.execute("INSERT OR IGNORE INTO config VALUES ('payment_checks_service_trace_v193','1')")
+        con.commit()
+
     if not con.execute("SELECT 1 FROM config WHERE key='extra_due_v1'").fetchone():
         try:
             con.execute("ALTER TABLE extra_debts ADD COLUMN due_date TEXT DEFAULT ''")
@@ -2073,15 +2131,21 @@ def state():
 
     for raw in d.execute(
         '''SELECT item, month, COALESCE(paid_month, month) AS paid_month,
-                  COALESCE(paid_date, '') AS paid_date, COALESCE(valor,0) AS valor
+                  COALESCE(paid_date, '') AS paid_date, COALESCE(valor,0) AS valor,
+                  COALESCE(source_type,'') AS source_type, COALESCE(payment_method,'') AS payment_method
            FROM payment_checks'''
     ).fetchall():
         r = dict(raw)
+        # A zero-value row is state metadata, not a financial attack. V193 repairs
+        # legacy service rows above; any unrelated $0 marker must not pollute history.
+        if int(r.get('valor') or 0) <= 0:
+            continue
         attack_history.append({
             'kind': 'check', 'id': f"check:{r['item']}:{r['month']}",
             'fecha': r.get('paid_date') or '', 'valor': int(r.get('valor') or 0),
             'name': r.get('item') or '?', 'item': r.get('item') or '',
-            'month': r.get('month') or '', 'paid_month': r.get('paid_month') or r.get('month') or ''
+            'month': r.get('month') or '', 'paid_month': r.get('paid_month') or r.get('month') or '',
+            'source_type': r.get('source_type') or '', 'payment_method': r.get('payment_method') or ''
         })
 
     # ISO dates sort lexicographically. Keep a deterministic tie-breaker and the same
@@ -2180,7 +2244,7 @@ def state():
                         payment_check_records=[dict(r) for r in d.execute(
                             "SELECT item, month, COALESCE(paid_month, month) AS paid_month, "
                             "COALESCE(paid_date, '') AS paid_date, COALESCE(valor,0) AS valor, "
-                            "debt_id, extra_id FROM payment_checks ORDER BY paid_date, item")],
+                            "debt_id, extra_id, COALESCE(source_type,'') AS source_type, COALESCE(payment_method,'') AS payment_method FROM payment_checks ORDER BY paid_date, item")],
                         today=date.today().isoformat()))
 
 
@@ -3087,6 +3151,8 @@ def check():
     paid_month = str(j.get('paid_month') or due_month).strip() or due_month
     debt_id = j.get('debt_id')
     extra_id = j.get('extra_id')
+    source_type = str(j.get('source_type') or '').strip()[:32]
+    payment_method = str(j.get('payment_method') or '').strip()[:80]
     valor = max(0, int(j.get('valor') or 0))
     if not item or not due_month:
         return jsonify(error='Payment item and due month are required'), 400
@@ -3094,7 +3160,7 @@ def check():
     _ensure_card_balance_schema(db())
     with transaction() as con:
         cur = con.execute(
-            'SELECT debt_id, extra_id, paid_month, valor FROM payment_checks WHERE item=? AND month=?',
+            'SELECT debt_id, extra_id, paid_month, valor, source_type, payment_method FROM payment_checks WHERE item=? AND month=?',
             (item, due_month)
         ).fetchone()
         if cur:
@@ -3122,10 +3188,10 @@ def check():
                            valor=int(cur.get('valor') or 0))
 
         con.execute(
-            "INSERT INTO payment_checks (item, month, paid_month, paid_date, valor, debt_id, extra_id) VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO payment_checks (item, month, paid_month, paid_date, valor, debt_id, extra_id, source_type, payment_method) VALUES (?,?,?,?,?,?,?,?,?)",
             (item, due_month, paid_month, date.today().isoformat(), valor,
              int(debt_id) if debt_id else None,
-             int(extra_id) if extra_id else None)
+             int(extra_id) if extra_id else None, source_type, payment_method)
         )
         if debt_id and valor > 0:
             # Card payments first satisfy installment purchases included in this
@@ -4413,12 +4479,27 @@ def service_card_charge_toggle():
                 return jsonify(error='This charge belongs to a closed month and is kept as history'), 409
             if not _remove_unpaid_service_card_charge(con, sid, month_key):
                 return jsonify(error='This card charge already has payment history and cannot be removed'), 409
+            con.execute(
+                "DELETE FROM payment_checks WHERE item=? AND month=? AND COALESCE(source_type,'')='service'",
+                (service.get('name') or '', month_key)
+            )
             return jsonify(ok=True, checked=False, month=month_key)
         # Historical backfill is still allowed when a closed month is missing a
         # record (useful for manual repair), but once created it becomes immutable.
         compra_id = _sync_service_card_charge(con, service, month_key)
         if not compra_id:
             return jsonify(error='Could not create card charge for this month'), 400
+        # V193: a service paid by credit card is still a real expense/payment event.
+        # Keep the card purchase for debt mechanics AND one canonical payment_check
+        # for human traceability. It is excluded from salary by the frontend because
+        # service_card_charges remains the source of truth for card funding.
+        con.execute(
+            '''INSERT OR IGNORE INTO payment_checks
+               (item, month, paid_month, paid_date, valor, debt_id, extra_id, source_type, payment_method)
+               VALUES (?,?,?,?,?,NULL,NULL,'service',?)''',
+            (service.get('name') or 'Service', month_key, month_key, date.today().isoformat(),
+             max(0, int(service.get('amount') or 0)), service.get('method') or '')
+        )
         return jsonify(ok=True, checked=True, month=month_key, compra_id=compra_id)
 
 
