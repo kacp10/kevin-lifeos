@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 193  # V193 Unified Service Payment Traceability
+VERSION = 194  # V194 Payment Check Schema Self-Heal
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -2049,6 +2049,9 @@ def cleanup_completed_goal_checkpoints():
 def state():
     cleanup_completed_goal_checkpoints()
     d = db()
+    # V194: /api/state must be resilient to partially-applied production migrations.
+    # Ensure the columns read below exist before selecting them.
+    _ensure_card_balance_schema(d)
     month = request.args.get('month', date.today().strftime('%Y-%m'))
     plan = json.loads(d.execute(
         "SELECT value FROM config WHERE key='plan'").fetchone()['value'])
@@ -4244,7 +4247,12 @@ def _ensure_card_balance_schema(con):
         ('compras', 'source_id', 'INTEGER DEFAULT NULL'),
         ('compras', 'source_month', "TEXT DEFAULT ''"),
         ('compras', 'refinance_baseline', 'INTEGER DEFAULT 0'),
-        ('detalle_items', 'check_offset', 'INTEGER DEFAULT 0')):
+        ('detalle_items', 'check_offset', 'INTEGER DEFAULT 0'),
+        # V194: payment history columns are operational schema, not an optional
+        # migration detail.  Production may contain the V193 marker even if an
+        # ALTER failed during deploy, so self-heal them on every relevant request.
+        ('payment_checks', 'source_type', "TEXT DEFAULT ''"),
+        ('payment_checks', 'payment_method', "TEXT DEFAULT ''")):
         try:
             con.execute(f'ALTER TABLE {table} ADD COLUMN {col} {decl}')
             con.commit()
