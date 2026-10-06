@@ -283,7 +283,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 193;
+const FRONT_V = 194;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -6200,6 +6200,7 @@ ESTADO ACTUAL DEL PROYECTO - V188 EXPLICIT MONTHLY SERVICE CARD CHARGES:
 - V191 congela visualmente el valor real de una cuota ya pagada usando payment_check_records. Después de marcar un check, ADDI/Codensa/Banco de Bogotá pueden avanzar inmediatamente a la siguiente cuota y reducir compras; Home no debe reemplazar el importe que se acaba de pagar por ese nuevo cálculo posterior. El check muestra el importe registrado de la transacción del mes y el motor financiero puede seguir avanzando internamente.
 - V192 unifica el historial humano de pagos con la transacción canónica de payment_checks: Historial de ataques muestra el importe COMPLETO marcado en Home, no solo el residual que llegó a la deuda base después de distribuir parte del pago entre compras. Los abonos residuales check:/extracheck: se excluyen del historial visible para evitar duplicados. Deshacer una entrada de check revierte atómicamente allocations + abono base usando los IDs persistidos por backend, aunque el frontend no los reenvíe.
 - V193 extiende esa trazabilidad a Life & services: cada check de servicio guarda su valor completo y método de pago en payment_checks; Efectivo/Nequi dejan de producir ataques de $0 y los cargos explícitos con tarjeta también generan una entrada histórica por el valor total del servicio, sin duplicar el gasto de salario. Los checks históricos de servicios que quedaron en $0 se reparan desde el monto configurado del servicio y las filas $0 restantes no se muestran como ataques financieros.
+- V194 endurece el esquema de payment_checks: source_type y payment_method se autocorrigen independientemente de marcadores de migración, y /api/state verifica ese esquema antes de leer el historial. Esto evita errores 500 por despliegues parcialmente migrados sin cambiar saldos, cuotas ni historial financiero.
 - V179 establece una fuente monetaria canónica para las cinco tarjetas: deuda base pendiente + compras pendientes. My Credit Cards y Debt Boss consumen ese mismo saldo.
 - Full debt breakdown mantiene las líneas históricas sin borrarlas ni reescribir pagos antiguos; cuando el historial viejo no permite atribuir con precisión un pago a una línea, muestra una fila de reconciliación explícita para que la suma del grupo coincida exactamente con el saldo real.
 - El selector de mes ya no paga capital por el simple paso del tiempo. Solo cambia qué cuota corresponde al mes; el saldo disminuye únicamente mediante abonos/pagos reales.
