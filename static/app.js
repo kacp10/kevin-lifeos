@@ -283,7 +283,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 194;
+const FRONT_V = 195;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -4808,7 +4808,22 @@ function lifeRestDates() {
     return new Set(Array.isArray(raw) ? raw : []);
   } catch { return new Set(); }
 }
-function isLifeRestDate(iso) { return lifeRestDates().has(iso); }
+// REST has two scopes: a one-off protected date and a recurring weekday
+// whose Work week setting is REST. Both are neutral for every Habit streak.
+function lifeWeekdayFromISO(iso) {
+  const day = String(iso || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  const d = new Date(`${day}T12:00:00`);
+  if (!Number.isFinite(d.getTime())) return null;
+  return (d.getDay() + 6) % 7; // Monday=0, matching S.shifts and DIAS
+}
+function isLifeRestDate(iso) {
+  const day = String(iso || '').slice(0, 10);
+  if (!day) return false;
+  if (lifeRestDates().has(day)) return true;
+  const weekday = lifeWeekdayFromISO(day);
+  return weekday !== null && String((S.shifts || {})[weekday] || 'libre') === 'descanso';
+}
 async function saveLifeRestDate(iso) {
   if (!iso) return;
   const dates = lifeRestDates();
@@ -4928,7 +4943,6 @@ function monthlyHakiSnapshot(ym) {
   const daysInMonth = new Date(year, month, 0).getDate();
   const elapsed = ym === currentYm ? Number(todayIso.slice(8, 10)) : (ym < currentYm ? daysInMonth : 0);
   const marks = new Set(S.marks || []);
-  const restDates = lifeRestDates();
   let done = 0;
   let denominator = 0;
   const eligibleCalendarDays = new Set();
@@ -4938,7 +4952,7 @@ function monthlyHakiSnapshot(ym) {
     for (let d = 1; d <= elapsed; d++) {
       const iso = `${ym}-${String(d).padStart(2, '0')}`;
       const dow = new Date(iso + 'T12:00:00').getDay();
-      const rest = dow === 0 || (exercise && dow === 6) || restDates.has(iso);
+      const rest = dow === 0 || (exercise && dow === 6) || isLifeRestDate(iso);
       if (rest) continue;
       denominator += 1;
       eligibleCalendarDays.add(iso);
@@ -6187,8 +6201,11 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 33. V186 Reliable PPL Promotion & Visual Governance: cuando Gym detecta que el arco PPL cumple 6 semanas + 20 sesiones y no existe dolor activo, la ventana de promoción debe ofrecerse automáticamente al entrar/renderizar Gym y también poder abrirse manualmente desde Personal Trainer como respaldo. El panel muestra requisitos cumplidos sin fracciones confusas, conservando los contadores reales. Antes de cualquier cambio visual se debe inspeccionar y respetar el lenguaje de diseño existente del módulo: composición, simetría, tipografía, paleta y patrones actuales; los módulos Hunter conservan su identidad HxH/One Piece y Haki no recibe estilos visuales no solicitados.
 34. V187 NotebookLM Batch Flow & Modal Toast Layering: NotebookLM Bridge mantiene un lote activo explícito. Copy y Export .md reutilizan exactamente el mismo lote y no lo consumen; solo “Mark batch as sent” marca sus source_id como procesados y cierra el lote, conservando English, conceptos y Academy en sus módulos originales. El Markdown separa English, Technical Concepts y Hunter Skill Academy e incluye instrucciones maestras para NotebookLM. Todos los toasts/notificaciones deben renderizar por encima de cualquier modal activo para que siempre sean legibles sin cerrar el modal.
 35. V188 Explicit Monthly Service Card Charges: Life & services inicia cada mes visual y financieramente limpio. services.method es solo el método preferido; nunca prueba que el mes esté pagado. Un servicio configurado con tarjeta crea exactamente una compra real source_type=service únicamente cuando el usuario lo marca explícitamente en ese mes. Volver a pulsarlo puede retirar ese cargo mientras siga impago y sin asignaciones. El cambio de mes, abrir /api/state, crear o editar un servicio NO materializa cargos automáticamente. La migración V188 elimina solo cargos automáticos impagos del mes de despliegue y preserva cualquier historial pagado/asignado.
+36. V195 Recurring REST Streak Neutrality: cualquier fecha protegida como REST y cualquier weekday cuyo turno recurrente en Life esté configurado como REST son neutrales para todas las rachas de Habits. No requieren check y no interrumpen la racha. El mismo criterio se aplica al porcentaje mensual Haki y al conteo de Recovery pendiente. Domingo y el descanso de sábado ya existente para Exercise se conservan.
 
-ESTADO ACTUAL DEL PROYECTO - V188 EXPLICIT MONTHLY SERVICE CARD CHARGES:
+ESTADO ACTUAL DEL PROYECTO - V195 RECURRING REST STREAK NEUTRALITY:
+- V195 corrige el alcance del descanso: el REST guardado como turno semanal se interpreta para cada fecha de ese weekday, no solo para la fecha visible más cercana. Todas las rachas y Haki lo excluyen sin pedir check; Recovery no muestra como pendientes las misiones que caen en REST. Los REST excepcionales por fecha continúan funcionando.
+- V194 endurece el esquema de payment_checks: source_type y payment_method se autocorrigen independientemente de marcadores de migración, y /api/state verifica ese esquema antes de leer el historial. Esto evita errores 500 por despliegues parcialmente migrados sin cambiar saldos, cuotas ni historial.
 - V187 conserva V186 y corrige NotebookLM Bridge: Copy y Export .md comparten un lote activo no destructivo; solo Mark batch as sent cierra y procesa el lote. El Markdown separa English, conceptos técnicos y Academy con instrucciones maestras para NotebookLM. Los toasts se muestran por encima de modales activos. La regla visual de V186 permanece vigente y Haki sigue protegido de estilos no solicitados.
 - V188 conserva V187 y corrige Life & services de raíz: ningún servicio se considera pagado ni crea compra por tener una tarjeta configurada. Cada mes empieza pendiente; el cargo real se crea solo al marcar explícitamente el servicio. Reabrir el mes no recrea cargos. El primer arranque V188 limpia únicamente cargos automáticos impagos del mes actual. Historial, pagos y asignaciones ya reales se preservan.
 - V185 permite editar títulos de Wishlist directamente sobre el texto, añade hombros/antebrazo/pantorrilla al seguimiento corporal y al Trainer, muestra el progreso exacto hacia el arco PPL y elimina el gate aleatorio para que el desbloqueo sea determinista al cumplir requisitos. No se añadió Body Progress Map. FINAL BOSS / THE DEBT es un cambio exclusivamente visual. V184 conserva NotebookLM Bridge incremental y Academy sin scrollbar visible.
@@ -6877,7 +6894,12 @@ let recoverySyncedFor = '';
 let recoverySyncFailedFor = '';
 
 function recoveryRows() { return Array.isArray(S?.habit_recoveries) ? S.habit_recoveries : []; }
-function recoveryPending() { return recoveryRows().filter(x => x.status === 'pending' || x.status === 'scheduled'); }
+function recoveryPending() {
+  return recoveryRows().filter(x =>
+    (x.status === 'pending' || x.status === 'scheduled') &&
+    !isLifeRestDate(String(x.original_day || '').slice(0, 10))
+  );
+}
 function recoveryOpenForHabit(habitId) {
   const habit=(S.habits||[]).find(h=>Number(h.id)===Number(habitId));
   return recoveryRows().filter(x => {
@@ -6887,8 +6909,9 @@ function recoveryOpenForHabit(habitId) {
   });
 }
 function recoveryDebtCount(habitId) {
-  const rest = lifeRestDates();
-  return recoveryOpenForHabit(habitId).filter(x => !rest.has(String(x.original_day || '').slice(0,10))).length;
+  return recoveryOpenForHabit(habitId).filter(x =>
+    !isLifeRestDate(String(x.original_day || '').slice(0, 10))
+  ).length;
 }
 function recoveredDaysForHabit(habitId) {
   return new Set(recoveryRows()
@@ -7039,7 +7062,7 @@ function closePendingMissionModal(){
 
 async function openPendingMissions(){
   const rows=recoveryRows();
-  const pending=rows.filter(x=>x.status==='pending'||x.status==='scheduled');
+  const pending=recoveryPending();
   const recovered=rows.filter(x=>x.status==='recovered').slice(0,40);
   const today=hoyLocal();
   const pendingHtml=pending.length?pending.map(x=>{
