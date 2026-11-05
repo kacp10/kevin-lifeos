@@ -283,7 +283,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 195;
+const FRONT_V = 196;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -6087,14 +6087,15 @@ function pirateMetrics() {
 }
 function pirateRequirements(metrics=pirateMetrics()) {
   const r=(label,current,target,done=current>=target)=>({label,current,target,done});
+  // Rank advancement is gated by the Haki evolution scale, not only by general activity.
   return {
     apprentice:[],
-    subordinate:[r('Conquered Haki months',metrics.conqueredMonths,1),r('Permanent archive records',metrics.achievements,1)],
-    'first-officer':[r('Conquered Haki months',metrics.conqueredMonths,3),r('Historical discipline streak',metrics.maxStreak,30),r('Developed life domains',metrics.domains,3)],
-    captain:[r('Conquered Haki months',metrics.conqueredMonths,6),r('Historical discipline streak',metrics.maxStreak,60),r('Completed expeditions',metrics.goals,2),r('Developed life domains',metrics.domains,4)],
-    supernova:[r('Conquered Haki months',metrics.conqueredMonths,12),r('Historical discipline streak',metrics.maxStreak,120),r('Permanent archive records',metrics.achievements,12),r('Developed life domains',metrics.domains,5)],
-    yonko:[r('Conquered Haki months',metrics.conqueredMonths,24),r('Historical discipline streak',metrics.maxStreak,180),r('Completed expeditions',metrics.goals,5),r('Developed life domains',metrics.domains,6),r("Conqueror's Haki",metrics.haki==='conqueror'?1:0,1)],
-    'pirate-king':[r('Conquered Haki months',metrics.conqueredMonths,36),r('Historical discipline streak',metrics.maxStreak,365),r('Permanent archive records',metrics.achievements,25),r('Completed expeditions',metrics.goals,8),r('Developed life domains',metrics.domains,7)]
+    subordinate:[r('Observation Haki · conquered months',metrics.conqueredMonths,1),r('Permanent archive records',metrics.achievements,1)],
+    'first-officer':[r('Armament Haki · conquered months',metrics.conqueredMonths,4),r('Historical discipline streak',metrics.maxStreak,30),r('Developed life domains',metrics.domains,3)],
+    captain:[r('Advanced Haki · conquered months',metrics.conqueredMonths,8),r('Historical discipline streak',metrics.maxStreak,60),r('Completed expeditions',metrics.goals,2),r('Developed life domains',metrics.domains,4)],
+    supernova:[r('Advanced Haki · mastery months',metrics.conqueredMonths,12),r('Historical discipline streak',metrics.maxStreak,120),r('Permanent archive records',metrics.achievements,12),r('Developed life domains',metrics.domains,5)],
+    yonko:[r("Conqueror's Haki · conquered months",metrics.conqueredMonths,16),r('Historical discipline streak',metrics.maxStreak,180),r('Completed expeditions',metrics.goals,5),r('Developed life domains',metrics.domains,6)],
+    'pirate-king':[r("Conqueror's Haki · mastery months",metrics.conqueredMonths,36),r('Historical discipline streak',metrics.maxStreak,365),r('Permanent archive records',metrics.achievements,25),r('Completed expeditions',metrics.goals,8),r('Developed life domains',metrics.domains,7)]
   };
 }
 function piratePositionState() {
@@ -6202,6 +6203,11 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 34. V187 NotebookLM Batch Flow & Modal Toast Layering: NotebookLM Bridge mantiene un lote activo explícito. Copy y Export .md reutilizan exactamente el mismo lote y no lo consumen; solo “Mark batch as sent” marca sus source_id como procesados y cierra el lote, conservando English, conceptos y Academy en sus módulos originales. El Markdown separa English, Technical Concepts y Hunter Skill Academy e incluye instrucciones maestras para NotebookLM. Todos los toasts/notificaciones deben renderizar por encima de cualquier modal activo para que siempre sean legibles sin cerrar el modal.
 35. V188 Explicit Monthly Service Card Charges: Life & services inicia cada mes visual y financieramente limpio. services.method es solo el método preferido; nunca prueba que el mes esté pagado. Un servicio configurado con tarjeta crea exactamente una compra real source_type=service únicamente cuando el usuario lo marca explícitamente en ese mes. Volver a pulsarlo puede retirar ese cargo mientras siga impago y sin asignaciones. El cambio de mes, abrir /api/state, crear o editar un servicio NO materializa cargos automáticamente. La migración V188 elimina solo cargos automáticos impagos del mes de despliegue y preserva cualquier historial pagado/asignado.
 36. V195 Recurring REST Streak Neutrality: cualquier fecha protegida como REST y cualquier weekday cuyo turno recurrente en Life esté configurado como REST son neutrales para todas las rachas de Habits. No requieren check y no interrumpen la racha. El mismo criterio se aplica al porcentaje mensual Haki y al conteo de Recovery pendiente. Domingo y el descanso de sábado ya existente para Exercise se conservan.
+37. V196 Haki & Pirate Progression Rebalance: los meses conquistados de Haki se conservan como evidencia histórica, pero la evolución se recalcula con una escala más lenta: Dormant 0, Observation 1, Armament 4, Advanced 8 y Conqueror's 16 meses ≥70%. Pirate Position Route usa esa misma escala de forma progresiva: Subordinate 1, First Officer 4, Captain 8, Supernova 12 (Advanced mastery), Yonko 16 (Conqueror's) y Pirate King 36 (Conqueror's mastery), además de conservar sus requisitos de disciplina, expediciones, archivo y dominios. Las posiciones ya reclamadas nunca se eliminan ni retroceden; no se modifican registros, meses cerrados ni estilos visuales.
+
+ESTADO ACTUAL DEL PROYECTO - V196 HAKI & PIRATE PROGRESSION REBALANCE:
+- V196 conserva intactos los meses de Haki cerrados y el historial de posiciones reclamadas; solo recalcula la etapa actual y los requisitos futuros usando la escala 1/4/8/16 meses. Con 4 meses conquistados, la etapa calculada es Armament Haki. First Officer ya reclamado se conserva; Captain requiere 8 meses + 60 días de disciplina + 2 expediciones + 4 dominios.
+- V195 conserva la neutralidad de REST recurrente y excepcional para rachas, porcentaje Haki y Recovery.
 
 ESTADO ACTUAL DEL PROYECTO - V195 RECURRING REST STREAK NEUTRALITY:
 - V195 corrige el alcance del descanso: el REST guardado como turno semanal se interpreta para cada fecha de ese weekday, no solo para la fecha visible más cercana. Todas las rachas y Haki lo excluyen sin pedir check; Recovery no muestra como pendientes las misiones que caen en REST. Los REST excepcionales por fecha continúan funcionando.
@@ -6623,10 +6629,10 @@ function renderAchievements() {
 
 const HAKI_LEVELS = [
   { min: 0, key: 'dormant', name: 'Dormant Haki', short: 'Dormant', img: '/static/img/haki_dormant.webp', need: 0, next: 'Conquer 1 month at 70% or more' },
-  { min: 1, key: 'observation', name: 'Observation Haki', short: 'Observation', img: '/static/img/haki_observation.webp', need: 1, next: 'Conquer 2 months at 70% or more' },
-  { min: 2, key: 'armament', name: 'Armament Haki', short: 'Armament', img: '/static/img/haki_armament.webp', need: 2, next: 'Conquer 4 months at 70% or more' },
-  { min: 4, key: 'advanced', name: 'Advanced Haki', short: 'Advanced', img: '/static/img/haki_advanced.webp', need: 4, next: 'Conquer 6 months at 70% or more' },
-  { min: 6, key: 'conqueror', name: "Conqueror's Haki", short: 'Conqueror', img: '/static/img/haki_conqueror.webp', need: 6, next: 'The throne is yours' }
+  { min: 1, key: 'observation', name: 'Observation Haki', short: 'Observation', img: '/static/img/haki_observation.webp', need: 1, next: 'Conquer 4 months at 70% or more' },
+  { min: 4, key: 'armament', name: 'Armament Haki', short: 'Armament', img: '/static/img/haki_armament.webp', need: 4, next: 'Conquer 8 months at 70% or more' },
+  { min: 8, key: 'advanced', name: 'Advanced Haki', short: 'Advanced', img: '/static/img/haki_advanced.webp', need: 8, next: 'Conquer 16 months at 70% or more' },
+  { min: 16, key: 'conqueror', name: "Conqueror's Haki", short: 'Conqueror', img: '/static/img/haki_conqueror.webp', need: 16, next: 'The throne is yours' }
 ];
 
 function hakiLevelFor(wins) {
@@ -6691,7 +6697,7 @@ function renderHaki() {
     historyHost.innerHTML = (S.history || []).map(h =>
       `<span class="haki-month ${h.pct >= 0.7 ? 'win' : 'lose'}">
        ${esc(h.label)}: ${pct(h.pct)} ${h.pct >= 0.7 ? '✔' : '✘'}</span>`
-    ).join('') || '<span class="hint">Close your first month to start earning Haki. The King demands 6 months ≥70%.</span>';
+    ).join('') || '<span class="hint">Close your first month to start earning Haki. Conqueror&#39;s Haki requires 16 months ≥70%.</span>';
   }
   renderHakiChart();
 }
