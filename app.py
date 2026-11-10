@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 197  # V197 Hunter Wishlist Annual Acquisition Route
+VERSION = 198  # V198 Hunter Wishlist All Years default + schema-safe annual targets
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -255,6 +255,33 @@ def wishlist_calendar_year():
     # The personal LifeOS calendar follows Colombia time (UTC-5, no DST),
     # avoiding a UTC date rollover from assigning targets to the wrong year.
     return datetime.now(timezone(timedelta(hours=-5))).year
+
+
+def ensure_wishlist_target_year_schema(con=None):
+    # Repair the annual Wishlist column if a deployment skipped its migration.
+    # This is idempotent and also runs from the read/write routes.
+    con = con or db()
+    if db_layer.IS_PG:
+        rows = con.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='dreams' AND table_schema=current_schema()"
+        ).fetchall()
+        columns = {str(dict(row)['column_name']) for row in rows}
+        if 'target_year' not in columns:
+            con.execute('ALTER TABLE dreams ADD COLUMN target_year INTEGER')
+    else:
+        rows = con.execute('PRAGMA table_info(dreams)').fetchall()
+        columns = {
+            str((dict(row) if hasattr(row, 'keys') else {'name': row[1]})['name'])
+            for row in rows
+        }
+        if 'target_year' not in columns:
+            con.execute('ALTER TABLE dreams ADD COLUMN target_year INTEGER')
+    con.execute(
+        'UPDATE dreams SET target_year=? WHERE target_year IS NULL OR target_year<1900 OR target_year>2200',
+        (wishlist_calendar_year() + 1,),
+    )
+    con.commit()
 
 
 def safe_field_update(table, allowed_fields, int_fields, j, coerce=None, default_field=None):
@@ -2078,6 +2105,8 @@ def cleanup_completed_goal_checkpoints():
 def state():
     cleanup_completed_goal_checkpoints()
     d = db()
+    # V198: repair a missing target_year column before Wishlist is serialized.
+    ensure_wishlist_target_year_schema(d)
     # V194: /api/state must be resilient to partially-applied production migrations.
     # Ensure the columns read below exist before selecting them.
     _ensure_card_balance_schema(d)
@@ -3098,15 +3127,29 @@ def close_month():
 
 @app.post('/api/dream')
 def dream():
-    j = request.json or {}
+    j = request.get_json(silent=True) or {}
     if j.get('field') == 'target_year':
+        con = db()
+        ensure_wishlist_target_year_schema(con)
+        try:
+            dream_id = int(j.get('id'))
+        except (TypeError, ValueError):
+            return jsonify(error='Invalid Wishlist item id'), 400
         target_year = to_int(j.get('value'))
         if target_year < 1900 or target_year > 2200:
             return jsonify(error='El año objetivo debe estar entre 1900 y 2200'), 400
-        j = dict(j)
-        j['value'] = target_year
-    return safe_field_update('dreams', ('name', 'saved', 'value', 'bought', 'target_year'),
-                              ('saved', 'value', 'bought', 'target_year'), j, default_field='saved')
+        try:
+            cur = con.execute('UPDATE dreams SET target_year=? WHERE id=?', (target_year, dream_id))
+            con.commit()
+        except Exception:
+            con.rollback()
+            logger.exception('Wishlist target year update failed for dream id=%s', dream_id)
+            return jsonify(error='No se pudo guardar el año objetivo. Revisa el registro del servidor.'), 500
+        if getattr(cur, 'rowcount', 1) == 0:
+            return jsonify(error='Wishlist item not found'), 404
+        return jsonify(ok=True, id=dream_id, target_year=target_year)
+    return safe_field_update('dreams', ('name', 'saved', 'value', 'bought'),
+                              ('saved', 'value', 'bought'), j, default_field='saved')
 
 
 
@@ -5649,7 +5692,9 @@ def debt_del(i):
 
 @app.post('/api/dream/new')
 def dream_new():
-    j = request.json or {}
+    con = db()
+    ensure_wishlist_target_year_schema(con)
+    j = request.get_json(silent=True) or {}
     category = str(j.get('category') or '').strip()
     name = str(j.get('name') or '').strip()
     value = to_int(j.get('value'))
