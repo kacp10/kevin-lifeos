@@ -283,7 +283,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 196;
+const FRONT_V = 197;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -6204,8 +6204,10 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 35. V188 Explicit Monthly Service Card Charges: Life & services inicia cada mes visual y financieramente limpio. services.method es solo el método preferido; nunca prueba que el mes esté pagado. Un servicio configurado con tarjeta crea exactamente una compra real source_type=service únicamente cuando el usuario lo marca explícitamente en ese mes. Volver a pulsarlo puede retirar ese cargo mientras siga impago y sin asignaciones. El cambio de mes, abrir /api/state, crear o editar un servicio NO materializa cargos automáticamente. La migración V188 elimina solo cargos automáticos impagos del mes de despliegue y preserva cualquier historial pagado/asignado.
 36. V195 Recurring REST Streak Neutrality: cualquier fecha protegida como REST y cualquier weekday cuyo turno recurrente en Life esté configurado como REST son neutrales para todas las rachas de Habits. No requieren check y no interrumpen la racha. El mismo criterio se aplica al porcentaje mensual Haki y al conteo de Recovery pendiente. Domingo y el descanso de sábado ya existente para Exercise se conservan.
 37. V196 Haki & Pirate Progression Rebalance: los meses conquistados de Haki se conservan como evidencia histórica, pero la evolución se recalcula con una escala más lenta: Dormant 0, Observation 1, Armament 4, Advanced 8 y Conqueror's 16 meses ≥70%. Pirate Position Route usa esa misma escala de forma progresiva: Subordinate 1, First Officer 4, Captain 8, Supernova 12 (Advanced mastery), Yonko 16 (Conqueror's) y Pirate King 36 (Conqueror's mastery), además de conservar sus requisitos de disciplina, expediciones, archivo y dominios. Las posiciones ya reclamadas nunca se eliminan ni retroceden; no se modifican registros, meses cerrados ni estilos visuales.
+38. V197 Hunter Wishlist Annual Acquisition Route: Wishlist conserva su función exclusiva de compras/adquisiciones. Cada dream tiene target_year editable; las compras existentes se asignan una sola vez al siguiente año calendario al migrar. El selector de año filtra el tablero y muestra progreso de objetivos adquiridos y recursos preparados. El año propuesto para nuevas compras se calcula dinámicamente como el siguiente año calendario; cambiar el año de una compra no mueve ninguna otra. No se toca la lógica de Shopping, pagos ni deudas.
 
-ESTADO ACTUAL DEL PROYECTO - V196 HAKI & PIRATE PROGRESSION REBALANCE:
+ESTADO ACTUAL DEL PROYECTO - V197 HUNTER WISHLIST ANNUAL ACQUISITION ROUTE:
+- V197 mantiene Wishlist como tablero exclusivo de compras. Cada adquisición tiene target_year editable, el filtro anual y el progreso de adquisiciones/recursos se calculan sobre el año seleccionado, y el año sugerido para nuevas compras es el siguiente año calendario dinámico. La migración asigna los registros legacy al próximo año una sola vez; los cambios de año no reubican otras compras. Shopping, finanzas y deudas no se modifican.
 - V196 conserva intactos los meses de Haki cerrados y el historial de posiciones reclamadas; solo recalcula la etapa actual y los requisitos futuros usando la escala 1/4/8/16 meses. Con 4 meses conquistados, la etapa calculada es Armament Haki. First Officer ya reclamado se conserva; Captain requiere 8 meses + 60 días de disciplina + 2 expediciones + 4 dominios.
 - V195 conserva la neutralidad de REST recurrente y excepcional para rachas, porcentaje Haki y Recovery.
 
@@ -8557,37 +8559,146 @@ document.addEventListener('click', async (e) => {
   load();
 });
 
-/* ---------- SUEÑOS ---------- */
+/* ---------- HUNTER WISHLIST · V197 ANNUAL ACQUISITION ROUTE ---------- */
+let WISHLIST_SELECTED_YEAR = null;
+let WISHLIST_YEAR_MANUAL_SELECTION = false;
+
+function wishlistAutoYear(dreams = S.dreams || []) {
+  const currentYear = new Date().getFullYear();
+  const hasCurrentYear = dreams.some(d => Number(d.target_year) === currentYear);
+  const hasPastTargets = dreams.some(d => Number(d.target_year) < currentYear);
+  return hasCurrentYear || hasPastTargets ? currentYear : currentYear + 1;
+}
+
+function wishlistYearList(extraYears = []) {
+  const currentYear = new Date().getFullYear();
+  const years = new Set();
+  for (let year = currentYear - 2; year <= currentYear + 8; year++) years.add(year);
+  for (const raw of extraYears) {
+    const year = Number(raw);
+    if (Number.isInteger(year) && year >= 1900 && year <= 2200) years.add(year);
+  }
+  return [...years].sort((a, b) => a - b);
+}
+
+function wishlistYearOptions(selectedYear, years = wishlistYearList()) {
+  return years.map(year => `<option value="${year}" ${String(year) === String(selectedYear) ? 'selected' : ''}>${year}</option>`).join('');
+}
+
+function ensureWishlistAnnualStyles() {
+  if ($('#wish-year-styles-v197')) return;
+  const style = document.createElement('style');
+  style.id = 'wish-year-styles-v197';
+  style.textContent = `
+    .wish-year-overview{margin:0 0 15px;padding:15px 17px;border:1px solid rgba(245,185,66,.24);border-radius:17px;background:radial-gradient(ellipse at 8% 0%,rgba(245,185,66,.105),transparent 48%),linear-gradient(145deg,rgba(20,17,35,.96),rgba(13,20,29,.94));box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}
+    .wish-year-head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:13px}
+    .wish-year-head small{display:block;color:var(--gold);font-size:.61rem;letter-spacing:.16em;font-weight:850}
+    .wish-year-head h3{margin:3px 0 4px;font-size:1.08rem;letter-spacing:.02em}
+    .wish-year-head p{margin:0;color:var(--mut);font-size:.76rem;line-height:1.45}
+    .wish-year-filter,.wish-year-field{display:grid;gap:5px;min-width:112px}
+    .wish-year-filter>span,.wish-year-field>span,.wish-year-card-control>span{color:var(--mut);font-size:.59rem;letter-spacing:.12em;font-weight:850;text-transform:uppercase}
+    .wish-year-filter select,.wish-year-field input{min-height:39px;padding:8px 11px;border:1px solid rgba(245,185,66,.28);border-radius:10px;background:rgba(255,255,255,.045);color:var(--txt);font:inherit;font-weight:750}
+    .wish-year-progress{display:grid;gap:7px}
+    .wish-year-progress-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:.69rem}
+    .wish-year-progress-head span{color:var(--mut);font-size:.61rem;letter-spacing:.09em;font-weight:800}
+    .wish-year-progress-head b{color:var(--txt);text-align:right;font-variant-numeric:tabular-nums}
+    .wish-year-track{height:7px;overflow:hidden;border-radius:999px;background:rgba(255,255,255,.07);box-shadow:inset 0 1px 2px rgba(0,0,0,.2)}
+    .wish-year-track i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#b88a2f,var(--gold),#ffe7a2);box-shadow:0 0 12px rgba(245,185,66,.2);transition:width .35s ease}
+    .wish-year-track.funding i{background:linear-gradient(90deg,#238f79,var(--ok),#a3f4d7);box-shadow:0 0 12px rgba(54,201,167,.16)}
+    .wish-year-card-tools{display:flex;align-items:center;gap:7px;flex:0 0 auto}
+    .wish-year-card-control{display:grid;gap:3px;min-width:76px}
+    .wish-year-card-control input{width:78px;min-height:31px;padding:5px 7px;border-radius:9px;font-size:.73rem;font-weight:800;text-align:center}
+    .wish-new-form{grid-template-columns:minmax(125px,.8fr) minmax(220px,1.45fr) minmax(135px,.8fr) minmax(105px,.65fr) auto!important}
+    .wish-year-field{min-width:0}
+    .wish-year-field input{width:100%;min-width:0}
+    @media(max-width:900px){.wish-new-form{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}.wish-name-field{grid-column:1/-1}.wish-add-btn{grid-column:1/-1}}
+    @media(max-width:700px){.wish-year-head{align-items:stretch;flex-direction:column;gap:10px}.wish-year-filter{width:100%}.wish-year-filter select{width:100%}.wish-new-form{grid-template-columns:1fr!important}.wish-name-field,.wish-year-field,.wish-add-btn{grid-column:auto}.wish-year-progress-head{font-size:.67rem}.wish-year-progress-head span{font-size:.57rem}.wish-year-card-tools{gap:5px}.wish-year-card-control{min-width:70px}}
+  `;
+  document.head.appendChild(style);
+}
+
+function ensureWishlistYearControl(dreams = S.dreams || []) {
+  const form = $('#dreamNew');
+  if (!form) return;
+  let field = form.querySelector('.wish-year-field');
+  if (!field) {
+    field = document.createElement('label');
+    field.className = 'wish-year-field';
+    field.innerHTML = '<span>Target year</span><input id="dnYear" type="number" min="1900" max="2200" step="1" required aria-label="Target year">';
+    const valueField = form.querySelector('#dnValor')?.closest('label');
+    if (valueField) valueField.insertAdjacentElement('afterend', field);
+    else form.insertBefore(field, form.querySelector('[type="submit"]'));
+    const yearInput = field.querySelector('#dnYear');
+    yearInput.dataset.userSet = '0';
+    yearInput.addEventListener('input', () => { yearInput.dataset.userSet = '1'; });
+  }
+  const input = field.querySelector('#dnYear');
+  if (input.dataset.userSet !== '1') {
+    const selectedPlanYear = WISHLIST_SELECTED_YEAR && WISHLIST_SELECTED_YEAR !== 'all'
+      ? Number(WISHLIST_SELECTED_YEAR) : new Date().getFullYear() + 1;
+    input.value = String(selectedPlanYear);
+  }
+}
+
 function renderSuenos() {
   const dreams = S.dreams || [];
-  const cats = [...new Set(dreams.map(d => d.category || 'Uncategorized'))];
-  const totalValue = dreams.reduce((sum,d)=>sum+(+d.value||0),0);
-  const totalSaved = dreams.reduce((sum,d)=>sum+Math.min(+d.saved||0,+d.value||Number.MAX_SAFE_INTEGER),0);
-  const completed = dreams.filter(d=>d.bought).length;
-  const ready = dreams.filter(d=>!d.bought && +d.value>0 && +d.saved>=+d.value).length;
-  const summary = `<div class="wish-command-strip">
-    <div><small>FUTURE TARGETS</small><b>${dreams.length}</b></div>
-    <div><small>RESOURCES SAVED</small><b>${fmt(totalSaved)}</b></div>
+  ensureWishlistAnnualStyles();
+  const currentYear = new Date().getFullYear();
+  if (WISHLIST_SELECTED_YEAR === null || !WISHLIST_YEAR_MANUAL_SELECTION) {
+    WISHLIST_SELECTED_YEAR = String(wishlistAutoYear(dreams));
+  }
+  ensureWishlistYearControl(dreams);
+  const years = wishlistYearList(dreams.map(d => d.target_year).concat(WISHLIST_SELECTED_YEAR === 'all' ? [] : [WISHLIST_SELECTED_YEAR]));
+  const inYear = WISHLIST_SELECTED_YEAR === 'all'
+    ? dreams
+    : dreams.filter(d => Number(d.target_year) === Number(WISHLIST_SELECTED_YEAR));
+  const yearLabel = WISHLIST_SELECTED_YEAR === 'all' ? 'All years' : String(WISHLIST_SELECTED_YEAR);
+  const totalValue = inYear.reduce((sum, d) => sum + Math.max(+d.value || 0, 0), 0);
+  const prepared = inYear.reduce((sum, d) => {
+    const value = Math.max(+d.value || 0, 0);
+    return sum + (d.bought ? value : Math.min(Math.max(+d.saved || 0, 0), value));
+  }, 0);
+  const completed = inYear.filter(d => d.bought).length;
+  const ready = inYear.filter(d => !d.bought && +d.value > 0 && +d.saved >= +d.value).length;
+  const acquiredPct = inYear.length ? Math.round(completed / inYear.length * 100) : 0;
+  const preparedPct = totalValue ? Math.min(100, Math.round(prepared / totalValue * 100)) : 0;
+  const summary = `<section class="wish-year-overview">
+    <div class="wish-year-head">
+      <div><small>HUNTER ANNUAL ROUTE</small><h3>${esc(yearLabel)} · Acquisition plan</h3><p>Assign every target to its own year. The calendar updates automatically; your targets stay where you placed them.</p></div>
+      <label class="wish-year-filter"><span>Plan year</span><select data-wish-year-filter aria-label="Filter Wishlist by year"><option value="all" ${WISHLIST_SELECTED_YEAR === 'all' ? 'selected' : ''}>All years</option>${wishlistYearOptions(WISHLIST_SELECTED_YEAR, years)}</select></label>
+    </div>
+    <div class="wish-year-progress">
+      <div class="wish-year-progress-head"><span>TARGETS CLAIMED</span><b>${completed}/${inYear.length} · ${acquiredPct}%</b></div>
+      <div class="wish-year-track"><i style="width:${acquiredPct}%"></i></div>
+      <div class="wish-year-progress-head"><span>ACQUISITION PREPARATION</span><b>${fmt(prepared)} / ${fmt(totalValue)} · ${preparedPct}%</b></div>
+      <div class="wish-year-track funding"><i style="width:${preparedPct}%"></i></div>
+    </div>
+  </section>
+  <div class="wish-command-strip">
+    <div><small>TARGETS PLANNED</small><b>${inYear.length}</b></div>
     <div><small>READY TO CLAIM</small><b>${ready}</b></div>
+    <div><small>RESOURCES PREPARED</small><b>${fmt(prepared)}</b></div>
     <div><small>CLAIMED</small><b>${completed}</b></div>
   </div>`;
-  if (!dreams.length) {
-    $('#dreamList').innerHTML = summary + `<div class="wish-empty"><span>◇</span><b>No future targets registered.</b><p>Add a purchase, experience or dream worth preparing for.</p></div>`;
+  if (!inYear.length) {
+    $('#dreamList').innerHTML = summary + `<div class="wish-empty"><span>◇</span><b>No targets assigned to ${esc(yearLabel)} yet.</b><p>Register a new acquisition above or change the target year of an existing one.</p></div>`;
     return;
   }
+  const cats = [...new Set(inYear.map(d => d.category || 'Uncategorized'))];
   const groups = cats.map(cat => {
-    const items = dreams.filter(d => (d.category || 'Uncategorized') === cat);
+    const items = inYear.filter(d => (d.category || 'Uncategorized') === cat);
     const bought = items.filter(d => d.bought).length;
-    const saved = items.reduce((sum,d)=>sum+(+d.saved||0),0);
+    const saved = items.reduce((sum, d) => sum + (d.bought ? Math.max(+d.value || 0, 0) : Math.min(Math.max(+d.saved || 0, 0), Math.max(+d.value || 0, 0))), 0);
     return `<section class="wish-category">
-      <header class="wish-category-head"><div><small>HUNTER TARGET CLASS</small><h3>${esc(cat)}</h3></div><div><b>${bought}/${items.length}</b><span>claimed · ${fmt(saved)} saved</span></div></header>
+      <header class="wish-category-head"><div><small>HUNTER TARGET CLASS</small><h3>${esc(cat)}</h3></div><div><b>${bought}/${items.length}</b><span>claimed · ${fmt(saved)} prepared</span></div></header>
       <div class="wish-grid">${items.map(d => {
         const value = +d.value || 0, savedAmount = +d.saved || 0;
         const p = value ? Math.min(savedAmount / value, 1) : 0;
         const percent = d.bought ? 100 : Math.round(p * 100);
         const remaining = Math.max(value - savedAmount, 0);
+        const targetYear = Number(d.target_year) || currentYear + 1;
         return `<article class="dream-item wish-card ${d.bought ? 'bought-item' : ''}">
-          <div class="wish-card-top"><div><small>${d.bought ? 'TARGET CLAIMED' : percent >= 100 ? 'READY TO CLAIM' : 'FUTURE ACQUISITION'}</small><h4 class="wish-inline-title" contenteditable="true" spellcheck="false" data-dream-name="${d.id}" role="textbox" aria-label="Edit target name">${esc(d.name)}</h4></div><button class="del-x" data-type="dream" data-id="${d.id}" aria-label="Delete wish">✕</button></div>
+          <div class="wish-card-top"><div><small>${d.bought ? 'TARGET CLAIMED' : percent >= 100 ? 'READY TO CLAIM' : 'FUTURE ACQUISITION'}</small><h4 class="wish-inline-title" contenteditable="true" spellcheck="false" data-dream-name="${d.id}" role="textbox" aria-label="Edit target name">${esc(d.name)}</h4></div><div class="wish-year-card-tools"><label class="wish-year-card-control"><span>YEAR</span><input class="wish-year-edit" data-wish-year-edit data-id="${d.id}" type="number" min="1900" max="2200" step="1" value="${targetYear}" aria-label="Target year for ${esc(d.name)}"></label><button class="del-x" data-type="dream" data-id="${d.id}" aria-label="Delete wish">✕</button></div></div>
           <div class="wish-money-grid">
             <label><span>Target value</span><input class="d-edit money-live" inputmode="numeric" data-f="value" data-id="${d.id}" value="${Number(value).toLocaleString('es-CO')}" title="Target value"></label>
             <label><span>Saved</span><input class="d-edit money-live" inputmode="numeric" data-f="saved" data-id="${d.id}" value="${Number(savedAmount).toLocaleString('es-CO')}" title="Amount saved"></label>
@@ -8600,6 +8711,18 @@ function renderSuenos() {
   }).join('');
   $('#dreamList').innerHTML = summary + groups;
 }
+function syncWishlistCalendarYear() {
+  if (WISHLIST_YEAR_MANUAL_SELECTION) return;
+  const nextYear = String(wishlistAutoYear(S.dreams || []));
+  if (WISHLIST_SELECTED_YEAR !== nextYear) {
+    WISHLIST_SELECTED_YEAR = nextYear;
+    if ($('#dreamList')) renderSuenos();
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) syncWishlistCalendarYear();
+});
+window.addEventListener('focus', syncWishlistCalendarYear);
 $('#dreamList').addEventListener('keydown', async (e) => {
   const title=e.target.closest('[data-dream-name]');
   if(!title)return;
@@ -8623,6 +8746,30 @@ $('#dreamList').addEventListener('blur', async (e) => {
   toast('Target name updated');
 }, true);
 $('#dreamList').addEventListener('change', async (e) => {
+  const yearFilter = e.target.closest('[data-wish-year-filter]');
+  if (yearFilter) {
+    WISHLIST_SELECTED_YEAR = yearFilter.value;
+    WISHLIST_YEAR_MANUAL_SELECTION = true;
+    renderSuenos();
+    return;
+  }
+  const yearEdit = e.target.closest('[data-wish-year-edit]');
+  if (yearEdit) {
+    const id = +yearEdit.dataset.id;
+    const targetYear = +yearEdit.value;
+    if (!Number.isInteger(targetYear) || targetYear < 1900 || targetYear > 2200) {
+      const existing = (S.dreams || []).find(item => item.id === id);
+      yearEdit.value = String(Number(existing?.target_year) || new Date().getFullYear() + 1);
+      toast('Enter a valid target year (1900–2200)', 'warn');
+      return;
+    }
+    await api('/api/dream', { body: { id, field: 'target_year', value: targetYear } });
+    const dream = (S.dreams || []).find(item => item.id === id);
+    if (dream) dream.target_year = targetYear;
+    renderSuenos();
+    toast(`Target year set to ${targetYear}`);
+    return;
+  }
   if (!e.target.classList.contains('d-edit')) return;
   const v = +(e.target.value || '').replace(/\./g, '').replace(/[^0-9-]/g, '') || 0;
   await api('/api/dream', { body: { id: +e.target.dataset.id,
@@ -9182,8 +9329,12 @@ $('#dreamNew').addEventListener('submit', async (e) => {
   e.preventDefault();
   await api('/api/dream/new', { body: {
     category: $('#dnCat').value, name: $('#dnName').value,
-    value: numVal('#dnValor') } });
+    value: numVal('#dnValor'), target_year: +($('#dnYear')?.value || (new Date().getFullYear() + 1)) } });
   e.target.reset();
+  if ($('#dnYear')) {
+    $('#dnYear').value = String(WISHLIST_SELECTED_YEAR && WISHLIST_SELECTED_YEAR !== 'all' ? Number(WISHLIST_SELECTED_YEAR) : new Date().getFullYear() + 1);
+    $('#dnYear').dataset.userSet = '0';
+  }
   load();
 });
 
@@ -9488,7 +9639,7 @@ document.addEventListener('click', async (event) => {
   await modal({
     icon:'◇',
     title:'How Future Targets work',
-    text:'Register purchases, experiences or dreams you want to prepare for. Update the target value and the amount saved directly on each card. When you are ready to buy, send the target to Shopping. Mark it as claimed only after it is truly acquired.<br><br><b>Hunter rule:</b> prepare the resources first and avoid creating new installment debt.',
+    text:'Register purchases, experiences or dreams you want to prepare for and assign each one a target year. Use Plan year to filter the annual route; the progress bars show targets claimed and acquisition resources prepared. You can change an item’s year at any time without moving other targets. When you are ready to buy, send it to Shopping. Mark it as claimed only after it is truly acquired.<br><br><b>Hunter rule:</b> prepare the resources first and avoid creating new installment debt.',
     okText:'Understood'
   });
 });
