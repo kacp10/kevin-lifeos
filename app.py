@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 198  # V198 Hunter Wishlist All Years default + schema-safe annual targets
+VERSION = 199  # V199 Wishlist optional target year + per-category priority order
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -258,8 +258,9 @@ def wishlist_calendar_year():
 
 
 def ensure_wishlist_target_year_schema(con=None):
-    # Repair the annual Wishlist column if a deployment skipped its migration.
-    # This is idempotent and also runs from the read/write routes.
+    # V199: repair Wishlist planning columns without forcing an annual assignment.
+    # NULL target_year is intentional: an acquisition may remain unplanned for a year.
+    # The helper is idempotent and also runs from read/write routes.
     con = con or db()
     if db_layer.IS_PG:
         rows = con.execute(
@@ -267,19 +268,24 @@ def ensure_wishlist_target_year_schema(con=None):
             "WHERE table_name='dreams' AND table_schema=current_schema()"
         ).fetchall()
         columns = {str(dict(row)['column_name']) for row in rows}
-        if 'target_year' not in columns:
-            con.execute('ALTER TABLE dreams ADD COLUMN target_year INTEGER')
     else:
         rows = con.execute('PRAGMA table_info(dreams)').fetchall()
         columns = {
             str((dict(row) if hasattr(row, 'keys') else {'name': row[1]})['name'])
             for row in rows
         }
-        if 'target_year' not in columns:
-            con.execute('ALTER TABLE dreams ADD COLUMN target_year INTEGER')
+    if 'target_year' not in columns:
+        con.execute('ALTER TABLE dreams ADD COLUMN target_year INTEGER')
+    if 'priority' not in columns:
+        con.execute('ALTER TABLE dreams ADD COLUMN priority INTEGER')
+    # Repair only malformed non-NULL years. Never convert an intentionally blank year.
     con.execute(
-        'UPDATE dreams SET target_year=? WHERE target_year IS NULL OR target_year<1900 OR target_year>2200',
-        (wishlist_calendar_year() + 1,),
+        'UPDATE dreams SET target_year=NULL WHERE target_year IS NOT NULL AND '
+        '(target_year<1900 OR target_year>2200)'
+    )
+    con.execute(
+        'UPDATE dreams SET priority=NULL WHERE priority IS NOT NULL AND '
+        '(priority<1 OR priority>9999)'
     )
     con.commit()
 
@@ -2105,7 +2111,7 @@ def cleanup_completed_goal_checkpoints():
 def state():
     cleanup_completed_goal_checkpoints()
     d = db()
-    # V198: repair a missing target_year column before Wishlist is serialized.
+    # V199: repair Wishlist planning columns before Wishlist is serialized.
     ensure_wishlist_target_year_schema(d)
     # V194: /api/state must be resilient to partially-applied production migrations.
     # Ensure the columns read below exist before selecting them.
@@ -3128,29 +3134,38 @@ def close_month():
 @app.post('/api/dream')
 def dream():
     j = request.get_json(silent=True) or {}
-    if j.get('field') == 'target_year':
+    field = j.get('field')
+    if field in ('target_year', 'priority'):
         con = db()
         ensure_wishlist_target_year_schema(con)
         try:
             dream_id = int(j.get('id'))
         except (TypeError, ValueError):
             return jsonify(error='Invalid Wishlist item id'), 400
-        target_year = to_int(j.get('value'))
-        if target_year < 1900 or target_year > 2200:
-            return jsonify(error='El año objetivo debe estar entre 1900 y 2200'), 400
+
+        raw_value = j.get('value')
+        if raw_value is None or str(raw_value).strip() == '':
+            value = None
+        else:
+            value = to_int(raw_value)
+            if field == 'target_year' and not 1900 <= value <= 2200:
+                return jsonify(error='El año objetivo debe estar entre 1900 y 2200'), 400
+            if field == 'priority' and not 1 <= value <= 9999:
+                return jsonify(error='La prioridad debe estar entre 1 y 9999'), 400
+
+        column = 'target_year' if field == 'target_year' else 'priority'
         try:
-            cur = con.execute('UPDATE dreams SET target_year=? WHERE id=?', (target_year, dream_id))
+            cur = con.execute(f'UPDATE dreams SET {column}=? WHERE id=?', (value, dream_id))
             con.commit()
         except Exception:
             con.rollback()
-            logger.exception('Wishlist target year update failed for dream id=%s', dream_id)
-            return jsonify(error='No se pudo guardar el año objetivo. Revisa el registro del servidor.'), 500
+            logger.exception('Wishlist %s update failed for dream id=%s', field, dream_id)
+            return jsonify(error='No se pudo guardar el cambio. Revisa el registro del servidor.'), 500
         if getattr(cur, 'rowcount', 1) == 0:
             return jsonify(error='Wishlist item not found'), 404
-        return jsonify(ok=True, id=dream_id, target_year=target_year)
+        return jsonify(ok=True, id=dream_id, **{field: value})
     return safe_field_update('dreams', ('name', 'saved', 'value', 'bought'),
                               ('saved', 'value', 'bought'), j, default_field='saved')
-
 
 
 
@@ -5698,16 +5713,19 @@ def dream_new():
     category = str(j.get('category') or '').strip()
     name = str(j.get('name') or '').strip()
     value = to_int(j.get('value'))
-    target_year = to_int(j.get('target_year')) or (wishlist_calendar_year() + 1)
+    raw_target_year = j.get('target_year')
+    target_year = None if raw_target_year is None or str(raw_target_year).strip() == '' else to_int(raw_target_year)
     if not category or not name:
         return jsonify(error='Completa la categoría y el nombre'), 400
     if value < 0:
         return jsonify(error='El valor no puede ser negativo'), 400
-    if target_year < 1900 or target_year > 2200:
+    if target_year is not None and not 1900 <= target_year <= 2200:
         return jsonify(error='El año objetivo debe estar entre 1900 y 2200'), 400
-    db().execute('INSERT INTO dreams (category, name, value, target_year) VALUES (?,?,?,?)',
-                 (category, name, value, target_year))
-    db().commit()
+    con.execute(
+        'INSERT INTO dreams (category, name, value, target_year, priority) VALUES (?,?,?,?,NULL)',
+        (category, name, value, target_year),
+    )
+    con.commit()
     return jsonify(ok=True)
 
 
