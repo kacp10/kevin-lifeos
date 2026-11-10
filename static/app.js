@@ -283,7 +283,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 198;
+const FRONT_V = 199;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -6207,8 +6207,10 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 38. V197 Hunter Wishlist Annual Acquisition Route: Wishlist conserva su función exclusiva de compras/adquisiciones. Cada dream tiene target_year editable; las compras existentes se asignan una sola vez al siguiente año calendario al migrar. El selector de año filtra el tablero y muestra progreso de objetivos adquiridos y recursos preparados. El año propuesto para nuevas compras se calcula dinámicamente como el siguiente año calendario; cambiar el año de una compra no mueve ninguna otra. No se toca la lógica de Shopping, pagos ni deudas.
 39. V198 Hunter Wishlist All Years Default & Schema Repair: cada sesión nueva de la app inicia Wishlist en All years y muestra todas las compras, independientemente de su año asignado. El filtro anual es opt-in y, al seleccionar un año, solo muestra sus compras. La selección se conserva durante la sesión, pero al reiniciar la app vuelve a All years. El desplegable de años usa el tema oscuro/dorado Hunter y opciones legibles. El año calendario se calcula con America/Bogota; el cambio de año refresca las opciones sin cambiar el filtro. Las altas nuevas proponen el próximo año calendario. /api/state, /api/dream y /api/dream/new autorreparan target_year si una migración de producción quedó incompleta; cambiar el año actualiza únicamente esa compra. No se toca Shopping, pagos, deudas ni finanzas.
 
-ESTADO ACTUAL DEL PROYECTO - V198 HUNTER WISHLIST ALL YEARS DEFAULT & SCHEMA REPAIR:
-- Wishlist inicia siempre en All years al abrir una sesión nueva y muestra el conjunto completo de compras. El filtro por año es manual; filtrar muestra exclusivamente ese año y cambiar de año una compra no altera las demás. El selector usa estilo Hunter oscuro/dorado y actualiza su lista al cambiar el año calendario de Colombia sin modificar el filtro activo. El formulario propone el próximo año calendario. El backend repara target_year antes de serializar Wishlist o guardar/crear una compra, evitando errores por migraciones parciales. Shopping, finanzas y deudas permanecen intactos.
+40. V199 Hunter Wishlist Optional Year & Local Priority Order: target_year admite NULL de forma intencional. Una adquisición sin año permanece en All years y queda fuera de los filtros anuales hasta que el usuario asigne uno; el campo del formulario inicia vacío y el año puede borrarse desde cada tarjeta. La reparación de esquema nunca vuelve a asignar años que el usuario dejó en blanco. Cada tarjeta de Wishlist admite una prioridad opcional (1–9999); dentro de cada categoría, los elementos se ordenan ascendentemente por prioridad y los no priorizados quedan al final. Las prioridades iguales conservan su orden previo. No se mezclan categorías ni se modifica Shopping, pagos, deudas u otros módulos.
+
+ESTADO ACTUAL DEL PROYECTO - V199 HUNTER WISHLIST OPTIONAL YEAR & PRIORITY ORDER:
+- Wishlist inicia siempre en All years al abrir una sesión nueva y muestra el conjunto completo de compras. El año es opcional: los elementos sin año permanecen en All years y solo aparecen en un filtro anual después de asignarles uno. El formulario inicia con el año vacío y cada tarjeta permite asignar o borrar el año. La reparación de esquema preserva NULL intencionales. Cada categoría de Wishlist ordena sus tarjetas por prioridad ascendente (1 primero); prioridad vacía queda al final y no se mezclan categorías. El selector conserva su estilo Hunter oscuro/dorado. Shopping, finanzas, deudas y otros módulos permanecen intactos.
 - V196 conserva intactos los meses de Haki cerrados y el historial de posiciones reclamadas; solo recalcula la etapa actual y los requisitos futuros usando la escala 1/4/8/16 meses. Con 4 meses conquistados, la etapa calculada es Armament Haki. First Officer ya reclamado se conserva; Captain requiere 8 meses + 60 días de disciplina + 2 expediciones + 4 dominios.
 - V195 conserva la neutralidad de REST recurrente y excepcional para rachas, porcentaje Haki y Recovery.
 
@@ -8560,7 +8562,7 @@ document.addEventListener('click', async (e) => {
   load();
 });
 
-/* ---------- HUNTER WISHLIST · V198 ANNUAL ACQUISITION ROUTE ---------- */
+/* ---------- HUNTER WISHLIST · V199 OPTIONAL YEAR + PRIORITY ORDER ---------- */
 // Every fresh app session starts with the complete Wishlist. Year filtering is opt-in.
 let WISHLIST_SELECTED_YEAR = 'all';
 let WISHLIST_LAST_CALENDAR_YEAR = null;
@@ -8572,10 +8574,6 @@ function wishlistCalendarYear() {
     if (part) return Number(part.value);
   } catch (_) {}
   return new Date().getFullYear();
-}
-
-function wishlistAutoYear() {
-  return wishlistCalendarYear() + 1;
 }
 
 function wishlistYearList(extraYears = []) {
@@ -8594,9 +8592,9 @@ function wishlistYearOptions(selectedYear, years = wishlistYearList()) {
 }
 
 function ensureWishlistAnnualStyles() {
-  if ($('#wish-year-styles-v198')) return;
+  if ($('#wish-year-styles-v199')) return;
   const style = document.createElement('style');
-  style.id = 'wish-year-styles-v198';
+  style.id = 'wish-year-styles-v199';
   style.textContent = `
     .wish-year-overview{margin:0 0 15px;padding:15px 17px;border:1px solid rgba(245,185,66,.24);border-radius:17px;background:radial-gradient(ellipse at 8% 0%,rgba(245,185,66,.105),transparent 48%),linear-gradient(145deg,rgba(20,17,35,.96),rgba(13,20,29,.94));box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}
     .wish-year-head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:13px}
@@ -8620,6 +8618,11 @@ function ensureWishlistAnnualStyles() {
     .wish-year-card-tools{display:flex;align-items:center;gap:7px;flex:0 0 auto}
     .wish-year-card-control{display:grid;gap:3px;min-width:76px}
     .wish-year-card-control input{width:78px;min-height:31px;padding:5px 7px;border-radius:9px;font-size:.73rem;font-weight:800;text-align:center}
+    .wish-priority-control{display:grid;gap:3px;min-width:52px}
+    .wish-priority-control>span{color:var(--mut);font-size:.53rem;letter-spacing:.09em;font-weight:850;text-transform:uppercase}
+    .wish-priority-control input{width:52px;min-height:31px;padding:4px 5px;border:1px solid rgba(245,185,66,.3);border-radius:9px;background:rgba(245,185,66,.055);color:var(--gold);font:inherit;font-size:.68rem;font-weight:850;text-align:center;font-variant-numeric:tabular-nums}
+    .wish-priority-control input::placeholder{color:var(--mut);opacity:.75}
+    .wish-priority-control input:focus-visible{outline:2px solid rgba(245,185,66,.65);outline-offset:2px}
     .wish-new-form{grid-template-columns:minmax(125px,.8fr) minmax(220px,1.45fr) minmax(135px,.8fr) minmax(105px,.65fr) auto!important}
     .wish-year-field{min-width:0}
     .wish-year-field input{width:100%;min-width:0}
@@ -8636,7 +8639,7 @@ function ensureWishlistYearControl(dreams = S.dreams || []) {
   if (!field) {
     field = document.createElement('label');
     field.className = 'wish-year-field';
-    field.innerHTML = '<span>Target year</span><input id="dnYear" type="number" min="1900" max="2200" step="1" required aria-label="Target year">';
+    field.innerHTML = '<span>Target year · optional</span><input id="dnYear" type="number" min="1900" max="2200" step="1" placeholder="No year" aria-label="Target year (optional)">';
     const valueField = form.querySelector('#dnValor')?.closest('label');
     if (valueField) valueField.insertAdjacentElement('afterend', field);
     else form.insertBefore(field, form.querySelector('[type="submit"]'));
@@ -8645,17 +8648,17 @@ function ensureWishlistYearControl(dreams = S.dreams || []) {
     yearInput.addEventListener('input', () => { yearInput.dataset.userSet = '1'; });
   }
   const input = field.querySelector('#dnYear');
+  input.required = false;
+  input.placeholder = 'No year';
   if (input.dataset.userSet !== '1') {
-    const selectedPlanYear = WISHLIST_SELECTED_YEAR && WISHLIST_SELECTED_YEAR !== 'all'
-      ? Number(WISHLIST_SELECTED_YEAR) : wishlistAutoYear();
-    input.value = String(selectedPlanYear);
+    // Leave the year blank by default; assign one only when there is a real plan.
+    input.value = '';
   }
 }
 
 function renderSuenos() {
   const dreams = S.dreams || [];
   ensureWishlistAnnualStyles();
-  const currentYear = wishlistCalendarYear();
   if (WISHLIST_SELECTED_YEAR === null || WISHLIST_SELECTED_YEAR === undefined || WISHLIST_SELECTED_YEAR === '') {
     WISHLIST_SELECTED_YEAR = 'all';
   }
@@ -8676,7 +8679,7 @@ function renderSuenos() {
   const preparedPct = totalValue ? Math.min(100, Math.round(prepared / totalValue * 100)) : 0;
   const summary = `<section class="wish-year-overview">
     <div class="wish-year-head">
-      <div><small>HUNTER ANNUAL ROUTE</small><h3>${esc(yearLabel)} · Acquisition plan</h3><p>Assign every target to its own year. The calendar updates automatically; your targets stay where you placed them.</p></div>
+      <div><small>HUNTER ANNUAL ROUTE</small><h3>${esc(yearLabel)} · Acquisition plan</h3><p>Assign a year only when you have a concrete plan. Items without a year stay visible in All years.</p></div>
       <label class="wish-year-filter"><span>Plan year</span><select data-wish-year-filter aria-label="Filter Wishlist by year"><option value="all" ${WISHLIST_SELECTED_YEAR === 'all' ? 'selected' : ''}>All years</option>${wishlistYearOptions(WISHLIST_SELECTED_YEAR, years)}</select></label>
     </div>
     <div class="wish-year-progress">
@@ -8699,6 +8702,15 @@ function renderSuenos() {
   const cats = [...new Set(inYear.map(d => d.category || 'Uncategorized'))];
   const groups = cats.map(cat => {
     const items = inYear.filter(d => (d.category || 'Uncategorized') === cat);
+    const originalOrder = new Map(items.map((item, index) => [item.id, index]));
+    items.sort((a, b) => {
+      const pa = Number(a.priority), pb = Number(b.priority);
+      const hasA = Number.isInteger(pa) && pa >= 1 && pa <= 9999;
+      const hasB = Number.isInteger(pb) && pb >= 1 && pb <= 9999;
+      if (hasA && hasB && pa !== pb) return pa - pb;
+      if (hasA !== hasB) return hasA ? -1 : 1;
+      return originalOrder.get(a.id) - originalOrder.get(b.id);
+    });
     const bought = items.filter(d => d.bought).length;
     const saved = items.reduce((sum, d) => sum + (d.bought ? Math.max(+d.value || 0, 0) : Math.min(Math.max(+d.saved || 0, 0), Math.max(+d.value || 0, 0))), 0);
     return `<section class="wish-category">
@@ -8708,9 +8720,9 @@ function renderSuenos() {
         const p = value ? Math.min(savedAmount / value, 1) : 0;
         const percent = d.bought ? 100 : Math.round(p * 100);
         const remaining = Math.max(value - savedAmount, 0);
-        const targetYear = Number(d.target_year) || currentYear + 1;
+        const targetYear = Number.isInteger(Number(d.target_year)) && Number(d.target_year) >= 1900 ? Number(d.target_year) : '';
         return `<article class="dream-item wish-card ${d.bought ? 'bought-item' : ''}">
-          <div class="wish-card-top"><div><small>${d.bought ? 'TARGET CLAIMED' : percent >= 100 ? 'READY TO CLAIM' : 'FUTURE ACQUISITION'}</small><h4 class="wish-inline-title" contenteditable="true" spellcheck="false" data-dream-name="${d.id}" role="textbox" aria-label="Edit target name">${esc(d.name)}</h4></div><div class="wish-year-card-tools"><label class="wish-year-card-control"><span>YEAR</span><input class="wish-year-edit" data-wish-year-edit data-id="${d.id}" type="number" min="1900" max="2200" step="1" value="${targetYear}" aria-label="Target year for ${esc(d.name)}"></label><button class="del-x" data-type="dream" data-id="${d.id}" aria-label="Delete wish">✕</button></div></div>
+          <div class="wish-card-top"><div><small>${d.bought ? 'TARGET CLAIMED' : percent >= 100 ? 'READY TO CLAIM' : 'FUTURE ACQUISITION'}</small><h4 class="wish-inline-title" contenteditable="true" spellcheck="false" data-dream-name="${d.id}" role="textbox" aria-label="Edit target name">${esc(d.name)}</h4></div><div class="wish-year-card-tools"><label class="wish-priority-control"><span>PRIORITY</span><input class="wish-priority-edit" data-wish-priority-edit data-id="${d.id}" type="number" min="1" max="9999" step="1" value="${Number.isInteger(Number(d.priority)) && Number(d.priority) > 0 ? Number(d.priority) : ''}" placeholder="—" aria-label="Priority for ${esc(d.name)}"></label><label class="wish-year-card-control"><span>YEAR</span><input class="wish-year-edit" data-wish-year-edit data-id="${d.id}" type="number" min="1900" max="2200" step="1" value="${targetYear}" placeholder="No year" aria-label="Target year for ${esc(d.name)} (optional)"></label><button class="del-x" data-type="dream" data-id="${d.id}" aria-label="Delete wish">✕</button></div></div>
           <div class="wish-money-grid">
             <label><span>Target value</span><input class="d-edit money-live" inputmode="numeric" data-f="value" data-id="${d.id}" value="${Number(value).toLocaleString('es-CO')}" title="Target value"></label>
             <label><span>Saved</span><input class="d-edit money-live" inputmode="numeric" data-f="saved" data-id="${d.id}" value="${Number(savedAmount).toLocaleString('es-CO')}" title="Amount saved"></label>
@@ -8771,25 +8783,51 @@ $('#dreamList').addEventListener('change', async (e) => {
   const yearEdit = e.target.closest('[data-wish-year-edit]');
   if (yearEdit) {
     const id = +yearEdit.dataset.id;
-    const targetYear = +yearEdit.value;
-    if (!Number.isInteger(targetYear) || targetYear < 1900 || targetYear > 2200) {
+    const rawYear = String(yearEdit.value || '').trim();
+    const targetYear = rawYear === '' ? null : Number(rawYear);
+    if (targetYear !== null && (!Number.isInteger(targetYear) || targetYear < 1900 || targetYear > 2200)) {
       const existing = (S.dreams || []).find(item => item.id === id);
-      yearEdit.value = String(Number(existing?.target_year) || wishlistAutoYear());
-      toast('Enter a valid target year (1900–2200)', 'warn');
+      yearEdit.value = existing?.target_year == null ? '' : String(existing.target_year);
+      toast('Enter a valid year (1900–2200) or leave it blank', 'warn');
       return;
     }
     try {
       await api('/api/dream', { body: { id, field: 'target_year', value: targetYear } });
     } catch (error) {
       const existing = (S.dreams || []).find(item => item.id === id);
-      yearEdit.value = String(Number(existing?.target_year) || wishlistAutoYear());
+      yearEdit.value = existing?.target_year == null ? '' : String(existing.target_year);
       toast(error?.message || 'Could not save the target year', 'err');
       return;
     }
     const dream = (S.dreams || []).find(item => item.id === id);
     if (dream) dream.target_year = targetYear;
     renderSuenos();
-    toast(`Target year set to ${targetYear}`);
+    toast(targetYear === null ? 'Year cleared · kept in All years' : `Target year set to ${targetYear}`);
+    return;
+  }
+  const priorityEdit = e.target.closest('[data-wish-priority-edit]');
+  if (priorityEdit) {
+    const id = +priorityEdit.dataset.id;
+    const rawPriority = String(priorityEdit.value || '').trim();
+    const priority = rawPriority === '' ? null : Number(rawPriority);
+    if (priority !== null && (!Number.isInteger(priority) || priority < 1 || priority > 9999)) {
+      const existing = (S.dreams || []).find(item => item.id === id);
+      priorityEdit.value = existing?.priority == null ? '' : String(existing.priority);
+      toast('Use a priority from 1 to 9999, or leave it blank', 'warn');
+      return;
+    }
+    try {
+      await api('/api/dream', { body: { id, field: 'priority', value: priority } });
+    } catch (error) {
+      const existing = (S.dreams || []).find(item => item.id === id);
+      priorityEdit.value = existing?.priority == null ? '' : String(existing.priority);
+      toast(error?.message || 'Could not save the priority', 'err');
+      return;
+    }
+    const dream = (S.dreams || []).find(item => item.id === id);
+    if (dream) dream.priority = priority;
+    renderSuenos();
+    toast(priority === null ? 'Priority cleared' : `Priority ${priority} saved · list reordered`);
     return;
   }
   if (!e.target.classList.contains('d-edit')) return;
@@ -9349,12 +9387,18 @@ $('#debtNew').addEventListener('submit', async (e) => {
 
 $('#dreamNew').addEventListener('submit', async (e) => {
   e.preventDefault();
+  const rawYear = String($('#dnYear')?.value || '').trim();
+  const targetYear = rawYear === '' ? null : Number(rawYear);
+  if (targetYear !== null && (!Number.isInteger(targetYear) || targetYear < 1900 || targetYear > 2200)) {
+    toast('Enter a valid year (1900–2200) or leave it blank', 'warn');
+    return;
+  }
   await api('/api/dream/new', { body: {
     category: $('#dnCat').value, name: $('#dnName').value,
-    value: numVal('#dnValor'), target_year: +($('#dnYear')?.value || wishlistAutoYear()) } });
+    value: numVal('#dnValor'), target_year: targetYear } });
   e.target.reset();
   if ($('#dnYear')) {
-    $('#dnYear').value = String(WISHLIST_SELECTED_YEAR && WISHLIST_SELECTED_YEAR !== 'all' ? Number(WISHLIST_SELECTED_YEAR) : wishlistAutoYear());
+    $('#dnYear').value = '';
     $('#dnYear').dataset.userSet = '0';
   }
   load();
@@ -9661,7 +9705,7 @@ document.addEventListener('click', async (event) => {
   await modal({
     icon:'◇',
     title:'How Future Targets work',
-    text:'Register purchases, experiences or dreams you want to prepare for and assign each one a target year. Use Plan year to filter the annual route; the progress bars show targets claimed and acquisition resources prepared. You can change an item’s year at any time without moving other targets. When you are ready to buy, send it to Shopping. Mark it as claimed only after it is truly acquired.<br><br><b>Hunter rule:</b> prepare the resources first and avoid creating new installment debt.',
+    text:'Register purchases, experiences or dreams you want to prepare for. A target year is optional: leave it blank until you decide when to acquire it. Use Plan year to filter the annual route; unassigned items remain visible in All years. Set a small priority number inside each category to organize its cards automatically. When you are ready to buy, send it to Shopping. Mark it as claimed only after it is truly acquired.<br><br><b>Hunter rule:</b> prepare the resources first and avoid creating new installment debt.',
     okText:'Understood'
   });
 });
