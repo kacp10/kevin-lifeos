@@ -283,7 +283,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 197;
+const FRONT_V = 198;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -6205,9 +6205,10 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 36. V195 Recurring REST Streak Neutrality: cualquier fecha protegida como REST y cualquier weekday cuyo turno recurrente en Life esté configurado como REST son neutrales para todas las rachas de Habits. No requieren check y no interrumpen la racha. El mismo criterio se aplica al porcentaje mensual Haki y al conteo de Recovery pendiente. Domingo y el descanso de sábado ya existente para Exercise se conservan.
 37. V196 Haki & Pirate Progression Rebalance: los meses conquistados de Haki se conservan como evidencia histórica, pero la evolución se recalcula con una escala más lenta: Dormant 0, Observation 1, Armament 4, Advanced 8 y Conqueror's 16 meses ≥70%. Pirate Position Route usa esa misma escala de forma progresiva: Subordinate 1, First Officer 4, Captain 8, Supernova 12 (Advanced mastery), Yonko 16 (Conqueror's) y Pirate King 36 (Conqueror's mastery), además de conservar sus requisitos de disciplina, expediciones, archivo y dominios. Las posiciones ya reclamadas nunca se eliminan ni retroceden; no se modifican registros, meses cerrados ni estilos visuales.
 38. V197 Hunter Wishlist Annual Acquisition Route: Wishlist conserva su función exclusiva de compras/adquisiciones. Cada dream tiene target_year editable; las compras existentes se asignan una sola vez al siguiente año calendario al migrar. El selector de año filtra el tablero y muestra progreso de objetivos adquiridos y recursos preparados. El año propuesto para nuevas compras se calcula dinámicamente como el siguiente año calendario; cambiar el año de una compra no mueve ninguna otra. No se toca la lógica de Shopping, pagos ni deudas.
+39. V198 Hunter Wishlist All Years Default & Schema Repair: cada sesión nueva de la app inicia Wishlist en All years y muestra todas las compras, independientemente de su año asignado. El filtro anual es opt-in y, al seleccionar un año, solo muestra sus compras. La selección se conserva durante la sesión, pero al reiniciar la app vuelve a All years. El desplegable de años usa el tema oscuro/dorado Hunter y opciones legibles. El año calendario se calcula con America/Bogota; el cambio de año refresca las opciones sin cambiar el filtro. Las altas nuevas proponen el próximo año calendario. /api/state, /api/dream y /api/dream/new autorreparan target_year si una migración de producción quedó incompleta; cambiar el año actualiza únicamente esa compra. No se toca Shopping, pagos, deudas ni finanzas.
 
-ESTADO ACTUAL DEL PROYECTO - V197 HUNTER WISHLIST ANNUAL ACQUISITION ROUTE:
-- V197 mantiene Wishlist como tablero exclusivo de compras. Cada adquisición tiene target_year editable, el filtro anual y el progreso de adquisiciones/recursos se calculan sobre el año seleccionado, y el año sugerido para nuevas compras es el siguiente año calendario dinámico. La migración asigna los registros legacy al próximo año una sola vez; los cambios de año no reubican otras compras. Shopping, finanzas y deudas no se modifican.
+ESTADO ACTUAL DEL PROYECTO - V198 HUNTER WISHLIST ALL YEARS DEFAULT & SCHEMA REPAIR:
+- Wishlist inicia siempre en All years al abrir una sesión nueva y muestra el conjunto completo de compras. El filtro por año es manual; filtrar muestra exclusivamente ese año y cambiar de año una compra no altera las demás. El selector usa estilo Hunter oscuro/dorado y actualiza su lista al cambiar el año calendario de Colombia sin modificar el filtro activo. El formulario propone el próximo año calendario. El backend repara target_year antes de serializar Wishlist o guardar/crear una compra, evitando errores por migraciones parciales. Shopping, finanzas y deudas permanecen intactos.
 - V196 conserva intactos los meses de Haki cerrados y el historial de posiciones reclamadas; solo recalcula la etapa actual y los requisitos futuros usando la escala 1/4/8/16 meses. Con 4 meses conquistados, la etapa calculada es Armament Haki. First Officer ya reclamado se conserva; Captain requiere 8 meses + 60 días de disciplina + 2 expediciones + 4 dominios.
 - V195 conserva la neutralidad de REST recurrente y excepcional para rachas, porcentaje Haki y Recovery.
 
@@ -8559,19 +8560,26 @@ document.addEventListener('click', async (e) => {
   load();
 });
 
-/* ---------- HUNTER WISHLIST · V197 ANNUAL ACQUISITION ROUTE ---------- */
-let WISHLIST_SELECTED_YEAR = null;
-let WISHLIST_YEAR_MANUAL_SELECTION = false;
+/* ---------- HUNTER WISHLIST · V198 ANNUAL ACQUISITION ROUTE ---------- */
+// Every fresh app session starts with the complete Wishlist. Year filtering is opt-in.
+let WISHLIST_SELECTED_YEAR = 'all';
+let WISHLIST_LAST_CALENDAR_YEAR = null;
 
-function wishlistAutoYear(dreams = S.dreams || []) {
-  const currentYear = new Date().getFullYear();
-  const hasCurrentYear = dreams.some(d => Number(d.target_year) === currentYear);
-  const hasPastTargets = dreams.some(d => Number(d.target_year) < currentYear);
-  return hasCurrentYear || hasPastTargets ? currentYear : currentYear + 1;
+function wishlistCalendarYear() {
+  try {
+    const part = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Bogota', year: 'numeric' })
+      .formatToParts(new Date()).find(item => item.type === 'year');
+    if (part) return Number(part.value);
+  } catch (_) {}
+  return new Date().getFullYear();
+}
+
+function wishlistAutoYear() {
+  return wishlistCalendarYear() + 1;
 }
 
 function wishlistYearList(extraYears = []) {
-  const currentYear = new Date().getFullYear();
+  const currentYear = wishlistCalendarYear();
   const years = new Set();
   for (let year = currentYear - 2; year <= currentYear + 8; year++) years.add(year);
   for (const raw of extraYears) {
@@ -8586,9 +8594,9 @@ function wishlistYearOptions(selectedYear, years = wishlistYearList()) {
 }
 
 function ensureWishlistAnnualStyles() {
-  if ($('#wish-year-styles-v197')) return;
+  if ($('#wish-year-styles-v198')) return;
   const style = document.createElement('style');
-  style.id = 'wish-year-styles-v197';
+  style.id = 'wish-year-styles-v198';
   style.textContent = `
     .wish-year-overview{margin:0 0 15px;padding:15px 17px;border:1px solid rgba(245,185,66,.24);border-radius:17px;background:radial-gradient(ellipse at 8% 0%,rgba(245,185,66,.105),transparent 48%),linear-gradient(145deg,rgba(20,17,35,.96),rgba(13,20,29,.94));box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}
     .wish-year-head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:13px}
@@ -8597,7 +8605,11 @@ function ensureWishlistAnnualStyles() {
     .wish-year-head p{margin:0;color:var(--mut);font-size:.76rem;line-height:1.45}
     .wish-year-filter,.wish-year-field{display:grid;gap:5px;min-width:112px}
     .wish-year-filter>span,.wish-year-field>span,.wish-year-card-control>span{color:var(--mut);font-size:.59rem;letter-spacing:.12em;font-weight:850;text-transform:uppercase}
-    .wish-year-filter select,.wish-year-field input{min-height:39px;padding:8px 11px;border:1px solid rgba(245,185,66,.28);border-radius:10px;background:rgba(255,255,255,.045);color:var(--txt);font:inherit;font-weight:750}
+    .wish-year-filter select{min-height:39px;min-width:132px;padding:8px 34px 8px 11px;border:1px solid rgba(245,185,66,.38);border-radius:10px;background-color:#171526;color:#f6e8c8;color-scheme:dark;appearance:none;-webkit-appearance:none;font:inherit;font-weight:800;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23e7b84e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;background-size:13px}
+    .wish-year-filter select option{background:#171526;color:#f6e8c8;padding:9px}
+    .wish-year-filter select option:checked{background:#8d692b;color:#fff4d7}
+    .wish-year-filter select:focus-visible{outline:2px solid rgba(245,185,66,.7);outline-offset:2px}
+    .wish-year-field input{min-height:39px;padding:8px 11px;border:1px solid rgba(245,185,66,.28);border-radius:10px;background:rgba(255,255,255,.045);color:var(--txt);font:inherit;font-weight:750}
     .wish-year-progress{display:grid;gap:7px}
     .wish-year-progress-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:.69rem}
     .wish-year-progress-head span{color:var(--mut);font-size:.61rem;letter-spacing:.09em;font-weight:800}
@@ -8635,7 +8647,7 @@ function ensureWishlistYearControl(dreams = S.dreams || []) {
   const input = field.querySelector('#dnYear');
   if (input.dataset.userSet !== '1') {
     const selectedPlanYear = WISHLIST_SELECTED_YEAR && WISHLIST_SELECTED_YEAR !== 'all'
-      ? Number(WISHLIST_SELECTED_YEAR) : new Date().getFullYear() + 1;
+      ? Number(WISHLIST_SELECTED_YEAR) : wishlistAutoYear();
     input.value = String(selectedPlanYear);
   }
 }
@@ -8643,9 +8655,9 @@ function ensureWishlistYearControl(dreams = S.dreams || []) {
 function renderSuenos() {
   const dreams = S.dreams || [];
   ensureWishlistAnnualStyles();
-  const currentYear = new Date().getFullYear();
-  if (WISHLIST_SELECTED_YEAR === null || !WISHLIST_YEAR_MANUAL_SELECTION) {
-    WISHLIST_SELECTED_YEAR = String(wishlistAutoYear(dreams));
+  const currentYear = wishlistCalendarYear();
+  if (WISHLIST_SELECTED_YEAR === null || WISHLIST_SELECTED_YEAR === undefined || WISHLIST_SELECTED_YEAR === '') {
+    WISHLIST_SELECTED_YEAR = 'all';
   }
   ensureWishlistYearControl(dreams);
   const years = wishlistYearList(dreams.map(d => d.target_year).concat(WISHLIST_SELECTED_YEAR === 'all' ? [] : [WISHLIST_SELECTED_YEAR]));
@@ -8712,10 +8724,14 @@ function renderSuenos() {
   $('#dreamList').innerHTML = summary + groups;
 }
 function syncWishlistCalendarYear() {
-  if (WISHLIST_YEAR_MANUAL_SELECTION) return;
-  const nextYear = String(wishlistAutoYear(S.dreams || []));
-  if (WISHLIST_SELECTED_YEAR !== nextYear) {
-    WISHLIST_SELECTED_YEAR = nextYear;
+  const calendarYear = wishlistCalendarYear();
+  if (WISHLIST_LAST_CALENDAR_YEAR === null) {
+    WISHLIST_LAST_CALENDAR_YEAR = calendarYear;
+    return;
+  }
+  // Refresh year options on New Year's rollover without changing the active filter.
+  if (WISHLIST_LAST_CALENDAR_YEAR !== calendarYear) {
+    WISHLIST_LAST_CALENDAR_YEAR = calendarYear;
     if ($('#dreamList')) renderSuenos();
   }
 }
@@ -8749,7 +8765,6 @@ $('#dreamList').addEventListener('change', async (e) => {
   const yearFilter = e.target.closest('[data-wish-year-filter]');
   if (yearFilter) {
     WISHLIST_SELECTED_YEAR = yearFilter.value;
-    WISHLIST_YEAR_MANUAL_SELECTION = true;
     renderSuenos();
     return;
   }
@@ -8759,11 +8774,18 @@ $('#dreamList').addEventListener('change', async (e) => {
     const targetYear = +yearEdit.value;
     if (!Number.isInteger(targetYear) || targetYear < 1900 || targetYear > 2200) {
       const existing = (S.dreams || []).find(item => item.id === id);
-      yearEdit.value = String(Number(existing?.target_year) || new Date().getFullYear() + 1);
+      yearEdit.value = String(Number(existing?.target_year) || wishlistAutoYear());
       toast('Enter a valid target year (1900–2200)', 'warn');
       return;
     }
-    await api('/api/dream', { body: { id, field: 'target_year', value: targetYear } });
+    try {
+      await api('/api/dream', { body: { id, field: 'target_year', value: targetYear } });
+    } catch (error) {
+      const existing = (S.dreams || []).find(item => item.id === id);
+      yearEdit.value = String(Number(existing?.target_year) || wishlistAutoYear());
+      toast(error?.message || 'Could not save the target year', 'err');
+      return;
+    }
     const dream = (S.dreams || []).find(item => item.id === id);
     if (dream) dream.target_year = targetYear;
     renderSuenos();
@@ -9329,10 +9351,10 @@ $('#dreamNew').addEventListener('submit', async (e) => {
   e.preventDefault();
   await api('/api/dream/new', { body: {
     category: $('#dnCat').value, name: $('#dnName').value,
-    value: numVal('#dnValor'), target_year: +($('#dnYear')?.value || (new Date().getFullYear() + 1)) } });
+    value: numVal('#dnValor'), target_year: +($('#dnYear')?.value || wishlistAutoYear()) } });
   e.target.reset();
   if ($('#dnYear')) {
-    $('#dnYear').value = String(WISHLIST_SELECTED_YEAR && WISHLIST_SELECTED_YEAR !== 'all' ? Number(WISHLIST_SELECTED_YEAR) : new Date().getFullYear() + 1);
+    $('#dnYear').value = String(WISHLIST_SELECTED_YEAR && WISHLIST_SELECTED_YEAR !== 'all' ? Number(WISHLIST_SELECTED_YEAR) : wishlistAutoYear());
     $('#dnYear').dataset.userSet = '0';
   }
   load();
