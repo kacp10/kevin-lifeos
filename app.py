@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 196  # V196 Haki & Pirate Progression Rebalance
+VERSION = 197  # V197 Hunter Wishlist Annual Acquisition Route
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -249,6 +249,12 @@ def to_int(v):
         return int(round(float(s)))
     except ValueError:
         return 0
+
+
+def wishlist_calendar_year():
+    # The personal LifeOS calendar follows Colombia time (UTC-5, no DST),
+    # avoiding a UTC date rollover from assigning targets to the wrong year.
+    return datetime.now(timezone(timedelta(hours=-5))).year
 
 
 def safe_field_update(table, allowed_fields, int_fields, j, coerce=None, default_field=None):
@@ -1228,6 +1234,29 @@ def init_db():
         con.execute("INSERT INTO config VALUES ('dreams_v2','1')")
         con.commit()
         print('  + skincare desglosado y laptop en piezas en tus sueños')
+    # V197: annual acquisition targets. Legacy Wishlist items receive the next
+    # calendar year once; subsequent year changes never move existing targets.
+    wishlist_default_year = wishlist_calendar_year() + 1
+    wishlist_year_migration = 'v197_wishlist_target_year'
+    if not con.execute('SELECT 1 FROM schema_migrations WHERE version=?', (wishlist_year_migration,)).fetchone():
+        if db_layer.IS_PG:
+            rows = con.execute("SELECT column_name FROM information_schema.columns WHERE table_name='dreams' AND table_schema=current_schema()").fetchall()
+            dream_columns = {str((dict(r) if hasattr(r, 'keys') else {'column_name': r[0]})['column_name']) for r in rows}
+        else:
+            rows = con.execute('PRAGMA table_info(dreams)').fetchall()
+            dream_columns = {str((dict(r) if hasattr(r, 'keys') else {'name': r[1]})['name']) for r in rows}
+        wishlist_statements = []
+        if 'target_year' not in dream_columns:
+            wishlist_statements.append((f'ALTER TABLE dreams ADD COLUMN target_year INTEGER DEFAULT {int(wishlist_default_year)}', ()))
+        wishlist_statements.append((
+            'UPDATE dreams SET target_year=? WHERE target_year IS NULL OR target_year<1900 OR target_year>2200',
+            (wishlist_default_year,),
+        ))
+        apply_migration(
+            con, wishlist_year_migration,
+            'Add editable target year to Hunter Wishlist and assign legacy items to next calendar year',
+            wishlist_statements,
+        )
     if not con.execute("SELECT 1 FROM config WHERE key='life_v1'").fetchone():
         # perfil inicial de Kevin (editable luego en la pestaña Life)
         perfil = {'ingles_nivel': 'A1-A2', 'horas_dia': '3-4',
@@ -3069,8 +3098,15 @@ def close_month():
 
 @app.post('/api/dream')
 def dream():
-    return safe_field_update('dreams', ('name', 'saved', 'value', 'bought'),
-                              ('saved', 'value', 'bought'), request.json or {}, default_field='saved')
+    j = request.json or {}
+    if j.get('field') == 'target_year':
+        target_year = to_int(j.get('value'))
+        if target_year < 1900 or target_year > 2200:
+            return jsonify(error='El año objetivo debe estar entre 1900 y 2200'), 400
+        j = dict(j)
+        j['value'] = target_year
+    return safe_field_update('dreams', ('name', 'saved', 'value', 'bought', 'target_year'),
+                              ('saved', 'value', 'bought', 'target_year'), j, default_field='saved')
 
 
 
@@ -5617,12 +5653,15 @@ def dream_new():
     category = str(j.get('category') or '').strip()
     name = str(j.get('name') or '').strip()
     value = to_int(j.get('value'))
+    target_year = to_int(j.get('target_year')) or (wishlist_calendar_year() + 1)
     if not category or not name:
         return jsonify(error='Completa la categoría y el nombre'), 400
     if value < 0:
         return jsonify(error='El valor no puede ser negativo'), 400
-    db().execute('INSERT INTO dreams (category, name, value) VALUES (?,?,?)',
-                 (category, name, value))
+    if target_year < 1900 or target_year > 2200:
+        return jsonify(error='El año objetivo debe estar entre 1900 y 2200'), 400
+    db().execute('INSERT INTO dreams (category, name, value, target_year) VALUES (?,?,?,?)',
+                 (category, name, value, target_year))
     db().commit()
     return jsonify(ok=True)
 
