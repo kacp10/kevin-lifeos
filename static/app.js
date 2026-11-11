@@ -283,7 +283,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 199;
+const FRONT_V = 200;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -3132,11 +3132,127 @@ document.addEventListener('click', async (e) => {
   }
 });
 
+let _shoppingDragState = null;
+
+function ensureShoppingDragStyles() {
+  if ($('#shopping-drag-styles-v200')) return;
+  const style = document.createElement('style');
+  style.id = 'shopping-drag-styles-v200';
+  style.textContent = `
+    .shop-reorder-hint{margin:2px 0 5px;color:var(--mut);font-size:.65rem;letter-spacing:.025em}
+    .shop-drag-handle{display:inline-flex;align-items:center;justify-content:center;flex:0 0 30px;width:30px;min-height:34px;padding:0;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--mut);font-size:1.05rem;font-weight:900;line-height:1;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
+    .shop-drag-handle:hover,.shop-drag-handle:focus-visible{border-color:rgba(245,185,66,.3);background:rgba(245,185,66,.07);color:var(--gold);outline:none}
+    .shop-drag-handle:active{cursor:grabbing}
+    .shop-item.dragging{position:relative;z-index:2;opacity:.52;border-radius:10px;background:rgba(245,185,66,.075);outline:1px dashed rgba(245,185,66,.55);transform:scale(.995)}
+    #shoppingList.shop-reordering .shop-item{transition:none}
+    @media(prefers-reduced-motion:reduce){.shop-item.dragging{transform:none}}
+  `;
+  document.head.appendChild(style);
+}
+
+function shoppingDragAutoScroll(cont, clientY) {
+  let scrollable = null;
+  for (let node = cont.parentElement; node && node !== document.body; node = node.parentElement) {
+    const overflowY = window.getComputedStyle(node).overflowY;
+    if (/(auto|scroll)/.test(overflowY) && node.scrollHeight > node.clientHeight + 2) {
+      scrollable = node;
+      break;
+    }
+  }
+  const bounds = scrollable
+    ? scrollable.getBoundingClientRect()
+    : { top: 0, bottom: window.innerHeight };
+  const edge = 68;
+  if (clientY < bounds.top + edge) {
+    if (scrollable) scrollable.scrollTop -= 14;
+    else window.scrollBy(0, -14);
+  } else if (clientY > bounds.bottom - edge) {
+    if (scrollable) scrollable.scrollTop += 14;
+    else window.scrollBy(0, 14);
+  }
+}
+
+function restoreShoppingDomOrder(cont, ids) {
+  const nodes = new Map([...cont.querySelectorAll('.shop-item[data-id]')].map(node => [String(node.dataset.id), node]));
+  ids.forEach(id => { const node = nodes.get(String(id)); if (node) cont.appendChild(node); });
+}
+
+function initShoppingDragDrop(cont) {
+  if (!cont || cont.dataset.dragDropReady === '1') return;
+  cont.dataset.dragDropReady = '1';
+
+  cont.addEventListener('pointerdown', (event) => {
+    const handle = event.target.closest('.shop-drag-handle');
+    if (!handle || !event.isPrimary || (event.button !== 0 && event.pointerType === 'mouse')) return;
+    const item = handle.closest('.shop-item[data-id]');
+    if (!item || !cont.contains(item)) return;
+    _shoppingDragState = {
+      container: cont, item, handle, pointerId: event.pointerId, startY: event.clientY, moved: false,
+      originalIds: [...cont.querySelectorAll('.shop-item[data-id]')].map(node => String(node.dataset.id))
+    };
+    try { handle.setPointerCapture(event.pointerId); } catch (_) {}
+    event.preventDefault();
+  });
+
+  cont.addEventListener('pointermove', (event) => {
+    const drag = _shoppingDragState;
+    if (!drag || drag.container !== cont || drag.pointerId !== event.pointerId) return;
+    if (!drag.moved && Math.abs(event.clientY - drag.startY) < 5) return;
+    drag.moved = true;
+    cont.classList.add('shop-reordering');
+    drag.item.classList.add('dragging');
+    shoppingDragAutoScroll(cont, event.clientY);
+
+    const candidates = [...cont.querySelectorAll('.shop-item[data-id]:not(.dragging)')];
+    const target = candidates.find(node => {
+      const rect = node.getBoundingClientRect();
+      return event.clientY < rect.top + rect.height / 2;
+    });
+    if (target) cont.insertBefore(drag.item, target);
+    else cont.appendChild(drag.item);
+    event.preventDefault();
+  });
+
+  const finishDrag = async (event, cancelled = false) => {
+    const drag = _shoppingDragState;
+    if (!drag || drag.container !== cont || drag.pointerId !== event.pointerId) return;
+    _shoppingDragState = null;
+    drag.item.classList.remove('dragging');
+    cont.classList.remove('shop-reordering');
+    try { if (drag.handle.hasPointerCapture(event.pointerId)) drag.handle.releasePointerCapture(event.pointerId); } catch (_) {}
+
+    if (cancelled) {
+      restoreShoppingDomOrder(cont, drag.originalIds);
+      return;
+    }
+    const ids = [...cont.querySelectorAll('.shop-item[data-id]')].map(node => Number(node.dataset.id));
+    const unchanged = ids.length === drag.originalIds.length && ids.every((id, index) => String(id) === drag.originalIds[index]);
+    if (!drag.moved || unchanged) return;
+
+    try {
+      await api('/api/shopping/reorder', { body: { ids } });
+      const positions = new Map(ids.map((id, index) => [Number(id), index + 1]));
+      S.shopping = (S.shopping || []).map(item => positions.has(Number(item.id))
+        ? { ...item, sort_order: positions.get(Number(item.id)) } : item);
+      toast('↕ Shopping order saved');
+    } catch (error) {
+      restoreShoppingDomOrder(cont, drag.originalIds);
+      console.error('[Shopping reorder]', error);
+    }
+  };
+
+  cont.addEventListener('pointerup', event => finishDrag(event, false));
+  cont.addEventListener('pointercancel', event => finishDrag(event, true));
+}
+
 function renderShopping() {
   const cont = document.getElementById('shoppingList');
   if (!cont) return;
+  ensureShoppingDragStyles();
+  initShoppingDragDrop(cont);
   const all = S.shopping || [];
-  const activos = all.filter(it => !it.bought_at);          // pendientes: NO comprados
+  const orderValue = item => Number(item.sort_order) > 0 ? Number(item.sort_order) : Number(item.id);
+  const activos = all.filter(it => !it.bought_at).sort((a, b) => orderValue(a) - orderValue(b) || Number(a.id) - Number(b.id));
   const comprados = all.filter(it => it.bought_at)          // historial: comprados
     .sort((a, b) => (b.bought_at || '').localeCompare(a.bought_at || ''));
   // contador en el botón del header (ítems pendientes, sin abrir el modal)
@@ -3146,7 +3262,7 @@ function renderShopping() {
   if (!activos.length) {
     cont.innerHTML = '<p class="hint">Nothing on the list. Add what you need above. 🛒</p>';
   } else {
-    cont.innerHTML = activos.map(it => {
+    cont.innerHTML = '<div class="shop-reorder-hint">Hold ⠿ and drag to set your order</div>' + activos.map(it => {
       const slots = it.slots || 1;
       const done = it.done || 0;
       const complete = slots > 0 && done >= slots;
@@ -3157,6 +3273,7 @@ function renderShopping() {
             `<i class="slot ${k < done ? 'on' : ''}"></i>`).join('') + '</span>';
       }
       return `<div class="shop-item ${complete ? 'done' : ''}" data-id="${it.id}">
+        <button type="button" class="shop-drag-handle" aria-label="Drag to reorder ${esc(it.name)}" title="Hold and drag to reorder">⠿</button>
         <button class="shop-check ${complete ? 'on' : ''}" data-id="${it.id}" title="${slots > 1 ? 'Tap once per task (' + done + '/' + slots + ')' : 'Mark as bought'}">
           ${complete ? '✓' : (slots > 1 ? done : '')}
         </button>
@@ -6208,9 +6325,11 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 39. V198 Hunter Wishlist All Years Default & Schema Repair: cada sesión nueva de la app inicia Wishlist en All years y muestra todas las compras, independientemente de su año asignado. El filtro anual es opt-in y, al seleccionar un año, solo muestra sus compras. La selección se conserva durante la sesión, pero al reiniciar la app vuelve a All years. El desplegable de años usa el tema oscuro/dorado Hunter y opciones legibles. El año calendario se calcula con America/Bogota; el cambio de año refresca las opciones sin cambiar el filtro. Las altas nuevas proponen el próximo año calendario. /api/state, /api/dream y /api/dream/new autorreparan target_year si una migración de producción quedó incompleta; cambiar el año actualiza únicamente esa compra. No se toca Shopping, pagos, deudas ni finanzas.
 
 40. V199 Hunter Wishlist Optional Year & Local Priority Order: target_year admite NULL de forma intencional. Una adquisición sin año permanece en All years y queda fuera de los filtros anuales hasta que el usuario asigne uno; el campo del formulario inicia vacío y el año puede borrarse desde cada tarjeta. La reparación de esquema nunca vuelve a asignar años que el usuario dejó en blanco. Cada tarjeta de Wishlist admite una prioridad opcional (1–9999); dentro de cada categoría, los elementos se ordenan ascendentemente por prioridad y los no priorizados quedan al final. Las prioridades iguales conservan su orden previo. No se mezclan categorías ni se modifica Shopping, pagos, deudas u otros módulos.
+41. V200 Hunter Supply Request Drag-and-Drop Order: la lista pendiente de Shopping & to-buy admite reordenamiento manual arrastrando el control ⠿ con mouse o pantalla táctil. La posición se persiste por item en shopping.sort_order y se devuelve desde /api/state; al crear una solicitud nueva se añade al final. Solo se reordenan elementos pendientes, incluidos los que tienen subtareas parciales; el historial de compras, el flujo de pagos, las cuotas, el botón de completar y las eliminaciones mantienen su lógica. Undo conserva su reversión financiera y devuelve el elemento al final de la lista pendiente. Si falla el guardado, la lista vuelve al orden anterior. No se modifica Wishlist ni otros módulos.
 
 ESTADO ACTUAL DEL PROYECTO - V199 HUNTER WISHLIST OPTIONAL YEAR & PRIORITY ORDER:
 - Wishlist inicia siempre en All years al abrir una sesión nueva y muestra el conjunto completo de compras. El año es opcional: los elementos sin año permanecen en All years y solo aparecen en un filtro anual después de asignarles uno. El formulario inicia con el año vacío y cada tarjeta permite asignar o borrar el año. La reparación de esquema preserva NULL intencionales. Cada categoría de Wishlist ordena sus tarjetas por prioridad ascendente (1 primero); prioridad vacía queda al final y no se mezclan categorías. El selector conserva su estilo Hunter oscuro/dorado. Shopping, finanzas, deudas y otros módulos permanecen intactos.
+- V200 añade orden manual persistente a Hunter Supply Request: el usuario arrastra ⠿ para ordenar las solicitudes pendientes en Home; el orden se conserva al recargar y las nuevas se agregan al final. El orden solo afecta tarjetas pendientes y no altera compras, pagos ni historial.
 - V196 conserva intactos los meses de Haki cerrados y el historial de posiciones reclamadas; solo recalcula la etapa actual y los requisitos futuros usando la escala 1/4/8/16 meses. Con 4 meses conquistados, la etapa calculada es Armament Haki. First Officer ya reclamado se conserva; Captain requiere 8 meses + 60 días de disciplina + 2 expediciones + 4 dominios.
 - V195 conserva la neutralidad de REST recurrente y excepcional para rachas, porcentaje Haki y Recovery.
 
