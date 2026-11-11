@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 199  # V199 Wishlist optional target year + per-category priority order
+VERSION = 200  # V200 Hunter Supply Request persistent drag-and-drop ordering
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -788,7 +788,7 @@ def init_db():
         day TEXT, note TEXT DEFAULT '');
     CREATE TABLE IF NOT EXISTS shopping (
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, slots INTEGER DEFAULT 1,
-         done INTEGER DEFAULT 0, created TEXT DEFAULT '',
+         done INTEGER DEFAULT 0, created TEXT DEFAULT '', sort_order INTEGER DEFAULT 0,
          bought_at TEXT DEFAULT '', cost INTEGER DEFAULT 0, method TEXT DEFAULT '',
          expense_id INTEGER DEFAULT NULL, compra_id INTEGER DEFAULT NULL);
     CREATE TABLE IF NOT EXISTS todos (
@@ -2266,7 +2266,9 @@ def state():
     fund = [dict(r) for r in d.execute('SELECT * FROM fund ORDER BY id')]
     piggy = [dict(r) for r in d.execute('SELECT * FROM piggy ORDER BY id')]
     piggy_moves = [dict(r) for r in d.execute('SELECT * FROM piggy_moves ORDER BY id DESC')]
-    shopping = [dict(r) for r in d.execute('SELECT * FROM shopping ORDER BY done, id')]
+    # V200: repair the persisted manual order before returning Shopping items.
+    _ensure_shopping_order_schema(d)
+    shopping = [dict(r) for r in d.execute('SELECT * FROM shopping ORDER BY sort_order, id')]
     # V119: una sola limpieza por día. Los To-do marcados ayer o antes se retiran;
     # los completados hoy permanecen visibles y tachados durante el resto del día.
     today_iso = date.today().isoformat()
@@ -4262,11 +4264,51 @@ def routine_extra_del(i):
 
 @app.post('/api/shopping/new')
 def shopping_new():
-    j = request.json
-    db().execute('INSERT INTO shopping (name, slots, done, created) VALUES (?,?,?,?)',
-                 (j['name'].strip(), int(j.get('slots') or 1), 0, date.today().isoformat()))
-    db().commit()
+    j = request.json or {}
+    name = str(j.get('name') or '').strip()
+    if not name:
+        return jsonify(error='Write the supply or errand first'), 400
+    con = db()
+    _ensure_shopping_order_schema(con)
+    next_order = con.execute(
+        "SELECT COALESCE(MAX(sort_order),0)+1 AS next_order FROM shopping WHERE bought_at IS NULL OR bought_at=''"
+    ).fetchone()
+    position = int(dict(next_order).get('next_order') or 1) if next_order else 1
+    con.execute('INSERT INTO shopping (name, slots, done, created, sort_order) VALUES (?,?,?,?,?)',
+                (name, int(j.get('slots') or 1), 0, date.today().isoformat(), position))
+    con.commit()
     return jsonify(ok=True)
+
+
+@app.post('/api/shopping/reorder')
+def shopping_reorder():
+    """Persist the exact visual order of pending Hunter Supply Request items."""
+    j = request.json or {}
+    raw_ids = j.get('ids')
+    if not isinstance(raw_ids, list):
+        return jsonify(error='Invalid shopping order'), 400
+    try:
+        ids = [int(value) for value in raw_ids]
+    except (TypeError, ValueError):
+        return jsonify(error='Invalid shopping item in order'), 400
+    if any(value <= 0 for value in ids) or len(ids) != len(set(ids)):
+        return jsonify(error='Shopping order contains invalid or repeated items'), 400
+
+    con = db()
+    _ensure_shopping_order_schema(con)
+    with transaction() as tx:
+        active_rows = tx.execute(
+            "SELECT id FROM shopping WHERE bought_at IS NULL OR bought_at='' ORDER BY sort_order, id"
+        ).fetchall()
+        active_ids = [int(dict(row)['id']) for row in active_rows]
+        if set(ids) != set(active_ids) or len(ids) != len(active_ids):
+            return jsonify(error='The shopping list changed. Refresh and try again.'), 409
+        for position, item_id in enumerate(ids, start=1):
+            tx.execute(
+                "UPDATE shopping SET sort_order=? WHERE id=? AND (bought_at IS NULL OR bought_at='')",
+                (position, item_id)
+            )
+    return jsonify(ok=True, count=len(ids))
 
 
 @app.post('/api/todo/new')
@@ -4733,6 +4775,32 @@ def _reconcile_legacy_card_checks_v171(con):
     con.commit()
 
 
+def _ensure_shopping_order_schema(con):
+    """V200: add a durable manual order without changing the legacy list order."""
+    added = False
+    try:
+        con.execute('ALTER TABLE shopping ADD COLUMN sort_order INTEGER DEFAULT 0')
+        con.commit()
+        added = True
+    except Exception:
+        # Existing column is expected on later requests; recover cleanly on PG too.
+        try:
+            con.rollback()
+        except Exception:
+            pass
+
+    if added:
+        # Preserve the exact pre-V200 active-list order (done, then id) on migration.
+        rows = con.execute('SELECT id FROM shopping ORDER BY done, id').fetchall()
+        for position, row in enumerate(rows, start=1):
+            con.execute('UPDATE shopping SET sort_order=? WHERE id=?', (position, int(dict(row)['id'])))
+        con.commit()
+    else:
+        # Repair only unset values; never overwrite a user's saved drag-and-drop order.
+        con.execute('UPDATE shopping SET sort_order=id WHERE sort_order IS NULL OR sort_order=0')
+        con.commit()
+
+
 def _ensure_shopping_finance_schema(con):
     """V170 hotfix: self-heal legacy Shopping databases before a purchase.
 
@@ -4857,6 +4925,8 @@ def shopping_unbuy():
         iid = int(j.get('id'))
     except (TypeError, ValueError):
         return jsonify(error='Invalid id'), 400
+    con = db()
+    _ensure_shopping_order_schema(con)
     with transaction() as con:
         row = con.execute('SELECT * FROM shopping WHERE id=?', (iid,)).fetchone()
         if not row:
@@ -4871,7 +4941,11 @@ def shopping_unbuy():
             con.execute('DELETE FROM compras WHERE id=?', (compra_id,))
         if expense_id:
             con.execute('DELETE FROM expenses WHERE id=?', (expense_id,))
-        con.execute("UPDATE shopping SET bought_at='', done=0, cost=0, method='', expense_id=NULL, compra_id=NULL WHERE id=?", (iid,))
+        next_position_row = con.execute(
+            "SELECT COALESCE(MAX(sort_order),0)+1 AS next_order FROM shopping WHERE bought_at IS NULL OR bought_at=''"
+        ).fetchone()
+        next_position = int(dict(next_position_row).get('next_order') or 1) if next_position_row else 1
+        con.execute("UPDATE shopping SET bought_at='', done=0, cost=0, method='', expense_id=NULL, compra_id=NULL, sort_order=? WHERE id=?", (next_position, iid))
     return jsonify(ok=True)
 
 
