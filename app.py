@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 201  # V201 Wishlist-to-Shopping purchase sync and collision-safe priorities
+VERSION = 202  # V202 non-blocking Wishlist/Shopping schema repair during state load
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -2114,7 +2114,16 @@ def state():
     d = db()
     # V199: repair Wishlist planning columns before Wishlist is serialized.
     ensure_wishlist_target_year_schema(d)
-    _ensure_skincare_unclaimed(d)
+    # V202: legacy Skincare normalization is best-effort. It must never block
+    # the complete application state if an older production schema is partial.
+    try:
+        _ensure_skincare_unclaimed(d)
+    except Exception:
+        try:
+            d.rollback()
+        except Exception:
+            pass
+        logger.exception('V202: Skincare normalization skipped during /api/state')
     # V194: /api/state must be resilient to partially-applied production migrations.
     # Ensure the columns read below exist before selecting them.
     _ensure_card_balance_schema(d)
@@ -2268,9 +2277,10 @@ def state():
     fund = [dict(r) for r in d.execute('SELECT * FROM fund ORDER BY id')]
     piggy = [dict(r) for r in d.execute('SELECT * FROM piggy ORDER BY id')]
     piggy_moves = [dict(r) for r in d.execute('SELECT * FROM piggy_moves ORDER BY id DESC')]
-    # V200: repair persisted manual order; V201: ensure Wishlist origin link exists.
+    # V200: repair persisted manual order. V202 intentionally does not run the
+    # V201 Wishlist-link ALTER TABLE during state loading: the link is ensured
+    # lazily by Shopping create/complete/undo routes, where it is actually needed.
     _ensure_shopping_order_schema(d)
-    _ensure_wishlist_shopping_link_schema(d)
     shopping = [dict(r) for r in d.execute('SELECT * FROM shopping ORDER BY sort_order, id')]
     # V119: una sola limpieza por día. Los To-do marcados ayer o antes se retiran;
     # los completados hoy permanecen visibles y tachados durante el resto del día.
