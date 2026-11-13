@@ -283,7 +283,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 200;
+const FRONT_V = 201;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -6326,10 +6326,12 @@ REGLAS PERMANENTES E INNEGOCIABLES:
 
 40. V199 Hunter Wishlist Optional Year & Local Priority Order: target_year admite NULL de forma intencional. Una adquisición sin año permanece en All years y queda fuera de los filtros anuales hasta que el usuario asigne uno; el campo del formulario inicia vacío y el año puede borrarse desde cada tarjeta. La reparación de esquema nunca vuelve a asignar años que el usuario dejó en blanco. Cada tarjeta de Wishlist admite una prioridad opcional (1–9999); dentro de cada categoría, los elementos se ordenan ascendentemente por prioridad y los no priorizados quedan al final. Las prioridades iguales conservan su orden previo. No se mezclan categorías ni se modifica Shopping, pagos, deudas u otros módulos.
 41. V200 Hunter Supply Request Drag-and-Drop Order: la lista pendiente de Shopping & to-buy admite reordenamiento manual arrastrando el control ⠿ con mouse o pantalla táctil. La posición se persiste por item en shopping.sort_order y se devuelve desde /api/state; al crear una solicitud nueva se añade al final. Solo se reordenan elementos pendientes, incluidos los que tienen subtareas parciales; el historial de compras, el flujo de pagos, las cuotas, el botón de completar y las eliminaciones mantienen su lógica. Undo conserva su reversión financiera y devuelve el elemento al final de la lista pendiente. Si falla el guardado, la lista vuelve al orden anterior. No se modifica Wishlist ni otros módulos.
+42. V201 Wishlist-to-Shopping Purchase Sync & Priority Insertion: enviar una adquisición normal a Shopping crea una copia vinculada mediante shopping.wishlist_dream_id y conserva el registro original en Wishlist sin marcarlo como claimed. Al completar la compra en Shopping, el registro enlazado pasa a bought=1 dentro de la misma transacción financiera; Undo revierte bought a 0 si la compra se deshace. Las solicitudes manuales de Shopping no se vinculan. Skincare es replenishable: enviar crea una copia sin vínculo, el objetivo permanece siempre en Wishlist y no ofrece ni recibe estado Claimed automático. Las prioridades son posiciones únicas y consecutivas dentro de cada categoría: insertar/mover a una posición desplaza las siguientes, borrar prioridad cierra el hueco y no se mezclan categorías. No se cambia la lógica de pagos, cuotas, historial ni otros módulos.
 
-ESTADO ACTUAL DEL PROYECTO - V199 HUNTER WISHLIST OPTIONAL YEAR & PRIORITY ORDER:
-- Wishlist inicia siempre en All years al abrir una sesión nueva y muestra el conjunto completo de compras. El año es opcional: los elementos sin año permanecen en All years y solo aparecen en un filtro anual después de asignarles uno. El formulario inicia con el año vacío y cada tarjeta permite asignar o borrar el año. La reparación de esquema preserva NULL intencionales. Cada categoría de Wishlist ordena sus tarjetas por prioridad ascendente (1 primero); prioridad vacía queda al final y no se mezclan categorías. El selector conserva su estilo Hunter oscuro/dorado. Shopping, finanzas, deudas y otros módulos permanecen intactos.
-- V200 añade orden manual persistente a Hunter Supply Request: el usuario arrastra ⠿ para ordenar las solicitudes pendientes en Home; el orden se conserva al recargar y las nuevas se agregan al final. El orden solo afecta tarjetas pendientes y no altera compras, pagos ni historial.
+ESTADO ACTUAL DEL PROYECTO - V201 WISHLIST PURCHASE SYNC & PRIORITY INSERTION:
+- Wishlist inicia siempre en All years al abrir una sesión nueva y muestra el conjunto completo de compras. El año es opcional: los elementos sin año permanecen en All years y solo aparecen en un filtro anual después de asignarles uno. El formulario inicia con el año vacío y cada tarjeta permite asignar o borrar el año. La reparación de esquema preserva NULL intencionales. Cada categoría de Wishlist ordena sus tarjetas por prioridad ascendente (1 primero); V201 hace que la prioridad funcione como una posición: al insertar/mover, las siguientes se desplazan y la secuencia queda consecutiva. No se mezclan categorías. El selector conserva su estilo Hunter oscuro/dorado.
+- V200 mantiene el orden manual persistente de Hunter Supply Request: el usuario arrastra ⠿ para ordenar solicitudes pendientes en Home; el orden se conserva al recargar y las nuevas se agregan al final.
+- V201 conserva los elementos normales de Wishlist al enviarlos a Shopping y los vincula con la copia. Solo al completar la compra real en Shopping el objetivo original pasa automáticamente a Claimed y el contador sube; Undo revierte ese estado si la compra se deshace. Las solicitudes manuales no afectan Wishlist. Skincare siempre permanece en Wishlist, se copia a Shopping sin vínculo y nunca se marca como Claimed. Pagos, cuotas, historial y otros módulos conservan su lógica.
 - V196 conserva intactos los meses de Haki cerrados y el historial de posiciones reclamadas; solo recalcula la etapa actual y los requisitos futuros usando la escala 1/4/8/16 meses. Con 4 meses conquistados, la etapa calculada es Armament Haki. First Officer ya reclamado se conserva; Captain requiere 8 meses + 60 días de disciplina + 2 expediciones + 4 dominios.
 - V195 conserva la neutralidad de REST recurrente y excepcional para rachas, porcentaje Haki y Recovery.
 
@@ -8742,6 +8744,7 @@ function ensureWishlistAnnualStyles() {
     .wish-priority-control input{width:52px;min-height:31px;padding:4px 5px;border:1px solid rgba(245,185,66,.3);border-radius:9px;background:rgba(245,185,66,.055);color:var(--gold);font:inherit;font-size:.68rem;font-weight:850;text-align:center;font-variant-numeric:tabular-nums}
     .wish-priority-control input::placeholder{color:var(--mut);opacity:.75}
     .wish-priority-control input:focus-visible{outline:2px solid rgba(245,185,66,.65);outline-offset:2px}
+    .wish-replenishable-note{display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:0 10px;border:1px solid rgba(245,185,66,.2);border-radius:9px;color:var(--mut);font-size:.58rem;font-weight:850;letter-spacing:.07em}
     .wish-new-form{grid-template-columns:minmax(125px,.8fr) minmax(220px,1.45fr) minmax(135px,.8fr) minmax(105px,.65fr) auto!important}
     .wish-year-field{min-width:0}
     .wish-year-field input{width:100%;min-width:0}
@@ -8787,14 +8790,17 @@ function renderSuenos() {
     ? dreams
     : dreams.filter(d => Number(d.target_year) === Number(WISHLIST_SELECTED_YEAR));
   const yearLabel = WISHLIST_SELECTED_YEAR === 'all' ? 'All years' : String(WISHLIST_SELECTED_YEAR);
+  const isReplenishable = d => /skincare/i.test(d.category || '');
+  const isClaimed = d => !isReplenishable(d) && !!d.bought;
+  const claimableItems = inYear.filter(d => !isReplenishable(d));
   const totalValue = inYear.reduce((sum, d) => sum + Math.max(+d.value || 0, 0), 0);
   const prepared = inYear.reduce((sum, d) => {
     const value = Math.max(+d.value || 0, 0);
-    return sum + (d.bought ? value : Math.min(Math.max(+d.saved || 0, 0), value));
+    return sum + (isClaimed(d) ? value : Math.min(Math.max(+d.saved || 0, 0), value));
   }, 0);
-  const completed = inYear.filter(d => d.bought).length;
-  const ready = inYear.filter(d => !d.bought && +d.value > 0 && +d.saved >= +d.value).length;
-  const acquiredPct = inYear.length ? Math.round(completed / inYear.length * 100) : 0;
+  const completed = claimableItems.filter(isClaimed).length;
+  const ready = claimableItems.filter(d => !isClaimed(d) && +d.value > 0 && +d.saved >= +d.value).length;
+  const acquiredPct = claimableItems.length ? Math.round(completed / claimableItems.length * 100) : 0;
   const preparedPct = totalValue ? Math.min(100, Math.round(prepared / totalValue * 100)) : 0;
   const summary = `<section class="wish-year-overview">
     <div class="wish-year-head">
@@ -8802,7 +8808,7 @@ function renderSuenos() {
       <label class="wish-year-filter"><span>Plan year</span><select data-wish-year-filter aria-label="Filter Wishlist by year"><option value="all" ${WISHLIST_SELECTED_YEAR === 'all' ? 'selected' : ''}>All years</option>${wishlistYearOptions(WISHLIST_SELECTED_YEAR, years)}</select></label>
     </div>
     <div class="wish-year-progress">
-      <div class="wish-year-progress-head"><span>TARGETS CLAIMED</span><b>${completed}/${inYear.length} · ${acquiredPct}%</b></div>
+      <div class="wish-year-progress-head"><span>TARGETS CLAIMED</span><b>${completed}/${claimableItems.length} · ${acquiredPct}%</b></div>
       <div class="wish-year-track"><i style="width:${acquiredPct}%"></i></div>
       <div class="wish-year-progress-head"><span>ACQUISITION PREPARATION</span><b>${fmt(prepared)} / ${fmt(totalValue)} · ${preparedPct}%</b></div>
       <div class="wish-year-track funding"><i style="width:${preparedPct}%"></i></div>
@@ -8830,24 +8836,27 @@ function renderSuenos() {
       if (hasA !== hasB) return hasA ? -1 : 1;
       return originalOrder.get(a.id) - originalOrder.get(b.id);
     });
-    const bought = items.filter(d => d.bought).length;
-    const saved = items.reduce((sum, d) => sum + (d.bought ? Math.max(+d.value || 0, 0) : Math.min(Math.max(+d.saved || 0, 0), Math.max(+d.value || 0, 0))), 0);
+    const claimableCount = items.filter(d => !isReplenishable(d)).length;
+    const bought = items.filter(isClaimed).length;
+    const saved = items.reduce((sum, d) => sum + (isClaimed(d) ? Math.max(+d.value || 0, 0) : Math.min(Math.max(+d.saved || 0, 0), Math.max(+d.value || 0, 0))), 0);
     return `<section class="wish-category">
-      <header class="wish-category-head"><div><small>HUNTER TARGET CLASS</small><h3>${esc(cat)}</h3></div><div><b>${bought}/${items.length}</b><span>claimed · ${fmt(saved)} prepared</span></div></header>
+      <header class="wish-category-head"><div><small>HUNTER TARGET CLASS</small><h3>${esc(cat)}</h3></div><div><b>${bought}/${claimableCount}</b><span>claimed · ${fmt(saved)} prepared</span></div></header>
       <div class="wish-grid">${items.map(d => {
         const value = +d.value || 0, savedAmount = +d.saved || 0;
         const p = value ? Math.min(savedAmount / value, 1) : 0;
-        const percent = d.bought ? 100 : Math.round(p * 100);
+        const isSkincare = isReplenishable(d);
+        const claimed = isClaimed(d);
+        const percent = claimed ? 100 : Math.round(p * 100);
         const remaining = Math.max(value - savedAmount, 0);
         const targetYear = Number.isInteger(Number(d.target_year)) && Number(d.target_year) >= 1900 ? Number(d.target_year) : '';
-        return `<article class="dream-item wish-card ${d.bought ? 'bought-item' : ''}">
-          <div class="wish-card-top"><div><small>${d.bought ? 'TARGET CLAIMED' : percent >= 100 ? 'READY TO CLAIM' : 'FUTURE ACQUISITION'}</small><h4 class="wish-inline-title" contenteditable="true" spellcheck="false" data-dream-name="${d.id}" role="textbox" aria-label="Edit target name">${esc(d.name)}</h4></div><div class="wish-year-card-tools"><label class="wish-priority-control"><span>PRIORITY</span><input class="wish-priority-edit" data-wish-priority-edit data-id="${d.id}" type="number" min="1" max="9999" step="1" value="${Number.isInteger(Number(d.priority)) && Number(d.priority) > 0 ? Number(d.priority) : ''}" placeholder="—" aria-label="Priority for ${esc(d.name)}"></label><label class="wish-year-card-control"><span>YEAR</span><input class="wish-year-edit" data-wish-year-edit data-id="${d.id}" type="number" min="1900" max="2200" step="1" value="${targetYear}" placeholder="No year" aria-label="Target year for ${esc(d.name)} (optional)"></label><button class="del-x" data-type="dream" data-id="${d.id}" aria-label="Delete wish">✕</button></div></div>
+        return `<article class="dream-item wish-card ${claimed ? 'bought-item' : ''}">
+          <div class="wish-card-top"><div><small>${claimed ? 'TARGET CLAIMED' : percent >= 100 ? 'READY TO CLAIM' : 'FUTURE ACQUISITION'}</small><h4 class="wish-inline-title" contenteditable="true" spellcheck="false" data-dream-name="${d.id}" role="textbox" aria-label="Edit target name">${esc(d.name)}</h4></div><div class="wish-year-card-tools"><label class="wish-priority-control"><span>PRIORITY</span><input class="wish-priority-edit" data-wish-priority-edit data-id="${d.id}" type="number" min="1" max="9999" step="1" value="${Number.isInteger(Number(d.priority)) && Number(d.priority) > 0 ? Number(d.priority) : ''}" placeholder="—" aria-label="Priority for ${esc(d.name)}"></label><label class="wish-year-card-control"><span>YEAR</span><input class="wish-year-edit" data-wish-year-edit data-id="${d.id}" type="number" min="1900" max="2200" step="1" value="${targetYear}" placeholder="No year" aria-label="Target year for ${esc(d.name)} (optional)"></label><button class="del-x" data-type="dream" data-id="${d.id}" aria-label="Delete wish">✕</button></div></div>
           <div class="wish-money-grid">
             <label><span>Target value</span><input class="d-edit money-live" inputmode="numeric" data-f="value" data-id="${d.id}" value="${Number(value).toLocaleString('es-CO')}" title="Target value"></label>
             <label><span>Saved</span><input class="d-edit money-live" inputmode="numeric" data-f="saved" data-id="${d.id}" value="${Number(savedAmount).toLocaleString('es-CO')}" title="Amount saved"></label>
           </div>
-          <div class="wish-progress"><div><span>${percent}% prepared</span><b>${d.bought ? 'Acquired' : remaining ? `${fmt(remaining)} remaining` : 'Ready'}</b></div><div class="mini-bar green"><i style="width:${percent}%"></i></div></div>
-          <div class="wish-card-actions"><button class="buy-btn ${d.bought ? 'on' : ''}" data-id="${d.id}">${d.bought ? '✓ Claimed' : 'Mark as claimed'}</button><button class="to-shop" data-id="${d.id}" title="Send to Shopping & to-buy">Send to Shopping <span>→</span></button></div>
+          <div class="wish-progress"><div><span>${percent}% prepared</span><b>${claimed ? 'Acquired' : remaining ? `${fmt(remaining)} remaining` : 'Ready'}</b></div><div class="mini-bar green"><i style="width:${percent}%"></i></div></div>
+          <div class="wish-card-actions">${isSkincare ? '<span class="wish-replenishable-note">REPLENISHABLE</span>' : `<button class="buy-btn ${d.bought ? 'on' : ''}" data-id="${d.id}">${d.bought ? '✓ Claimed' : 'Mark as claimed'}</button>`}<button class="to-shop" data-id="${d.id}" title="Send to Shopping & to-buy">Send to Shopping <span>→</span></button></div>
         </article>`;
       }).join('')}</div>
     </section>`;
@@ -8936,7 +8945,16 @@ $('#dreamList').addEventListener('change', async (e) => {
       return;
     }
     try {
-      await api('/api/dream', { body: { id, field: 'priority', value: priority } });
+      const savedPriority = await api('/api/dream', { body: { id, field: 'priority', value: priority } });
+      if (Array.isArray(savedPriority?.priorities)) {
+        const updates = new Map(savedPriority.priorities.map(item => [Number(item.id), item.priority]));
+        (S.dreams || []).forEach(item => {
+          if (updates.has(Number(item.id))) item.priority = updates.get(Number(item.id));
+        });
+      } else {
+        const existing = (S.dreams || []).find(item => item.id === id);
+        if (existing) existing.priority = savedPriority?.priority ?? null;
+      }
     } catch (error) {
       const existing = (S.dreams || []).find(item => item.id === id);
       priorityEdit.value = existing?.priority == null ? '' : String(existing.priority);
@@ -8944,9 +8962,9 @@ $('#dreamList').addEventListener('change', async (e) => {
       return;
     }
     const dream = (S.dreams || []).find(item => item.id === id);
-    if (dream) dream.priority = priority;
+    const effectivePriority = dream?.priority ?? null;
     renderSuenos();
-    toast(priority === null ? 'Priority cleared' : `Priority ${priority} saved · list reordered`);
+    toast(effectivePriority === null ? 'Priority cleared' : `Priority ${effectivePriority} saved · list reordered`);
     return;
   }
   if (!e.target.classList.contains('d-edit')) return;
@@ -8960,14 +8978,21 @@ $('#dreamList').addEventListener('click', async (e) => {
   if (shop) {
     const d = S.dreams.find(x => x.id === +shop.dataset.id);
     if (!d) return;
-    const esSkincare = /skincare/i.test(d.category || '');   // skincare se recompra: NO sale de la wishlist
+    const esSkincare = /skincare/i.test(d.category || '');
     const msg = esSkincare
-      ? `Send <b>${esc(d.name)}</b> to your 🛒 Shopping & to-buy list?<br><br>Skincare items stay in your wishlist so you can buy them again.`
-      : `Move <b>${esc(d.name)}</b> to your 🛒 Shopping & to-buy list? It leaves your wishlist and you tick it off there once you buy it.`;
+      ? `Send a replenishable copy of <b>${esc(d.name)}</b> to your 🛒 Shopping & to-buy list?<br><br>It will stay in Wishlist and will never be marked as claimed.`
+      : `Add <b>${esc(d.name)}</b> to your 🛒 Shopping & to-buy list?<br><br>It will remain in Wishlist. Once you complete the purchase in Shopping, Wishlist will automatically mark it as claimed.`;
     if (!await confirmModal('Send to Shopping', msg)) return;
-    await api('/api/shopping/new', { body: { name: d.name, slots: 1 } });
-    if (!esSkincare) await api('/api/dream/' + d.id, { method: 'DELETE' });
-    toast(esSkincare ? '🛒 Added to Shopping · kept in wishlist' : '🛒 Moved to Shopping & to-buy');
+    const result = await api('/api/shopping/new', {
+      body: { name: d.name, slots: 1, wishlist_dream_id: esSkincare ? null : d.id }
+    });
+    if (result?.already_exists) {
+      toast(result.purchased ? 'This Wishlist item is already in Shopping history' : 'This Wishlist item is already in Shopping');
+    } else {
+      toast(esSkincare
+        ? '🛒 Replenishable copy added · Wishlist unchanged'
+        : '🛒 Added to Shopping · it will be claimed when purchased');
+    }
     load();
     return;
   }
