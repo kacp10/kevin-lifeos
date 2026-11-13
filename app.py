@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 200  # V200 Hunter Supply Request persistent drag-and-drop ordering
+VERSION = 201  # V201 Wishlist-to-Shopping purchase sync and collision-safe priorities
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -790,7 +790,8 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, slots INTEGER DEFAULT 1,
          done INTEGER DEFAULT 0, created TEXT DEFAULT '', sort_order INTEGER DEFAULT 0,
          bought_at TEXT DEFAULT '', cost INTEGER DEFAULT 0, method TEXT DEFAULT '',
-         expense_id INTEGER DEFAULT NULL, compra_id INTEGER DEFAULT NULL);
+         expense_id INTEGER DEFAULT NULL, compra_id INTEGER DEFAULT NULL,
+         wishlist_dream_id INTEGER DEFAULT NULL);
     CREATE TABLE IF NOT EXISTS todos (
         id INTEGER PRIMARY KEY AUTOINCREMENT, texto TEXT,
         done INTEGER DEFAULT 0, created TEXT DEFAULT '',
@@ -2113,6 +2114,7 @@ def state():
     d = db()
     # V199: repair Wishlist planning columns before Wishlist is serialized.
     ensure_wishlist_target_year_schema(d)
+    _ensure_skincare_unclaimed(d)
     # V194: /api/state must be resilient to partially-applied production migrations.
     # Ensure the columns read below exist before selecting them.
     _ensure_card_balance_schema(d)
@@ -2266,8 +2268,9 @@ def state():
     fund = [dict(r) for r in d.execute('SELECT * FROM fund ORDER BY id')]
     piggy = [dict(r) for r in d.execute('SELECT * FROM piggy ORDER BY id')]
     piggy_moves = [dict(r) for r in d.execute('SELECT * FROM piggy_moves ORDER BY id DESC')]
-    # V200: repair the persisted manual order before returning Shopping items.
+    # V200: repair persisted manual order; V201: ensure Wishlist origin link exists.
     _ensure_shopping_order_schema(d)
+    _ensure_wishlist_shopping_link_schema(d)
     shopping = [dict(r) for r in d.execute('SELECT * FROM shopping ORDER BY sort_order, id')]
     # V119: una sola limpieza por día. Los To-do marcados ayer o antes se retiran;
     # los completados hoy permanecen visibles y tachados durante el resto del día.
@@ -3149,26 +3152,85 @@ def dream():
         if raw_value is None or str(raw_value).strip() == '':
             value = None
         else:
-            value = to_int(raw_value)
+            if field == 'priority':
+                try:
+                    numeric = float(str(raw_value).strip())
+                    if not numeric.is_integer():
+                        raise ValueError
+                    value = int(numeric)
+                except (TypeError, ValueError):
+                    return jsonify(error='La prioridad debe ser un número entero'), 400
+            else:
+                value = to_int(raw_value)
             if field == 'target_year' and not 1900 <= value <= 2200:
                 return jsonify(error='El año objetivo debe estar entre 1900 y 2200'), 400
             if field == 'priority' and not 1 <= value <= 9999:
                 return jsonify(error='La prioridad debe estar entre 1 y 9999'), 400
 
-        column = 'target_year' if field == 'target_year' else 'priority'
+        if field == 'priority':
+            # A priority is a position within its own Wishlist category. Removing
+            # the edited item and inserting it at the requested position keeps
+            # every other assigned priority unique and contiguous (1, 2, 3...).
+            with transaction() as tx:
+                target_row = tx.execute(
+                    'SELECT id, category FROM dreams WHERE id=?', (dream_id,)
+                ).fetchone()
+                if not target_row:
+                    return jsonify(error='Wishlist item not found'), 404
+                category = dict(target_row).get('category')
+                all_rows = [dict(row) for row in tx.execute(
+                    'SELECT id, category, priority FROM dreams'
+                ).fetchall()]
+                category_rows = [row for row in all_rows if row.get('category') == category]
+                ranked = [row for row in category_rows
+                          if int(row['id']) != dream_id
+                          and row.get('priority') is not None
+                          and 1 <= int(row['priority']) <= 9999]
+                ranked.sort(key=lambda row: (int(row['priority']), int(row['id'])))
+                effective_priority = None
+                priority_updates = []
+                if value is not None:
+                    insert_at = min(max(value - 1, 0), len(ranked))
+                    ranked.insert(insert_at, {'id': dream_id, 'category': category, 'priority': value})
+                for position, row in enumerate(ranked, start=1):
+                    row_id = int(row['id'])
+                    tx.execute('UPDATE dreams SET priority=? WHERE id=?', (position, row_id))
+                    priority_updates.append({'id': row_id, 'priority': position})
+                    if row_id == dream_id:
+                        effective_priority = position
+                if value is None:
+                    tx.execute('UPDATE dreams SET priority=NULL WHERE id=?', (dream_id,))
+                    priority_updates.append({'id': dream_id, 'priority': None})
+            return jsonify(ok=True, id=dream_id, priority=effective_priority,
+                           priorities=priority_updates)
+
         try:
-            cur = con.execute(f'UPDATE dreams SET {column}=? WHERE id=?', (value, dream_id))
+            cur = con.execute('UPDATE dreams SET target_year=? WHERE id=?', (value, dream_id))
             con.commit()
         except Exception:
             con.rollback()
-            logger.exception('Wishlist %s update failed for dream id=%s', field, dream_id)
+            logger.exception('Wishlist target_year update failed for dream id=%s', dream_id)
             return jsonify(error='No se pudo guardar el cambio. Revisa el registro del servidor.'), 500
         if getattr(cur, 'rowcount', 1) == 0:
             return jsonify(error='Wishlist item not found'), 404
-        return jsonify(ok=True, id=dream_id, **{field: value})
+        return jsonify(ok=True, id=dream_id, target_year=value)
+
+    if field == 'bought':
+        try:
+            dream_id = int(j.get('id'))
+            bought_value = int(j.get('value') or 0)
+        except (TypeError, ValueError):
+            return jsonify(error='Invalid Wishlist item'), 400
+        dream_row = db().execute(
+            'SELECT category FROM dreams WHERE id=?', (dream_id,)
+        ).fetchone()
+        if not dream_row:
+            return jsonify(error='Wishlist item not found'), 404
+        if re.search(r'skincare', str(dict(dream_row).get('category') or ''), re.I) and bought_value:
+            return jsonify(error='Skincare is replenishable and is not marked as claimed'), 409
+
     return safe_field_update('dreams', ('name', 'saved', 'value', 'bought'),
                               ('saved', 'value', 'bought'), j, default_field='saved')
-
 
 
 BACKUP_TABLES = (
@@ -4270,14 +4332,45 @@ def shopping_new():
         return jsonify(error='Write the supply or errand first'), 400
     con = db()
     _ensure_shopping_order_schema(con)
+    _ensure_wishlist_shopping_link_schema(con)
+    _ensure_skincare_unclaimed(con)
+
+    # Only explicit non-Skincare Wishlist copies carry a link back to their target.
+    # Ordinary Shopping requests and replenishable Skincare copies remain unlinked.
+    wishlist_dream_id = None
+    raw_dream_id = j.get('wishlist_dream_id')
+    if raw_dream_id is not None and str(raw_dream_id).strip() != '':
+        try:
+            requested_dream_id = int(raw_dream_id)
+        except (TypeError, ValueError):
+            return jsonify(error='Invalid Wishlist reference'), 400
+        dream_row = con.execute(
+            'SELECT id, category FROM dreams WHERE id=?', (requested_dream_id,)
+        ).fetchone()
+        if not dream_row:
+            return jsonify(error='Wishlist item not found'), 404
+        if not re.search(r'skincare', str(dict(dream_row).get('category') or ''), re.I):
+            wishlist_dream_id = requested_dream_id
+            existing = con.execute(
+                'SELECT id, bought_at FROM shopping WHERE wishlist_dream_id=? ORDER BY id DESC LIMIT 1',
+                (wishlist_dream_id,)
+            ).fetchone()
+            if existing:
+                existing_item = dict(existing)
+                return jsonify(ok=True, already_exists=True,
+                               shopping_id=existing_item['id'],
+                               purchased=bool(str(existing_item.get('bought_at') or '').strip()))
+
     next_order = con.execute(
         "SELECT COALESCE(MAX(sort_order),0)+1 AS next_order FROM shopping WHERE bought_at IS NULL OR bought_at=''"
     ).fetchone()
     position = int(dict(next_order).get('next_order') or 1) if next_order else 1
-    con.execute('INSERT INTO shopping (name, slots, done, created, sort_order) VALUES (?,?,?,?,?)',
-                (name, int(j.get('slots') or 1), 0, date.today().isoformat(), position))
+    con.execute(
+        'INSERT INTO shopping (name, slots, done, created, sort_order, wishlist_dream_id) VALUES (?,?,?,?,?,?)',
+        (name, int(j.get('slots') or 1), 0, date.today().isoformat(), position, wishlist_dream_id)
+    )
     con.commit()
-    return jsonify(ok=True)
+    return jsonify(ok=True, wishlist_dream_id=wishlist_dream_id)
 
 
 @app.post('/api/shopping/reorder')
@@ -4801,6 +4894,56 @@ def _ensure_shopping_order_schema(con):
         con.commit()
 
 
+def _ensure_skincare_unclaimed(con):
+    """V201: Skincare is replenishable and never contributes to claimed totals."""
+    cur = con.execute(
+        "UPDATE dreams SET bought=0 WHERE LOWER(COALESCE(category,'')) LIKE '%skincare%' "
+        "AND COALESCE(bought,0)<>0"
+    )
+    if getattr(cur, 'rowcount', 0):
+        con.commit()
+
+
+def _ensure_wishlist_shopping_link_schema(con):
+    """V201: persist the origin Wishlist item on Shopping copies."""
+    if db_layer.IS_PG:
+        rows = con.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='shopping' AND table_schema=current_schema()"
+        ).fetchall()
+        columns = {str(dict(row)['column_name']) for row in rows}
+    else:
+        rows = con.execute('PRAGMA table_info(shopping)').fetchall()
+        columns = {
+            str((dict(row) if hasattr(row, 'keys') else {'name': row[1]})['name'])
+            for row in rows
+        }
+    if 'wishlist_dream_id' not in columns:
+        try:
+            con.execute('ALTER TABLE shopping ADD COLUMN wishlist_dream_id INTEGER DEFAULT NULL')
+            con.commit()
+        except Exception:
+            # A concurrent worker may have added the column after our inspection.
+            try:
+                con.rollback()
+            except Exception:
+                pass
+            if db_layer.IS_PG:
+                rows = con.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='shopping' AND table_schema=current_schema()"
+                ).fetchall()
+                columns = {str(dict(row)['column_name']) for row in rows}
+            else:
+                rows = con.execute('PRAGMA table_info(shopping)').fetchall()
+                columns = {
+                    str((dict(row) if hasattr(row, 'keys') else {'name': row[1]})['name'])
+                    for row in rows
+                }
+            if 'wishlist_dream_id' not in columns:
+                raise
+
+
 def _ensure_shopping_finance_schema(con):
     """V170 hotfix: self-heal legacy Shopping databases before a purchase.
 
@@ -4861,8 +5004,9 @@ def shopping_complete():
             return jsonify(error='Installments must be 1-60 and start month must be valid'), 400
         creditor, boss = SHOPPING_CARD_ROUTES[method]
 
-    # Repair legacy/partially migrated databases before touching finance links.
+    # Repair legacy/partially migrated databases before touching finance or Wishlist links.
     _ensure_shopping_finance_schema(db())
+    _ensure_wishlist_shopping_link_schema(db())
 
     expense_id = None
     compra_id = None
@@ -4894,8 +5038,19 @@ def shopping_complete():
         con.execute('UPDATE shopping SET done=slots, bought_at=?, cost=?, method=?, expense_id=?, compra_id=? WHERE id=?',
                     (date.today().isoformat(), cost, method, expense_id, compra_id, iid))
 
+        linked_dream_id = item.get('wishlist_dream_id')
+        if linked_dream_id:
+            linked_dream = con.execute(
+                'SELECT category FROM dreams WHERE id=?', (linked_dream_id,)
+            ).fetchone()
+            if linked_dream and not re.search(
+                r'skincare', str(dict(linked_dream).get('category') or ''), re.I
+            ):
+                con.execute('UPDATE dreams SET bought=1 WHERE id=?', (linked_dream_id,))
+
     return jsonify(ok=True, payment_type='card' if is_card else 'cash', expense_id=expense_id,
-                   compra_id=compra_id, creditor=creditor, cuotas=cuotas, start=start_month)
+                   compra_id=compra_id, creditor=creditor, cuotas=cuotas, start=start_month,
+                   wishlist_claimed=bool(item.get('wishlist_dream_id')))
 
 
 @app.post('/api/shopping/bought')
@@ -4906,14 +5061,26 @@ def shopping_bought():
         iid = int(j.get('id'))
     except (TypeError, ValueError):
         return jsonify(error='Invalid id'), 400
-    row = db().execute('SELECT * FROM shopping WHERE id=?', (iid,)).fetchone()
-    if not row:
-        return jsonify(error='Item not found'), 404
+    con = db()
+    _ensure_wishlist_shopping_link_schema(con)
     cost = to_int(j.get('cost'))
     method = j.get('method') or ''
-    db().execute('UPDATE shopping SET done=slots, bought_at=?, cost=?, method=? WHERE id=?',
-                 (date.today().isoformat(), cost, method, iid))
-    db().commit()
+    with transaction() as con:
+        row = con.execute('SELECT * FROM shopping WHERE id=?', (iid,)).fetchone()
+        if not row:
+            return jsonify(error='Item not found'), 404
+        item = dict(row)
+        con.execute('UPDATE shopping SET done=slots, bought_at=?, cost=?, method=? WHERE id=?',
+                    (date.today().isoformat(), cost, method, iid))
+        linked_dream_id = item.get('wishlist_dream_id')
+        if linked_dream_id:
+            linked_dream = con.execute(
+                'SELECT category FROM dreams WHERE id=?', (linked_dream_id,)
+            ).fetchone()
+            if linked_dream and not re.search(
+                r'skincare', str(dict(linked_dream).get('category') or ''), re.I
+            ):
+                con.execute('UPDATE dreams SET bought=1 WHERE id=?', (linked_dream_id,))
     return jsonify(ok=True)
 
 
@@ -4927,6 +5094,7 @@ def shopping_unbuy():
         return jsonify(error='Invalid id'), 400
     con = db()
     _ensure_shopping_order_schema(con)
+    _ensure_wishlist_shopping_link_schema(con)
     with transaction() as con:
         row = con.execute('SELECT * FROM shopping WHERE id=?', (iid,)).fetchone()
         if not row:
@@ -4946,6 +5114,15 @@ def shopping_unbuy():
         ).fetchone()
         next_position = int(dict(next_position_row).get('next_order') or 1) if next_position_row else 1
         con.execute("UPDATE shopping SET bought_at='', done=0, cost=0, method='', expense_id=NULL, compra_id=NULL, sort_order=? WHERE id=?", (next_position, iid))
+        linked_dream_id = item.get('wishlist_dream_id')
+        if linked_dream_id:
+            linked_dream = con.execute(
+                'SELECT category FROM dreams WHERE id=?', (linked_dream_id,)
+            ).fetchone()
+            if linked_dream and not re.search(
+                r'skincare', str(dict(linked_dream).get('category') or ''), re.I
+            ):
+                con.execute('UPDATE dreams SET bought=0 WHERE id=?', (linked_dream_id,))
     return jsonify(ok=True)
 
 
