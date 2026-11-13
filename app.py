@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 203  # V203 repair legacy Shopping finance and Wishlist claimed schemas before copy creation
+VERSION = 204  # V204 bind Skincare LIKE pattern for PostgreSQL compatibility
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -4964,9 +4964,13 @@ def _ensure_skincare_unclaimed(con):
             if 'bought' not in columns:
                 raise
 
+    # Bind the LIKE pattern instead of embedding literal percent signs.
+    # PGConn always calls psycopg2 cursor.execute(sql, params), where literal
+    # percent signs in SQL are treated as formatting markers.
     cur = con.execute(
-        "UPDATE dreams SET bought=0 WHERE LOWER(COALESCE(category,'')) LIKE '%skincare%' "
-        "AND COALESCE(bought,0)<>0"
+        "UPDATE dreams SET bought=0 WHERE LOWER(COALESCE(category,'')) LIKE ? "
+        "AND COALESCE(bought,0)<>0",
+        ('%skincare%',)
     )
     if getattr(cur, 'rowcount', 0):
         con.commit()
