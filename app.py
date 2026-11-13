@@ -22,7 +22,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 202  # V202 non-blocking Wishlist/Shopping schema repair during state load
+VERSION = 203  # V203 repair legacy Shopping finance and Wishlist claimed schemas before copy creation
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -4336,51 +4336,71 @@ def routine_extra_del(i):
 
 @app.post('/api/shopping/new')
 def shopping_new():
-    j = request.json or {}
+    j = request.get_json(silent=True) or {}
     name = str(j.get('name') or '').strip()
     if not name:
         return jsonify(error='Write the supply or errand first'), 400
+
     con = db()
-    _ensure_shopping_order_schema(con)
-    _ensure_wishlist_shopping_link_schema(con)
-    _ensure_skincare_unclaimed(con)
+    stage = 'shopping schema repair'
+    try:
+        # V203: /api/state can load successfully even when an old production DB
+        # still has a partial V170 Shopping migration. New-item creation reads
+        # bought_at and writes finance/link fields, so repair those columns here.
+        _ensure_shopping_finance_schema(con)
+        _ensure_shopping_order_schema(con)
+        _ensure_wishlist_shopping_link_schema(con)
 
-    # Only explicit non-Skincare Wishlist copies carry a link back to their target.
-    # Ordinary Shopping requests and replenishable Skincare copies remain unlinked.
-    wishlist_dream_id = None
-    raw_dream_id = j.get('wishlist_dream_id')
-    if raw_dream_id is not None and str(raw_dream_id).strip() != '':
-        try:
-            requested_dream_id = int(raw_dream_id)
-        except (TypeError, ValueError):
-            return jsonify(error='Invalid Wishlist reference'), 400
-        dream_row = con.execute(
-            'SELECT id, category FROM dreams WHERE id=?', (requested_dream_id,)
-        ).fetchone()
-        if not dream_row:
-            return jsonify(error='Wishlist item not found'), 404
-        if not re.search(r'skincare', str(dict(dream_row).get('category') or ''), re.I):
-            wishlist_dream_id = requested_dream_id
-            existing = con.execute(
-                'SELECT id, bought_at FROM shopping WHERE wishlist_dream_id=? ORDER BY id DESC LIMIT 1',
-                (wishlist_dream_id,)
+        # Skincare normalization is secondary to adding the Shopping copy. Its
+        # helper now repairs a missing legacy dreams.bought column before UPDATE.
+        stage = 'Wishlist Skincare normalization'
+        _ensure_skincare_unclaimed(con)
+
+        # Only explicit non-Skincare Wishlist copies carry a link back to their target.
+        # Ordinary Shopping requests and replenishable Skincare copies remain unlinked.
+        stage = 'Wishlist reference validation'
+        wishlist_dream_id = None
+        raw_dream_id = j.get('wishlist_dream_id')
+        if raw_dream_id is not None and str(raw_dream_id).strip() != '':
+            try:
+                requested_dream_id = int(raw_dream_id)
+            except (TypeError, ValueError):
+                return jsonify(error='Invalid Wishlist reference'), 400
+            dream_row = con.execute(
+                'SELECT id, category FROM dreams WHERE id=?', (requested_dream_id,)
             ).fetchone()
-            if existing:
-                existing_item = dict(existing)
-                return jsonify(ok=True, already_exists=True,
-                               shopping_id=existing_item['id'],
-                               purchased=bool(str(existing_item.get('bought_at') or '').strip()))
+            if not dream_row:
+                return jsonify(error='Wishlist item not found'), 404
+            if not re.search(r'skincare', str(dict(dream_row).get('category') or ''), re.I):
+                wishlist_dream_id = requested_dream_id
+                existing = con.execute(
+                    'SELECT id, bought_at FROM shopping WHERE wishlist_dream_id=? ORDER BY id DESC LIMIT 1',
+                    (wishlist_dream_id,)
+                ).fetchone()
+                if existing:
+                    existing_item = dict(existing)
+                    return jsonify(ok=True, already_exists=True,
+                                   shopping_id=existing_item['id'],
+                                   purchased=bool(str(existing_item.get('bought_at') or '').strip()))
 
-    next_order = con.execute(
-        "SELECT COALESCE(MAX(sort_order),0)+1 AS next_order FROM shopping WHERE bought_at IS NULL OR bought_at=''"
-    ).fetchone()
-    position = int(dict(next_order).get('next_order') or 1) if next_order else 1
-    con.execute(
-        'INSERT INTO shopping (name, slots, done, created, sort_order, wishlist_dream_id) VALUES (?,?,?,?,?,?)',
-        (name, int(j.get('slots') or 1), 0, date.today().isoformat(), position, wishlist_dream_id)
-    )
-    con.commit()
-    return jsonify(ok=True, wishlist_dream_id=wishlist_dream_id)
+        stage = 'Shopping item insert'
+        next_order = con.execute(
+            "SELECT COALESCE(MAX(sort_order),0)+1 AS next_order FROM shopping WHERE bought_at IS NULL OR bought_at=''"
+        ).fetchone()
+        position = int(dict(next_order).get('next_order') or 1) if next_order else 1
+        con.execute(
+            'INSERT INTO shopping (name, slots, done, created, sort_order, wishlist_dream_id) VALUES (?,?,?,?,?,?)',
+            (name, int(j.get('slots') or 1), 0, date.today().isoformat(), position, wishlist_dream_id)
+        )
+        con.commit()
+        return jsonify(ok=True, wishlist_dream_id=wishlist_dream_id)
+    except Exception:
+        try:
+            con.rollback()
+        except Exception:
+            pass
+        logger.exception('V203 /api/shopping/new failed during %s', stage)
+        return jsonify(error='Could not add this item to Shopping. The server recorded the failure.'), 500
 
 
 @app.post('/api/shopping/reorder')
@@ -4905,7 +4925,45 @@ def _ensure_shopping_order_schema(con):
 
 
 def _ensure_skincare_unclaimed(con):
-    """V201: Skincare is replenishable and never contributes to claimed totals."""
+    """V203: Skincare is replenishable; repair the legacy bought column if needed."""
+    if db_layer.IS_PG:
+        rows = con.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='dreams' AND table_schema=current_schema()"
+        ).fetchall()
+        columns = {str(dict(row)['column_name']) for row in rows}
+    else:
+        rows = con.execute('PRAGMA table_info(dreams)').fetchall()
+        columns = {
+            str((dict(row) if hasattr(row, 'keys') else {'name': row[1]})['name'])
+            for row in rows
+        }
+
+    if 'bought' not in columns:
+        try:
+            con.execute('ALTER TABLE dreams ADD COLUMN bought INTEGER DEFAULT 0')
+            con.commit()
+        except Exception:
+            # A concurrent worker may have completed the same repair.
+            try:
+                con.rollback()
+            except Exception:
+                pass
+            if db_layer.IS_PG:
+                rows = con.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='dreams' AND table_schema=current_schema()"
+                ).fetchall()
+                columns = {str(dict(row)['column_name']) for row in rows}
+            else:
+                rows = con.execute('PRAGMA table_info(dreams)').fetchall()
+                columns = {
+                    str((dict(row) if hasattr(row, 'keys') else {'name': row[1]})['name'])
+                    for row in rows
+                }
+            if 'bought' not in columns:
+                raise
+
     cur = con.execute(
         "UPDATE dreams SET bought=0 WHERE LOWER(COALESCE(category,'')) LIKE '%skincare%' "
         "AND COALESCE(bought,0)<>0"
