@@ -6383,7 +6383,8 @@ FORMA DE TRABAJO:
 - Después espera mi solicitud concreta.
 - Para cada solicitud, inspecciona el código relacionado, aplica solo el cambio autorizado, valida que no dañaste otras funciones y entrega únicamente los archivos completos modificados con el formato indicado.
 
-Este prompt tiene prioridad como protocolo de trabajo para Kevin Life OS durante toda la conversación.`;
+Este prompt tiene prioridad como protocolo de trabajo para Kevin Life OS durante toda la conversación.21. V205 Wishlist Visual Icons + Life Pillars: cada dream puede guardar un emoji Unicode opcional, seleccionado desde un picker local (sin recursos externos), con persistencia en DB y opción de cambiar o quitar. No se asignan iconos automáticamente. LIFE PILLARS abre un modal responsive Hunter en inglés con las 10 áreas y sus descripciones. Los estilos se inyectan desde app.js; no requiere cambiar index.html ni CSS externo. Mantener intactos Wishlist anual, prioridad, valores, progreso, claimed y el comportamiento Skincare.
+`;
 }
 async function copyHunterProjectContinuityPrompt() {
   const text=hunterProjectContinuityPrompt();
@@ -8779,9 +8780,146 @@ function ensureWishlistYearControl(dreams = S.dreams || []) {
   }
 }
 
+/* ---------- WISHLIST EMOJI + LIFE PILLARS · V205 ---------- */
+const WISHLIST_EMOJI_GROUPS = [
+  { name: 'Everyday', items: [['✨','sparkles'],['⭐','star'],['🌟','glowing star'],['💎','diamond'],['🎁','gift'],['🛍️','shopping'],['💰','money'],['💳','card'],['💵','cash'],['🏆','trophy'],['🎯','target'],['🔥','fire'],['❤️','heart'],['🖤','black heart'],['💜','purple heart'],['💙','blue heart'],['💚','green heart'],['🤍','white heart'],['🫶','love'],['👑','crown']] },
+  { name: 'Tech & Gaming', items: [['💻','laptop'],['🖥️','desktop computer'],['⌨️','keyboard'],['🖱️','mouse'],['📱','phone'],['📲','mobile'],['📷','camera'],['🎧','headphones'],['🎵','music'],['🎮','gaming controller'],['🕹️','joystick'],['⌚','watch'],['🔋','battery'],['🔌','plug'],['📺','television'],['🎙️','microphone'],['🚀','rocket'],['🤖','robot'],['🧩','puzzle'],['🔧','tool']] },
+  { name: 'Style & Personal', items: [['👕','shirt'],['👟','shoes'],['🧥','jacket'],['👜','bag'],['🎒','backpack'],['👓','glasses'],['💄','makeup'],['🧴','lotion'],['🪞','mirror'],['💅','nails'],['🧢','cap'],['💍','ring'],['🧸','plush'],['🧼','soap'],['🪥','toothbrush'],['🧢','hat']] },
+  { name: 'Home', items: [['🏠','home'],['🛏️','bed'],['🛋️','sofa'],['🪑','chair'],['🪴','plant'],['🌿','leaf'],['🕯️','candle'],['💡','light bulb'],['🧹','broom'],['🧺','basket'],['🪟','window'],['🖼️','art'],['🍽️','dining'],['☕','coffee'],['🍳','cooking'],['🧊','ice']] },
+  { name: 'Fitness & Health', items: [['💪','muscle'],['🏋️','weightlifting'],['🏃','running'],['🚴','cycling'],['🧘','meditation'],['🥗','salad'],['🍎','apple'],['💧','water'],['🩺','health'],['🫀','heart health'],['⚽','soccer'],['🏀','basketball'],['🎾','tennis'],['🥊','boxing'],['🧗','climbing'],['🏊','swimming']] },
+  { name: 'Travel & Experiences', items: [['✈️','airplane'],['🚗','car'],['🚙','suv'],['🏍️','motorcycle'],['🚆','train'],['🗺️','map'],['🏖️','beach'],['🏔️','mountain'],['🌴','palm tree'],['🌅','sunrise'],['🌌','night sky'],['🌍','earth'],['⛺','camping'],['🎟️','ticket'],['🎡','ferris wheel'],['🏕️','camp']] },
+  { name: 'Learning & Work', items: [['📚','books'],['📖','book'],['✏️','pencil'],['📝','note'],['🎓','graduation'],['🧠','brain'],['💼','briefcase'],['📈','chart'],['🏅','medal'],['🗂️','files'],['🛠️','tools'],['🔬','science'],['🧪','experiment'],['🧑‍💻','developer'],['🌐','web'],['🔑','key']] },
+  { name: 'Miscellaneous', items: [['🐶','dog'],['🐱','cat'],['🐼','panda'],['🦊','fox'],['🐸','frog'],['🦋','butterfly'],['🌸','flower'],['🌻','sunflower'],['🍀','clover'],['🍓','strawberry'],['🍕','pizza'],['🍔','burger'],['🎨','art palette'],['🎬','movie'],['🎤','karaoke'],['🎉','celebration']] }
+];
+const WISHLIST_PILLARS = [
+  ['🫀','Health','Having the energy and capacity to live.'],
+  ['🧠','Mental Well-being','Maintaining stability, control, and peace.'],
+  ['💰','Finances','Moving beyond survival and building security.'],
+  ['🎯','Career','Increasing your ability to generate income.'],
+  ['✨','Appearance','Taking care of your physique, beauty, and presentation.'],
+  ['❤️','Relationships','Building genuine and healthy connections.'],
+  ['🧭','Purpose','Living with direction and principles.'],
+  ['🏠','Environment','Building a suitable living space and lifestyle.'],
+  ['📚','Growth','Continuously learning and evolving.'],
+  ['🌎','Experiences','Enjoying life while building it.']
+];
+function ensureWishlistFeatureStyles() {
+  if ($('#wish-feature-styles-v205')) return;
+  const style = document.createElement('style');
+  style.id = 'wish-feature-styles-v205';
+  style.textContent = `
+    .wish-card-title-group{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+    .wish-card-title-copy{min-width:0;flex:1}
+    .wish-emoji-slot{display:grid;place-items:center;width:38px;height:38px;min-width:38px;border:1px solid rgba(245,185,66,.35);border-radius:11px;background:rgba(245,185,66,.07);color:#f2c45b;font-size:1.35rem;cursor:pointer;transition:background .18s,border-color .18s,transform .18s;flex-shrink:0}
+    .wish-emoji-slot:hover{background:rgba(245,185,66,.16);border-color:rgba(245,185,66,.7);transform:translateY(-1px)}
+    .wish-emoji-slot .wish-emoji-plus{font-size:1rem;font-weight:800;opacity:.65}
+    .wish-pillars-open{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:37px;padding:8px 12px;border:1px solid rgba(245,185,66,.45);border-radius:10px;background:linear-gradient(135deg,rgba(245,185,66,.13),rgba(245,185,66,.04));color:#f3c45e;font-size:.63rem;letter-spacing:.1em;font-weight:900;white-space:nowrap;cursor:pointer}
+    .wish-pillars-open:hover{background:rgba(245,185,66,.2);border-color:rgba(245,185,66,.8)}
+    .wish-year-head{flex-wrap:wrap}
+    .wish-feature-backdrop{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(5,7,12,.82);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
+    .wish-feature-modal{width:min(100%,510px);max-height:88vh;display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(245,185,66,.38);border-radius:18px;background:radial-gradient(ellipse at 10% 0%,rgba(245,185,66,.12),transparent 43%),linear-gradient(145deg,#181725,#101923);box-shadow:0 25px 80px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.03);color:#f2ead6}
+    .wish-feature-modal.wish-pillars-modal{width:min(100%,760px)}
+    .wish-feature-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:19px 20px 13px;border-bottom:1px solid rgba(245,185,66,.14)}
+    .wish-feature-kicker{display:block;margin-bottom:4px;color:#d8aa43;font-size:.61rem;letter-spacing:.16em;font-weight:900}
+    .wish-feature-head h3{margin:0;color:#f4e8cc;font-size:1.08rem;font-weight:850}
+    .wish-feature-head p{margin:5px 0 0;color:#9e9bae;font-size:.75rem;line-height:1.45}
+    .wish-feature-close{display:grid;place-items:center;width:34px;height:34px;min-width:34px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.04);color:#c8c4d1;font-size:1rem;cursor:pointer}
+    .wish-feature-close:hover{color:#f3c45e;border-color:rgba(245,185,66,.35)}
+    .wish-feature-body{overflow:auto;overscroll-behavior:contain;padding:16px 20px 20px}
+    .wish-emoji-search{width:100%;min-height:42px;margin:0 0 14px;padding:10px 12px;border:1px solid rgba(245,185,66,.24);border-radius:11px;background:#10141f;color:#f6ebd1;font:inherit;font-size:.85rem;outline:none}
+    .wish-emoji-search:focus{border-color:rgba(245,185,66,.68);box-shadow:0 0 0 3px rgba(245,185,66,.09)}
+    .wish-emoji-section{margin:0 0 14px}
+    .wish-emoji-section h4{margin:0 0 9px;color:#d6a944;font-size:.62rem;letter-spacing:.12em;text-transform:uppercase}
+    .wish-emoji-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:6px}
+    .wish-emoji-choice{display:grid;place-items:center;aspect-ratio:1;min-width:0;border:1px solid rgba(255,255,255,.07);border-radius:9px;background:rgba(255,255,255,.035);font-size:1.35rem;cursor:pointer;transition:background .15s,border-color .15s,transform .15s}
+    .wish-emoji-choice:hover{background:rgba(245,185,66,.13);border-color:rgba(245,185,66,.4);transform:scale(1.04)}
+    .wish-emoji-footer{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:15px;padding-top:12px;border-top:1px solid rgba(245,185,66,.14)}
+    .wish-emoji-clear{border:1px solid rgba(255,255,255,.13);border-radius:9px;background:rgba(255,255,255,.04);color:#bcb9c7;padding:8px 11px;font-size:.7rem;cursor:pointer}
+    .wish-emoji-empty-result{padding:20px;text-align:center;color:#a5a2b0;font-size:.78rem}
+    .wish-pillars-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+    .wish-pillar-card{display:flex;align-items:flex-start;gap:11px;padding:13px;border:1px solid rgba(245,185,66,.16);border-radius:13px;background:linear-gradient(145deg,rgba(245,185,66,.06),rgba(255,255,255,.015));min-width:0}
+    .wish-pillar-number{display:grid;place-items:center;width:27px;height:27px;min-width:27px;border-radius:8px;background:rgba(245,185,66,.11);color:#d8aa43;font-size:.65rem;font-weight:900}
+    .wish-pillar-emoji{font-size:1.25rem;line-height:1.3}
+    .wish-pillar-card h4{margin:0 0 4px;color:#f3e7cc;font-size:.82rem}
+    .wish-pillar-card p{margin:0;color:#a9a5b4;font-size:.73rem;line-height:1.45}
+    @media(max-width:600px){
+      .wish-year-head{align-items:stretch;gap:10px}
+      .wish-year-head>div:first-child{width:100%;min-width:0}
+      .wish-pillars-open{width:100%;order:3}
+      .wish-feature-backdrop{padding:10px;align-items:center}
+      .wish-feature-modal{max-height:91vh;border-radius:15px}
+      .wish-feature-head{padding:16px 15px 12px}
+      .wish-feature-body{padding:13px 15px 16px}
+      .wish-emoji-grid{grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}
+      .wish-emoji-choice{font-size:1.25rem;border-radius:8px}
+      .wish-pillars-grid{grid-template-columns:1fr;gap:8px}
+      .wish-pillar-card{padding:11px}
+    }
+  `;
+  document.head.appendChild(style);
+}
+function closeWishlistFeatureModal() {
+  const modal = $('#wish-feature-modal');
+  if (!modal) return;
+  if (modal._wishEscapeHandler) document.removeEventListener('keydown', modal._wishEscapeHandler);
+  modal.remove();
+}
+function wishlistEmojiGridMarkup(query='') {
+  const q = String(query||'').trim().toLowerCase();
+  const groups = WISHLIST_EMOJI_GROUPS.map(group => ({
+    name: group.name,
+    items: group.items.filter(([emoji,label]) => !q || emoji.includes(q) || label.includes(q))
+  })).filter(group => group.items.length);
+  if (!groups.length) return '<div class="wish-emoji-empty-result">No emojis found. Try another word.</div>';
+  return groups.map(group => `<section class="wish-emoji-section"><h4>${esc(group.name)}</h4><div class="wish-emoji-grid">${group.items.map(([emoji,label]) => `<button type="button" class="wish-emoji-choice" data-wish-emoji-value="${emoji}" title="${esc(label)}" aria-label="${esc(label)}">${emoji}</button>`).join('')}</div></section>`).join('');
+}
+function openWishlistEmojiPicker(dreamId) {
+  const dream = (S.dreams || []).find(item => Number(item.id) === Number(dreamId));
+  if (!dream) return;
+  closeWishlistFeatureModal();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'wish-feature-modal';
+  backdrop.className = 'wish-feature-backdrop';
+  backdrop.innerHTML = `<section class="wish-feature-modal" role="dialog" aria-modal="true" aria-labelledby="wish-emoji-title"><header class="wish-feature-head"><div><small class="wish-feature-kicker">WISHLIST · PERSONAL ICON</small><h3 id="wish-emoji-title">Choose an emoji</h3><p>Pick a symbol for <b>${esc(dream.name)}</b>. Your choice will be saved.</p></div><button type="button" class="wish-feature-close" data-wish-feature-close aria-label="Close">✕</button></header><div class="wish-feature-body"><input class="wish-emoji-search" type="search" placeholder="Search emojis (e.g. laptop, travel, home)" aria-label="Search emojis" autocomplete="off"><div class="wish-emoji-results">${wishlistEmojiGridMarkup()}</div><footer class="wish-emoji-footer"><button type="button" class="wish-emoji-clear" data-wish-emoji-clear>Remove icon</button><small style="color:var(--mut,#a5a2b0);font-size:.68rem">${dream.emoji ? 'Current icon: '+esc(dream.emoji) : 'No icon selected'}</small></footer></div></section>`;
+  document.body.appendChild(backdrop);
+  const search = backdrop.querySelector('.wish-emoji-search');
+  const results = backdrop.querySelector('.wish-emoji-results');
+  search.addEventListener('input', () => { results.innerHTML = wishlistEmojiGridMarkup(search.value); });
+  backdrop.addEventListener('click', async event => {
+    if (event.target === backdrop || event.target.closest('[data-wish-feature-close]')) { closeWishlistFeatureModal(); return; }
+    const selected = event.target.closest('[data-wish-emoji-value]');
+    const clear = event.target.closest('[data-wish-emoji-clear]');
+    if (!selected && !clear) return;
+    const emoji = selected ? selected.dataset.wishEmojiValue : '';
+    try {
+      await api('/api/dream', { body: { id: Number(dreamId), field: 'emoji', value: emoji } });
+      dream.emoji = emoji || null;
+      closeWishlistFeatureModal();
+      renderSuenos();
+      toast(emoji ? 'Wishlist icon saved' : 'Wishlist icon removed');
+    } catch (error) { toast(error?.message || 'Could not save the emoji', 'err'); }
+  });
+  backdrop._wishEscapeHandler = event => { if (event.key === 'Escape') closeWishlistFeatureModal(); };
+  document.addEventListener('keydown', backdrop._wishEscapeHandler);
+  search.focus();
+}
+function openWishlistPillarsModal() {
+  closeWishlistFeatureModal();
+  const backdrop = document.createElement('div');
+  backdrop.id = 'wish-feature-modal';
+  backdrop.className = 'wish-feature-backdrop';
+  backdrop.innerHTML = `<section class="wish-feature-modal wish-pillars-modal" role="dialog" aria-modal="true" aria-labelledby="wish-pillars-title"><header class="wish-feature-head"><div><small class="wish-feature-kicker">HUNTER FRAMEWORK · LIFE PILLARS</small><h3 id="wish-pillars-title">The 10 pillars of life</h3><p>Use these areas as a compass for a balanced life. They are principles, not habits or points.</p></div><button type="button" class="wish-feature-close" data-wish-feature-close aria-label="Close">✕</button></header><div class="wish-feature-body"><div class="wish-pillars-grid">${WISHLIST_PILLARS.map(([emoji,name,description],index) => `<article class="wish-pillar-card"><span class="wish-pillar-number">${String(index+1).padStart(2,'0')}</span><div><div class="wish-pillar-emoji">${emoji}</div><h4>${esc(name)}</h4><p>${esc(description)}</p></div></article>`).join('')}</div></div></section>`;
+  document.body.appendChild(backdrop);
+  backdrop.addEventListener('click', event => { if (event.target === backdrop || event.target.closest('[data-wish-feature-close]')) closeWishlistFeatureModal(); });
+  backdrop._wishEscapeHandler = event => { if (event.key === 'Escape') closeWishlistFeatureModal(); };
+  document.addEventListener('keydown', backdrop._wishEscapeHandler);
+}
+
+
 function renderSuenos() {
   const dreams = S.dreams || [];
   ensureWishlistAnnualStyles();
+  ensureWishlistFeatureStyles();
   if (WISHLIST_SELECTED_YEAR === null || WISHLIST_SELECTED_YEAR === undefined || WISHLIST_SELECTED_YEAR === '') {
     WISHLIST_SELECTED_YEAR = 'all';
   }
@@ -8806,7 +8944,7 @@ function renderSuenos() {
   const summary = `<section class="wish-year-overview">
     <div class="wish-year-head">
       <div><small>HUNTER ANNUAL ROUTE</small><h3>${esc(yearLabel)} · Acquisition plan</h3><p>Assign a year only when you have a concrete plan. Items without a year stay visible in All years.</p></div>
-      <label class="wish-year-filter"><span>Plan year</span><select data-wish-year-filter aria-label="Filter Wishlist by year"><option value="all" ${WISHLIST_SELECTED_YEAR === 'all' ? 'selected' : ''}>All years</option>${wishlistYearOptions(WISHLIST_SELECTED_YEAR, years)}</select></label>
+      <label class="wish-year-filter"><span>Plan year</span><select data-wish-year-filter aria-label="Filter Wishlist by year"><option value="all" ${WISHLIST_SELECTED_YEAR === 'all' ? 'selected' : ''}>All years</option>${wishlistYearOptions(WISHLIST_SELECTED_YEAR, years)}</select></label><button type="button" class="wish-pillars-open" data-wish-pillars-open title="Read the 10 Life Pillars">🧭 LIFE PILLARS</button>
     </div>
     <div class="wish-year-progress">
       <div class="wish-year-progress-head"><span>TARGETS CLAIMED</span><b>${completed}/${claimableItems.length} · ${acquiredPct}%</b></div>
@@ -8851,7 +8989,7 @@ function renderSuenos() {
         const remaining = Math.max(value - savedAmount, 0);
         const targetYear = Number.isInteger(Number(d.target_year)) && Number(d.target_year) >= 1900 ? Number(d.target_year) : '';
         return `<article class="dream-item wish-card ${claimed ? 'bought-item' : ''}">
-          <div class="wish-card-top"><div><small>${claimed ? 'TARGET CLAIMED' : percent >= 100 ? 'READY TO CLAIM' : 'FUTURE ACQUISITION'}</small><h4 class="wish-inline-title" contenteditable="true" spellcheck="false" data-dream-name="${d.id}" role="textbox" aria-label="Edit target name">${esc(d.name)}</h4></div><div class="wish-year-card-tools"><label class="wish-priority-control"><span>PRIORITY</span><input class="wish-priority-edit" data-wish-priority-edit data-id="${d.id}" type="number" min="1" max="9999" step="1" value="${Number.isInteger(Number(d.priority)) && Number(d.priority) > 0 ? Number(d.priority) : ''}" placeholder="—" aria-label="Priority for ${esc(d.name)}"></label><label class="wish-year-card-control"><span>YEAR</span><input class="wish-year-edit" data-wish-year-edit data-id="${d.id}" type="number" min="1900" max="2200" step="1" value="${targetYear}" placeholder="No year" aria-label="Target year for ${esc(d.name)} (optional)"></label><button class="del-x" data-type="dream" data-id="${d.id}" aria-label="Delete wish">✕</button></div></div>
+          <div class="wish-card-top"><div class="wish-card-title-group"><button type="button" class="wish-emoji-slot" data-wish-emoji-picker data-id="${d.id}" aria-label="Choose icon for ${esc(d.name)}" title="Choose emoji">${d.emoji ? esc(d.emoji) : '<span class="wish-emoji-plus">＋</span>'}</button><div class="wish-card-title-copy"><small>${claimed ? 'TARGET CLAIMED' : percent >= 100 ? 'READY TO CLAIM' : 'FUTURE ACQUISITION'}</small><h4 class="wish-inline-title" contenteditable="true" spellcheck="false" data-dream-name="${d.id}" role="textbox" aria-label="Edit target name">${esc(d.name)}</h4></div></div><div class="wish-year-card-tools"><label class="wish-priority-control"><span>PRIORITY</span><input class="wish-priority-edit" data-wish-priority-edit data-id="${d.id}" type="number" min="1" max="9999" step="1" value="${Number.isInteger(Number(d.priority)) && Number(d.priority) > 0 ? Number(d.priority) : ''}" placeholder="—" aria-label="Priority for ${esc(d.name)}"></label><label class="wish-year-card-control"><span>YEAR</span><input class="wish-year-edit" data-wish-year-edit data-id="${d.id}" type="number" min="1900" max="2200" step="1" value="${targetYear}" placeholder="No year" aria-label="Target year for ${esc(d.name)} (optional)"></label><button class="del-x" data-type="dream" data-id="${d.id}" aria-label="Delete wish">✕</button></div></div>
           <div class="wish-money-grid">
             <label><span>Target value</span><input class="d-edit money-live" inputmode="numeric" data-f="value" data-id="${d.id}" value="${Number(value).toLocaleString('es-CO')}" title="Target value"></label>
             <label><span>Saved</span><input class="d-edit money-live" inputmode="numeric" data-f="saved" data-id="${d.id}" value="${Number(savedAmount).toLocaleString('es-CO')}" title="Amount saved"></label>
@@ -8974,6 +9112,13 @@ $('#dreamList').addEventListener('change', async (e) => {
     field: e.target.dataset.f, value: v } });
   load();
 });
+document.addEventListener('click', e => {
+  const emojiButton = e.target.closest('[data-wish-emoji-picker]');
+  if (emojiButton) { openWishlistEmojiPicker(Number(emojiButton.dataset.id)); return; }
+  if (e.target.closest('[data-wish-pillars-open]')) { openWishlistPillarsModal(); }
+});
+
+
 $('#dreamList').addEventListener('click', async (e) => {
   const shop = e.target.closest('.to-shop');
   if (shop) {
