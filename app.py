@@ -14,6 +14,7 @@ import sqlite3
 import urllib.error
 import urllib.parse
 import urllib.request
+import unicodedata
 from datetime import date
 from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
@@ -22,7 +23,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 204  # V204 bind Skincare LIKE pattern for PostgreSQL compatibility
+VERSION = 205  # V205 persistent Wishlist emojis + LIFE PILLARS UI
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -278,6 +279,8 @@ def ensure_wishlist_target_year_schema(con=None):
         con.execute('ALTER TABLE dreams ADD COLUMN target_year INTEGER')
     if 'priority' not in columns:
         con.execute('ALTER TABLE dreams ADD COLUMN priority INTEGER')
+    if 'emoji' not in columns:
+        con.execute('ALTER TABLE dreams ADD COLUMN emoji TEXT DEFAULT NULL')
     # Repair only malformed non-NULL years. Never convert an intentionally blank year.
     con.execute(
         'UPDATE dreams SET target_year=NULL WHERE target_year IS NOT NULL AND '
@@ -715,7 +718,8 @@ def init_db():
         label TEXT PRIMARY KEY, pct REAL);
     CREATE TABLE IF NOT EXISTS dreams (
         id INTEGER PRIMARY KEY, category TEXT, name TEXT,
-        value INTEGER, saved INTEGER DEFAULT 0, bought INTEGER DEFAULT 0);
+        value INTEGER, saved INTEGER DEFAULT 0, bought INTEGER DEFAULT 0,
+        emoji TEXT DEFAULT NULL);
     CREATE TABLE IF NOT EXISTS animes (
         id INTEGER PRIMARY KEY, name TEXT, score REAL,
         t1 TEXT DEFAULT '', t2 TEXT DEFAULT '', t3 TEXT DEFAULT '',
@@ -3150,6 +3154,33 @@ def close_month():
 def dream():
     j = request.get_json(silent=True) or {}
     field = j.get('field')
+    if field == 'emoji':
+        try:
+            dream_id = int(j.get('id'))
+        except (TypeError, ValueError):
+            return jsonify(error='Invalid Wishlist item id'), 400
+        emoji_value = str(j.get('value') or '').strip()
+        if len(emoji_value) > 16 or any(ch in emoji_value for ch in '<>&"\''):
+            return jsonify(error='Invalid emoji'), 400
+        # Emoji and emoji variation/join characters are allowed; empty clears it.
+        # Output is escaped in the frontend before rendering, so this is not HTML.
+        if emoji_value and not all(
+            unicodedata.category(ch) in ('So', 'Sk', 'Mn', 'Cf')
+            for ch in emoji_value
+        ):
+            return jsonify(error='Invalid emoji'), 400
+        con = db()
+        ensure_wishlist_target_year_schema(con)
+        try:
+            cur = con.execute('UPDATE dreams SET emoji=? WHERE id=?', (emoji_value or None, dream_id))
+            con.commit()
+        except Exception:
+            con.rollback()
+            logger.exception('Wishlist emoji update failed for dream id=%s', dream_id)
+            return jsonify(error='No se pudo guardar el icono. Revisa el registro del servidor.'), 500
+        if getattr(cur, 'rowcount', 1) == 0:
+            return jsonify(error='Wishlist item not found'), 404
+        return jsonify(ok=True, id=dream_id, emoji=emoji_value or None)
     if field in ('target_year', 'priority'):
         con = db()
         ensure_wishlist_target_year_schema(con)
