@@ -23,7 +23,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 206  # V206 historical REST exclusions for Work week / Recovery bugfix
+VERSION = 207  # V207 include archived REST history in Habit streak neutrality
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
