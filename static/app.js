@@ -283,7 +283,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 206;
+const FRONT_V = 207;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -4945,7 +4945,10 @@ function lifeWeekdayFromISO(iso) {
 function isLifeRestDate(iso) {
   const day = String(iso || '').slice(0, 10);
   if (!day) return false;
-  if (lifeRestDates().has(day)) return true;
+  // V207: archived historical REST dates remain neutral after the weekly shift changes.
+  // They must be consulted by Habit streaks, Recovery visibility, and other consumers
+  // of this shared REST predicate, not only by Recovery's expected-mission scan.
+  if (lifeRestDates().has(day) || lifeRestHistoryDates().has(day)) return true;
   const weekday = lifeWeekdayFromISO(day);
   return weekday !== null && String((S.shifts || {})[weekday] || 'libre') === 'descanso';
 }
