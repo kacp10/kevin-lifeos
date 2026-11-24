@@ -4928,10 +4928,13 @@ function lifeRestDates() {
 // V206: permanent record of dates explicitly protected as REST, independent
 // of the currently configured weekday shift.
 function lifeRestHistoryDates() {
+  // V208: confirmed legacy REST dates remain neutral even if an older client
+  // or a schedule edit failed to persist their archive. They are never checks.
+  const confirmedLegacy = ['2026-11-07','2026-11-08','2026-11-14','2026-11-15','2026-11-16','2026-11-21'];
   try {
     const raw = JSON.parse((S.profile || {}).life_rest_history_dates || '[]');
-    return new Set(Array.isArray(raw) ? raw : []);
-  } catch { return new Set(); }
+    return new Set([...(Array.isArray(raw) ? raw : []), ...confirmedLegacy]);
+  } catch { return new Set(confirmedLegacy); }
 }
 // REST has two scopes: a one-off protected date and a recurring weekday
 // whose Work week setting is REST. Both are neutral for every Habit streak.
