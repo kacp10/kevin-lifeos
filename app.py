@@ -23,7 +23,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 207  # V207 include archived REST history in Habit streak neutrality
+VERSION = 208  # V208 durable REST periods; never retroactively convert past REST into Recovery debt
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -3495,7 +3495,28 @@ def recovery_sync():
 
     # REST is authoritative on the server. Merge the browser copy only as a
     # compatibility fallback, never as the sole source of truth.
+    # V208: explicitly protect the six legacy REST dates confirmed by the user.
+    # They are exclusions, not completions: no Habit marks are created here.
+    legacy_confirmed_rest = {
+        '2026-11-07', '2026-11-08', '2026-11-14',
+        '2026-11-15', '2026-11-16', '2026-11-21',
+    }
     rest_days = {str(x)[:10] for x in (j.get('rest_days') or []) if x}
+    rest_days.update(legacy_confirmed_rest)
+    try:
+        # Persist confirmed legacy dates as historical REST across devices.
+        history_row = d.execute("SELECT value FROM study_profile WHERE key='life_rest_history_dates'").fetchone()
+        try:
+            history = json.loads(history_row['value'] or '[]') if history_row else []
+        except Exception:
+            history = []
+        history = sorted({str(x)[:10] for x in history if x} | legacy_confirmed_rest)
+        d.execute("INSERT INTO study_profile (key,value) VALUES ('life_rest_history_dates',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                  (json.dumps(history, ensure_ascii=False),))
+        d.commit()
+    except Exception as exc:
+        warnings.append('legacy_rest_persist_skipped')
+        logger.warning('Could not persist confirmed legacy REST dates: %s', exc)
     try:
         rest_row = d.execute("SELECT value FROM study_profile WHERE key='life_rest_dates'").fetchone()
         if rest_row:
@@ -4055,32 +4076,76 @@ def goal_strategy_save():
 
 @app.post('/api/shift')
 def shift():
+    """Update a recurring weekday shift without rewriting its past.
+
+    V208 records the start of each recurring REST period. When REST ends, every
+    elapsed date in that period is archived as a neutral REST date before the
+    new schedule is applied. This prevents future Recovery syncs from treating
+    formerly-resting dates as missed obligations.
+    """
     j = request.json or {}
-    weekday = int(j['weekday'])
-    next_shift = str(j['shift'])
+    try:
+        weekday = int(j['weekday'])
+    except (KeyError, TypeError, ValueError):
+        return jsonify(error='Invalid weekday'), 400
+    if weekday < 0 or weekday > 6:
+        return jsonify(error='Invalid weekday'), 400
+    next_shift = str(j.get('shift') or 'libre')
+    allowed = {'7-16', '8-17', '9-18', '10-19', '12-21', 'sabado', 'sabado11', 'libre', 'descanso'}
+    if next_shift not in allowed:
+        return jsonify(error='Invalid shift'), 400
+
     d = db()
     old_row = d.execute('SELECT shift FROM week_shifts WHERE weekday=?', (weekday,)).fetchone()
     old_shift = str(old_row['shift']) if old_row else 'libre'
-    # V206: when a recurring REST weekday is switched back to a normal schedule,
-    # archive the prior 30 days for that weekday before the new shift takes effect.
-    # This protects past rest dates from being retroactively scanned as Recovery.
-    if old_shift == 'descanso' and next_shift != 'descanso':
-        history_row = d.execute("SELECT value FROM study_profile WHERE key='life_rest_history_dates'").fetchone()
-        try:
-            history = json.loads(history_row['value'] or '[]') if history_row else []
-        except Exception:
-            history = []
-        today = datetime.now(timezone(timedelta(hours=-5))).date()
-        for offset in range(1, 31):
-            past = today - timedelta(days=offset)
-            if (past.weekday() == weekday):
-                history.append(past.isoformat())
-        history = sorted({str(x)[:10] for x in history if x})
-        d.execute("INSERT INTO study_profile (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                 ('life_rest_history_dates', json.dumps(history, ensure_ascii=False)))
-    d.execute('INSERT OR REPLACE INTO week_shifts VALUES (?,?)', (weekday, next_shift))
-    d.commit()
-    return jsonify(ok=True)
+    today = datetime.now(timezone(timedelta(hours=-5))).date()
+    now = datetime.now().isoformat(timespec='seconds')
+    since_key = f'life_rest_since_{weekday}'
+
+    try:
+        since_row = d.execute('SELECT value FROM study_profile WHERE key=?', (since_key,)).fetchone()
+        since = str(since_row['value'] or '')[:10] if since_row else ''
+
+        # Entering REST starts a new protected interval from the date of change.
+        if next_shift == 'descanso' and old_shift != 'descanso':
+            d.execute("""INSERT INTO study_profile (key,value) VALUES (?,?)
+                         ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+                      (since_key, today.isoformat()))
+
+        # Leaving REST archives every elapsed weekday from the recorded start
+        # through yesterday. Today is not archived: the new shift applies today.
+        elif old_shift == 'descanso' and next_shift != 'descanso':
+            if since:
+                try:
+                    cursor = date.fromisoformat(since)
+                    while cursor < today:
+                        if cursor.weekday() == weekday:
+                            history_row = d.execute("SELECT value FROM study_profile WHERE key='life_rest_history_dates'").fetchone()
+                            try:
+                                history = json.loads(history_row['value'] or '[]') if history_row else []
+                            except Exception:
+                                history = []
+                            history = {str(x)[:10] for x in history if x}
+                            history.add(cursor.isoformat())
+                            d.execute("""INSERT INTO study_profile (key,value) VALUES ('life_rest_history_dates',?)
+                                         ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+                                      (json.dumps(sorted(history), ensure_ascii=False),))
+                            d.execute("""UPDATE habit_recoveries
+                                         SET status='rest_exempt',added_to_day='',updated_at=?
+                                         WHERE original_day=? AND status IN ('pending','scheduled')""",
+                                      (now, cursor.isoformat()))
+                        cursor += timedelta(days=1)
+                except ValueError:
+                    logger.warning('Invalid REST start date for weekday %s: %r', weekday, since)
+            d.execute('DELETE FROM study_profile WHERE key=?', (since_key,))
+
+        d.execute('INSERT OR REPLACE INTO week_shifts VALUES (?,?)', (weekday, next_shift))
+        d.commit()
+    except Exception:
+        d.rollback()
+        raise
+    return jsonify(ok=True, previous_shift=old_shift, shift=next_shift,
+                   rest_period_started=(today.isoformat() if next_shift == 'descanso' and old_shift != 'descanso' else None))
 
 
 @app.post('/api/career/new')
