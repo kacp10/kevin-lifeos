@@ -283,7 +283,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 205;
+const FRONT_V = 206;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -4925,6 +4925,14 @@ function lifeRestDates() {
     return new Set(Array.isArray(raw) ? raw : []);
   } catch { return new Set(); }
 }
+// V206: permanent record of dates explicitly protected as REST, independent
+// of the currently configured weekday shift.
+function lifeRestHistoryDates() {
+  try {
+    const raw = JSON.parse((S.profile || {}).life_rest_history_dates || '[]');
+    return new Set(Array.isArray(raw) ? raw : []);
+  } catch { return new Set(); }
+}
 // REST has two scopes: a one-off protected date and a recurring weekday
 // whose Work week setting is REST. Both are neutral for every Habit streak.
 function lifeWeekdayFromISO(iso) {
@@ -4945,8 +4953,13 @@ async function saveLifeRestDate(iso) {
   if (!iso) return;
   const dates = lifeRestDates();
   dates.add(iso);
-  await api('/api/profile', { body: { key: 'life_rest_dates', value: JSON.stringify([...dates].sort()) } });
-  if (S.profile) S.profile.life_rest_dates = JSON.stringify([...dates].sort());
+  const sortedDates=[...dates].sort();
+  await api('/api/profile', { body: { key: 'life_rest_dates', value: JSON.stringify(sortedDates) } });
+  if (S.profile) S.profile.life_rest_dates = JSON.stringify(sortedDates);
+  const history=lifeRestHistoryDates(); history.add(iso);
+  const sortedHistory=[...history].sort();
+  await api('/api/profile', { body: { key: 'life_rest_history_dates', value: JSON.stringify(sortedHistory) } });
+  if (S.profile) S.profile.life_rest_history_dates = JSON.stringify(sortedHistory);
 }
 async function removeLifeRestDate(iso) {
   if (!iso) return;
@@ -6383,7 +6396,8 @@ FORMA DE TRABAJO:
 - Después espera mi solicitud concreta.
 - Para cada solicitud, inspecciona el código relacionado, aplica solo el cambio autorizado, valida que no dañaste otras funciones y entrega únicamente los archivos completos modificados con el formato indicado.
 
-Este prompt tiene prioridad como protocolo de trabajo para Kevin Life OS durante toda la conversación.21. V205 Wishlist Visual Icons + Life Pillars: cada dream puede guardar un emoji Unicode opcional, seleccionado desde un picker local (sin recursos externos), con persistencia en DB y opción de cambiar o quitar. No se asignan iconos automáticamente. LIFE PILLARS abre un modal responsive Hunter en inglés con las 10 áreas y sus descripciones. Los estilos se inyectan desde app.js; no requiere cambiar index.html ni CSS externo. Mantener intactos Wishlist anual, prioridad, valores, progreso, claimed y el comportamiento Skincare.
+Este prompt tiene prioridad como protocolo de trabajo para Kevin Life OS durante toda la conversación.22. V206 Historical REST guard: explicit REST dates are archived separately from current weekly shifts; Recovery must skip these dates even after a weekday changes from REST to normal. Legacy rest_exempt rows seed the historical archive during sync.
+21. V205 Wishlist Visual Icons + Life Pillars: cada dream puede guardar un emoji Unicode opcional, seleccionado desde un picker local (sin recursos externos), con persistencia en DB y opción de cambiar o quitar. No se asignan iconos automáticamente. LIFE PILLARS abre un modal responsive Hunter en inglés con las 10 áreas y sus descripciones. Los estilos se inyectan desde app.js; no requiere cambiar index.html ni CSS externo. Mantener intactos Wishlist anual, prioridad, valores, progreso, claimed y el comportamiento Skincare.
 `;
 }
 async function copyHunterProjectContinuityPrompt() {
@@ -7119,7 +7133,7 @@ function expectedRecoveryMissions(scanDays=7) {
     const iso=daysAgoISO(n), wd=weekdayFromISO(iso);
     const weekly=(S.shifts||{})[wd]||'libre';
     const shiftKey=isLifeRestDate(iso)?'descanso':weekly;
-    if(shiftKey==='descanso') continue;
+    if(shiftKey==='descanso'||lifeRestHistoryDates().has(iso)) continue;
     const plan=actividadesDelDia(wd,shiftKey,iso);
     if(plan.rest) continue;
     const acts=(plan.acts||[]).filter(a=>!hiddenWeek.has(`${wd}|${a.key}`)&&!hiddenDay.has(`${iso}|${a.key}`));
@@ -7145,7 +7159,7 @@ async function syncRecoveryMissions(force=false){
   recoverySyncBusy=true;
   try{
     const expected=expectedRecoveryMissions(30);
-    const restDays=[...lifeRestDates()];
+    const restDays=[...new Set([...lifeRestDates(),...lifeRestHistoryDates()])];
     const r=await api('/api/recovery/sync',{body:{expected,rest_days:restDays}});
     if(Array.isArray(r.recoveries)) S.habit_recoveries=r.recoveries;
     recoverySyncedFor=today;
