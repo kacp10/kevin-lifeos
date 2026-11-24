@@ -23,7 +23,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 205  # V205 persistent Wishlist emojis + LIFE PILLARS UI
+VERSION = 206  # V206 historical REST exclusions for Work week / Recovery bugfix
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -3504,9 +3504,37 @@ def recovery_sync():
                 rest_days.update(str(x)[:10] for x in server_rest if x)
             except Exception:
                 warnings.append('invalid_rest_profile')
+        # V206: keep historical explicit REST dates separate from the current weekly
+        # shift. Changing a weekday from REST to a work shift must not retroactively
+        # create Recovery debt for dates that were intentionally protected.
+        history_row = d.execute("SELECT value FROM study_profile WHERE key='life_rest_history_dates'").fetchone()
+        if history_row:
+            try:
+                history_rest = json.loads(history_row['value'] or '[]')
+                rest_days.update(str(x)[:10] for x in history_rest if x)
+            except Exception:
+                warnings.append('invalid_rest_history_profile')
+        # Older REST actions may only exist as rest_exempt Recovery records.
+        legacy_rest = d.execute("SELECT DISTINCT original_day FROM habit_recoveries WHERE status='rest_exempt'").fetchall()
+        rest_days.update(str(dict(r).get('original_day'))[:10] for r in legacy_rest if dict(r).get('original_day'))
     except Exception as exc:
         warnings.append('rest_profile_unavailable')
         logger.warning('Recovery sync could not read REST profile: %s', exc)
+
+    # V206: retroactively neutralize existing open Recovery records for archived REST dates.
+    # Those dates are intentional rest and must never remain pending debt.
+    try:
+        for rest_day in rest_days:
+            d.execute('''UPDATE habit_recoveries
+                         SET status='rest_exempt',added_to_day='',updated_at=?
+                         WHERE original_day=? AND status IN ('pending','scheduled')''',
+                      (now, rest_day))
+        d.commit()
+    except Exception as exc:
+        try: d.rollback()
+        except Exception: pass
+        warnings.append('rest_history_repair_skipped')
+        logger.warning('Recovery historical REST repair skipped: %s', exc)
 
     expected_map = {}
     for raw in expected[:1500]:
@@ -3704,12 +3732,23 @@ def recovery_rest_day():
     if not day:
         return jsonify(error='REST date is required'), 400
     d = db()
+    # V206: archive this exact date so future weekly-shift edits do not
+    # resurrect activities from a day intentionally marked REST.
+    row = d.execute("SELECT value FROM study_profile WHERE key='life_rest_history_dates'").fetchone()
+    try:
+        history = json.loads(row['value'] or '[]') if row else []
+    except Exception:
+        history = []
+    history = sorted({str(x)[:10] for x in history if x} | {day})
+    d.execute("""INSERT INTO study_profile (key,value) VALUES (?,?)
+                 ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+              ('life_rest_history_dates', json.dumps(history, ensure_ascii=False)))
     d.execute("""UPDATE habit_recoveries
                  SET status='rest_exempt',added_to_day='',updated_at=?
                  WHERE status IN ('pending','scheduled') AND original_day=?""",
               (datetime.now().isoformat(timespec='seconds'), day))
     d.commit()
-    return jsonify(ok=True)
+    return jsonify(ok=True, rest_days=history)
 
 
 @app.post('/api/recovery/unrest-day')
@@ -3731,6 +3770,15 @@ def recovery_unrest_day():
         d.execute("""INSERT INTO study_profile (key,value) VALUES (?,?)
                      ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
                   ('life_rest_dates', json.dumps(dates, ensure_ascii=False)))
+        history_row = d.execute("SELECT value FROM study_profile WHERE key='life_rest_history_dates'").fetchone()
+        try:
+            history = json.loads(history_row['value'] or '[]') if history_row else []
+        except Exception:
+            history = []
+        history = sorted({str(x)[:10] for x in history if x and str(x)[:10] != day})
+        d.execute("""INSERT INTO study_profile (key,value) VALUES (?,?)
+                     ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+                  ('life_rest_history_dates', json.dumps(history, ensure_ascii=False)))
         d.execute("""UPDATE habit_recoveries
                      SET status='pending',added_to_day='',updated_at=?
                      WHERE original_day=? AND status='rest_exempt'""",
@@ -4007,10 +4055,31 @@ def goal_strategy_save():
 
 @app.post('/api/shift')
 def shift():
-    j = request.json
-    db().execute('INSERT OR REPLACE INTO week_shifts VALUES (?,?)',
-                 (int(j['weekday']), j['shift']))
-    db().commit()
+    j = request.json or {}
+    weekday = int(j['weekday'])
+    next_shift = str(j['shift'])
+    d = db()
+    old_row = d.execute('SELECT shift FROM week_shifts WHERE weekday=?', (weekday,)).fetchone()
+    old_shift = str(old_row['shift']) if old_row else 'libre'
+    # V206: when a recurring REST weekday is switched back to a normal schedule,
+    # archive the prior 30 days for that weekday before the new shift takes effect.
+    # This protects past rest dates from being retroactively scanned as Recovery.
+    if old_shift == 'descanso' and next_shift != 'descanso':
+        history_row = d.execute("SELECT value FROM study_profile WHERE key='life_rest_history_dates'").fetchone()
+        try:
+            history = json.loads(history_row['value'] or '[]') if history_row else []
+        except Exception:
+            history = []
+        today = datetime.now(timezone(timedelta(hours=-5))).date()
+        for offset in range(1, 31):
+            past = today - timedelta(days=offset)
+            if (past.weekday() == weekday):
+                history.append(past.isoformat())
+        history = sorted({str(x)[:10] for x in history if x})
+        d.execute("INSERT INTO study_profile (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                 ('life_rest_history_dates', json.dumps(history, ensure_ascii=False)))
+    d.execute('INSERT OR REPLACE INTO week_shifts VALUES (?,?)', (weekday, next_shift))
+    d.commit()
     return jsonify(ok=True)
 
 
