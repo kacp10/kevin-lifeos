@@ -23,7 +23,7 @@ import db_layer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE, 'lifeos.db')
-VERSION = 208  # V208 durable REST periods; never retroactively convert past REST into Recovery debt
+VERSION = 209  # V209 permanent custom weekday activities
 CHECKPOINT_RETENTION_DAYS = 1
 _last_checkpoint_cleanup_day = None
 app = Flask(__name__)
@@ -926,6 +926,14 @@ def init_db():
                 con.rollback()
             except Exception:
                 pass
+
+    # V209: custom recurring weekday selection. Empty JSON keeps legacy schedules unchanged.
+    try:
+        con.execute("ALTER TABLE routine_extra ADD COLUMN weekdays_json TEXT DEFAULT ''")
+        con.commit()
+    except Exception:
+        try: con.rollback()
+        except Exception: pass
 
     # V183: recurring custom Life activities need a real activation boundary.
     # Older rows never stored creation/effective date, which allowed a newly added
@@ -4467,10 +4475,11 @@ def routine_extra_new():
     j = request.json
     explicit_day = str(j.get('day') or '').strip()[:10]
     effective_from = str(j.get('effective_from') or explicit_day or date.today().isoformat()).strip()[:10]
-    db().execute('INSERT INTO routine_extra (time, title, descr, weekday, day, habit, scheduled, effective_from) VALUES (?,?,?,?,?,?,?,?)',
+    db().execute('INSERT INTO routine_extra (time, title, descr, weekday, day, habit, scheduled, effective_from, weekdays_json) VALUES (?,?,?,?,?,?,?,?,?)',
                  (j.get('time', ''), j['title'].strip(), j.get('descr', ''),
                   int(j.get('weekday', -1)), explicit_day, j.get('habit', ''),
-                  1 if j.get('scheduled') else 0, effective_from))
+                  1 if j.get('scheduled') else 0, effective_from,
+                  json.dumps(sorted(set(int(x) for x in (j.get('weekdays') or []) if int(x) in range(7))))))
     db().commit()
     return jsonify(ok=True)
 
