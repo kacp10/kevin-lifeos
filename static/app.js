@@ -283,7 +283,7 @@ document.getElementById('tabs').addEventListener('click', (e) => {
   document.getElementById('tab-' + e.target.dataset.tab).classList.add('active');
 });
 
-const FRONT_V = 208;
+const FRONT_V = 209;
 const V170_ACTIVITY_EFFECTIVE_DAY = '2026-08-13';
 let MES = 0;   // mes seleccionado en Inicio (0 = julio 2026)
 let ANIME_FILTRO = 'todos';
@@ -7143,7 +7143,7 @@ function expectedRecoveryMissions(scanDays=7) {
     const plan=actividadesDelDia(wd,shiftKey,iso);
     if(plan.rest) continue;
     const acts=(plan.acts||[]).filter(a=>!hiddenWeek.has(`${wd}|${a.key}`)&&!hiddenDay.has(`${iso}|${a.key}`));
-    const extras=(S.routine_extra||[]).filter(x=>{const effective=String(x.effective_from||'').slice(0,10);if(effective&&iso<effective)return false;return (x.day&&x.day===iso)||(!x.day&&(x.weekday===-1||(x.weekday===-2&&wd<=4)||x.weekday===wd));});
+    const extras=(S.routine_extra||[]).filter(x=>{const effective=String(x.effective_from||'').slice(0,10);if(effective&&iso<effective)return false;let days=[];try{days=JSON.parse(x.weekdays_json||'[]')}catch(e){}return (x.day&&x.day===iso)||(!x.day&&(x.weekday===-1||(x.weekday===-2&&wd<=4)||x.weekday===wd||(x.weekday===-3&&days.includes(wd))));});
     extras.forEach(x=>acts.push({key:'extra_'+x.id,title:x.title||'Extra activity'}));
     const seen=new Set();
     for(const act of acts){
@@ -7835,18 +7835,26 @@ async function openCustomLifeActivityModal({iso, wd, sugerencia}) {
       { type: 'select', options: [
         { v: 'day', t: `Just this ${dayName} (${iso})` },
         { v: 'week', t: `Every ${dayName} (recurring)` },
-        { v: 'mf', t: 'Monday to Friday (weekdays)' }
-      ] }
+        { v: 'mf', t: 'Monday to Friday (weekdays)' },
+        { v: 'custom', t: 'Custom days (permanent weekly)' }
+      ] },
+      { type: 'text', placeholder: 'Custom days: Mon, Wed, Fri, Sat (only for Custom days)' }
     ], okText: 'Add' });
   if (!r || !r[1].trim()) return false;
   const body = { time: r[0], title: r[1], descr: r[2], habit: r[3] || '' };
   const scopeAdd = r[4] || 'day';
   if (scopeAdd === 'week') body.weekday = wd;
   else if (scopeAdd === 'mf') body.weekday = -2;
-  else body.day = iso;
-  body.effective_from = nextLifeActivityEffectiveDate(scopeAdd, wd, iso);
+  else if (scopeAdd === 'custom') {
+    const map={mon:0,monday:0,lun:0,lunes:0,tue:1,tuesday:1,mar:1,martes:1,wed:2,wednesday:2,mie:2,miércoles:2,thu:3,thursday:3,jue:3,jueves:3,fri:4,friday:4,vie:4,viernes:4,sat:5,saturday:5,sab:5,sábado:5,sun:6,sunday:6,dom:6,domingo:6};
+    const tokens=String(r[5]||'').toLowerCase().split(/[,;\s]+/).filter(Boolean);
+    body.weekdays=[...new Set(tokens.map(t=>map[t]).filter(v=>v!==undefined))];
+    if(!body.weekdays.length){toast('Enter at least one valid weekday (Mon, Tue, Wed, Thu, Fri, Sat, Sun).');return false;}
+    body.weekday=-3;
+  } else body.day = iso;
+  body.effective_from = scopeAdd === 'custom' ? hoyLocal() : nextLifeActivityEffectiveDate(scopeAdd, wd, iso);
   await api('/api/routine_extra/new', { body });
-  toast(scopeAdd === 'week' ? `➕ Added every ${dayName}` : scopeAdd === 'mf' ? '➕ Added Monday to Friday' : '➕ Added for this day only');
+  toast(scopeAdd === 'week' ? `➕ Added every ${dayName}` : scopeAdd === 'mf' ? '➕ Added Monday to Friday' : scopeAdd === 'custom' ? '➕ Added permanently on selected weekdays' : '➕ Added for this day only');
   await load();
   return true;
 }
@@ -7902,6 +7910,7 @@ function renderRoutineDay() {
     (x.day && x.day === iso) ||
     (!x.day && (x.weekday === -1 ||
                 (x.weekday === -2 && wd <= 4 && !esDescanso) ||
+                (x.weekday === -3 && (()=>{try{return JSON.parse(x.weekdays_json||'[]').includes(wd)}catch(e){return false}})()) ||
                 x.weekday === wd)));
   for (const x of extras) {
     lista.push({ t: x.time || '—', title: x.title, d: x.descr || '', key: 'extra_' + x.id, extraId: x.id });
